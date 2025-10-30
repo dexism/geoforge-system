@@ -4,11 +4,10 @@
   "description": "",
   "main": "index.js",
 "scripts": {
-  "test": "echo \"Error: no test specified\" && exit 1",
-  "preview": "vite preview --port 10000",
+  "build": "npx vite build",
+  "preview": "npx vite preview --port 10000",
   "dev": "vite",
-  "build": "vite build"
-
+  "test": "echo \"Error: no test specified\" && exit 1"
 },
   "keywords": [],
   "author": "",
@@ -17,7 +16,7 @@
   "devDependencies": {
     "eslint": "^9.38.0",
     "nodemon": "^3.1.10",
-    "prettier": "^3.6.2",
+    "prettier": "^3.6.2"
   },
   "dependencies": {
     "d3": "^7.9.0",
