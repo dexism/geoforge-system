@@ -5,7 +5,6 @@ html, body {
   background-color: #235;
   font-family: sans-serif;
 }
-
 svg {
   width: 100vw;
   height: 100vh;
@@ -16,14 +15,54 @@ svg {
   stroke-width: 1;
 }
 
-.hex-label {
-  /* テキストが選択されたり、マウスイベントを邪魔しないようにする */
+/* --- ★★★ 以下を追記・修正 ★★★ --- */
+
+/* UIコンテナ */
+.ui-container {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+}
+
+.ui-container button {
+  padding: 8px 12px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* ラベル共通設定 */
+.hex-label, .settlement-label, .property-label {
   pointer-events: none;
   user-select: none;
   margin: 0;
   padding: 0;
-  /* テキストの見た目 */
+  font-size: 1.0em;
+  fill: #222;
+  paint-order: stroke;
+  stroke: #fff8;
+  stroke-width: 0.3px;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+}
+
+/* 座標ラベル (E00-N00) */
+.hex-label {
+  font-weight: 900;
+  fill: #444;
+}
+
+/* 居住区ラベル (都, 街) */
+.settlement-label {
+  font-weight: 900;
+  stroke-width: 0.6px;
+}
+
+/* 魔力・資源ラベル */
+.property-label {
   font-weight: bold;
   fill: #222;
-  text-shadow: 0 0 2px #fff8;
 }
+
