@@ -26,16 +26,16 @@ const LAND_BIAS = 0.5; // 全体の標高を底上げします（値を大きく
 const CONTINENT_FALLOFF_FACTOR = 100.0; 
 
 // 内海・湖の閾値
-const INLAND_SEA_THRESHOLD = -10.0; 
+const INLAND_SEA_THRESHOLD = -100.0; 
 
 // 標高のしきい値
 const ELEVATION_THRESHOLDS = {
-    DEEP_OCEAN: -0.5,
-    OCEAN: -0.2,
-    PLAINS: 0.1,  // 少し調整：平地を広げやすく
-    HILLS: 0.5,
-    MOUNTAINS: 0.9, // 少し調整：山脈を少しレアに
-    PEAKS: 100.0, 
+    DEEP_OCEAN: -0.3,
+    OCEAN: -0.1,
+    PLAINS: 0.2,  // 少し調整：平地を広げやすく
+    HILLS: 0.8,
+    MOUNTAINS: 1.1, // 少し調整：山脈を少しレアに
+    PEAKS: 10.0, 
 };
 
 // 北緯の寒冷地設定
@@ -44,16 +44,16 @@ const DESERT_LATITUDE = 0.4;
 
 // SLG風カラーパレット
 const TERRAIN_COLORS_SLG = {
-    DEEP_OCEAN:    '#0d47a1',
-    OCEAN:         '#1976d2',
+    DEEP_OCEAN:    '#136',
+    OCEAN:         '#248',
     LAKE:          '#42a5f5',
-    PLAINS:        '#66bb6a',
-    HILLS:         '#d4e157',
-    MOUNTAINS:     '#a1887f',
-    PEAKS:         '#b0bec5',
-    DESERT:        '#ffee58',
-    TUNDRA:        '#b2dfdb',
-    SNOW_MOUNTAIN: '#ffffff',
+    PLAINS:        '#9a8',
+    HILLS:         '#465',
+    MOUNTAINS:     '#987',
+    PEAKS:         '#abb',
+    DESERT:        '#ddb',
+    TUNDRA:        '#dee',
+    SNOW_MOUNTAIN: '#fff',
 };
 
 // ================================================================
