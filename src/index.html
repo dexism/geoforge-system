@@ -2,30 +2,12 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>GeoForge System - World Map</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background-color: #2c3e50; /* 背景を海の色に合わせる */
-    }
-    svg {
-      width: 100vw;
-      height: 100vh;
-    }
-    .hex {
-      stroke: rgba(255, 255, 255, 0.1); /* 境界線を少し控えめに */
-      stroke-width: 1;
-    }
-  </style>
+  <title>GeoForge System - World Map v0.0.8</title>
+  <!-- ★★★ 変更点：外部CSSファイルを読み込みます ★★★ -->
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <svg id="hexmap"></svg>
-  
-  <!-- Simplex Noise ライブラリを読み込む -->
-  <!--script src="https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js"></script-->
-
   <script type="module" src="./main.js"></script>
 </body>
 </html>

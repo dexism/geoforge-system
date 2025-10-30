@@ -1,0 +1,29 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #235;
+  font-family: sans-serif;
+}
+
+svg {
+  width: 100vw;
+  height: 100vh;
+}
+
+.hex {
+  stroke: #0008;
+  stroke-width: 1;
+}
+
+.hex-label {
+  /* テキストが選択されたり、マウスイベントを邪魔しないようにする */
+  pointer-events: none;
+  user-select: none;
+  margin: 0;
+  padding: 0;
+  /* テキストの見た目 */
+  font-weight: bold;
+  fill: #222;
+  text-shadow: 0 0 2px #fff8;
+}
