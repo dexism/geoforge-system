@@ -4,8 +4,9 @@
   "description": "",
   "main": "index.js",
 "scripts": {
-  "build": "npx vite build",
-  "preview": "npx vite preview --port 10000",
+  "postinstall": "chmod +x node_modules/vite/bin/vite.js",
+  "build": "node_modules/vite/bin/vite.js build",
+  "preview": "node_modules/vite/bin/vite.js preview --port 10000",
   "dev": "vite",
   "test": "echo \"Error: no test specified\" && exit 1"
 },
