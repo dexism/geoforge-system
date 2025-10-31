@@ -3,7 +3,6 @@ import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/
 
 // ================================================================
 // GeoForge System 設定
-// (このセクションに変更はありません)
 // ================================================================
 const COLS = 100;
 const ROWS = 100;
@@ -50,14 +49,28 @@ const TERRAIN_COLORS_SLG = {
     DEEP_SNOW_PEAKS:     '#fff',
 };
 
+// ★★★ 変更点：気候帯の定義を追加 ★★★
+// 気候帯を分ける温度の境界値
+const CLIMATE_ZONE_THRESHOLDS = {
+    COLD: 0,      // 0℃未満は「寒冷」
+    TEMPERATE: 20 // 20℃未満は「温帯」、それ以上は「熱帯」
+};
+// 気候帯ごとの色
+const CLIMATE_ZONE_COLORS = {
+    COLD: '#aed6f1',      // 寒冷 (水色)
+    TEMPERATE: '#a9dfbf', // 温帯 (緑色)
+    TROPICAL: '#f9e79f'   // 熱帯 (黄色)
+};
+
+// カラーマッピング
 const manaColor = d3.scaleSequential(d3.interpolatePurples).domain([0, 1]);
-const climateColor = d3.scaleSequential(d3.interpolateTurbo).domain([-15, 35]);
+// 気温表示(temp-overlay)は従来通り連続的な色を使用
+const tempColor = d3.scaleSequential(d3.interpolateTurbo).domain([-15, 35]);
 const elevationColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 7000]);
 
 
 // ================================================================
 // データ生成ロジック
-// (このセクションに変更はありません)
 // ================================================================
 const centerX = COLS / 2;
 const centerY = ROWS / 2;
@@ -98,15 +111,27 @@ function generateHexData(col, row) {
 
   const latitude = row / ROWS;
 
+  // 1. 基準気候（標高補正前）
   const baseTemp = -5 + (latitude * 35);
   properties.climate = baseTemp + climateNoise(nx, ny) * 5;
 
+  // ★★★ 変更点：基準気候に基づいて気候帯名をプロパティとして保存 ★★★
+  if (properties.climate < CLIMATE_ZONE_THRESHOLDS.COLD) {
+      properties.climateZone = '寒冷';
+  } else if (properties.climate < CLIMATE_ZONE_THRESHOLDS.TEMPERATE) {
+      properties.climateZone = '温帯';
+  } else {
+      properties.climateZone = '熱帯';
+  }
+
+  // 2. 実効気温（標高補正後）
   let elevationCorrection = 0;
   if (properties.elevation > 0) {
       elevationCorrection = (properties.elevation / 100) * 0.6;
   }
   properties.temperature = properties.climate - elevationCorrection;
 
+  // 実効気温に基づいて最終的な地形を決定
   if (properties.temperature <= -10) {
       switch(terrain) {
           case 'PLAINS':    terrain = 'TUNDRA'; break;
@@ -148,7 +173,6 @@ function generateHexData(col, row) {
 
 // ================================================================
 // D3.jsによる描画
-// (このセクションに変更はありません)
 // ================================================================
 const svg = d3.select('#hexmap');
 const g = svg.append('g');
@@ -204,19 +228,27 @@ manaOverlayLayer.selectAll('.mana-hex')
   .style('fill-opacity', 0.6)
   .style('pointer-events', 'none');
 
+// ★★★ 変更点：気候帯(climateZone)の色を描画するレイヤー ★★★
 climateOverlayLayer.selectAll('.climate-hex')
   .data(hexes).enter().append('polygon')
   .attr('class', 'climate-hex')
   .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => climateColor(d.properties.climate))
+  .attr('fill', d => {
+      switch(d.properties.climateZone) {
+          case '寒冷': return CLIMATE_ZONE_COLORS.COLD;
+          case '温帯': return CLIMATE_ZONE_COLORS.TEMPERATE;
+          case '熱帯': return CLIMATE_ZONE_COLORS.TROPICAL;
+      }
+  })
   .style('fill-opacity', 0.6)
   .style('pointer-events', 'none');
 
+// 実効気温(temperature)を描画するレイヤー (変更なし)
 tempOverlayLayer.selectAll('.temp-hex')
   .data(hexes).enter().append('polygon')
   .attr('class', 'temp-hex')
   .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => climateColor(d.properties.temperature))
+  .attr('fill', d => tempColor(d.properties.temperature))
   .style('fill-opacity', 0.6)
   .style('pointer-events', 'none');
 
@@ -240,7 +272,7 @@ hexLabelGroups.append('polygon')
     `E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
     `Terrain: ${d.terrain}\n` +
     `Elevation: ${Math.round(d.properties.elevation)}m\n` +
-    `Climate: ${d.properties.climate.toFixed(1)}℃\n` +
+    `Climate: ${d.properties.climateZone} (${d.properties.climate.toFixed(1)}℃)\n` +
     `Temp: ${d.properties.temperature.toFixed(1)}℃\n` +
     `Mana: ${d.properties.manaRank} (${d.properties.manaValue.toFixed(2)})\n` +
     `Resource: ${d.properties.resourceRank}`
@@ -302,31 +334,16 @@ d3.select('#toggleElevationOverlay').on('click', function() {
   toggleLayerVisibility('elevation-overlay', this, '標高表示', '標高非表示');
 });
 
-
-// ★★★ 以下を再追加 ★★★
 // --- 初期表示位置の設定 ---
-// 1. 中央にしたい目標のヘックス座標
 const targetX = 50;
 const targetY = 50;
-
-// 2. 画面のサイズを取得
 const svgWidth = svg.node().getBoundingClientRect().width;
 const svgHeight = svg.node().getBoundingClientRect().height;
-
-// 3. 目標ヘックスのデータを探す
 const targetHex = hexes.find(h => h.x === targetX && h.y === targetY);
-
 if (targetHex) {
-  // 4. 初期ズーム倍率を設定 (お好みで調整)
   const initialScale = 1.5;
-
-  // 5. 目標ヘックスが画面中央に来るように移動量を計算
   const translateX = svgWidth / 2 - targetHex.cx * initialScale;
   const translateY = svgHeight / 2 - targetHex.cy * initialScale;
-
-  // 6. 計算した移動量と倍率で初期変換を作成
   const initialTransform = d3.zoomIdentity.translate(translateX, translateY).scale(initialScale);
-  
-  // 7. SVGに初期変換を適用
   svg.call(zoom.transform, initialTransform);
 }
