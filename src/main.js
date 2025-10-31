@@ -3,6 +3,7 @@ import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/
 
 // ================================================================
 // GeoForge System 設定
+// (このセクションに変更はありません)
 // ================================================================
 const COLS = 100;
 const ROWS = 100;
@@ -10,34 +11,53 @@ const HEX_SIZE_KM = 20;
 const r = 20;
 
 const terrainNoise = createNoise2D();
-const manaNoise = createNoise2D(); // ★★★ 魔力用のNoiseを追加
-const NOISE_SCALE = 0.05;
-const LAND_BIAS = 1.0;
-const CONTINENT_FALLOFF_FACTOR = 2;
-const INLAND_SEA_THRESHOLD = -0.9;
+const manaNoise = createNoise2D();
+const climateNoise = createNoise2D();
 
-const ELEVATION_THRESHOLDS = {
-    DEEP_OCEAN: -0.4, OCEAN: 0.0, PLAINS: 0.3,
-    HILLS: 0.8, MOUNTAINS: 1.3, PEAKS: 2.0, 
+const NOISE_SCALE = 0.06; 
+const LAND_BIAS =   0.8; 
+const ELEVATION_PEAK_FACTOR =    5.0; 
+const CONTINENT_FALLOFF_FACTOR = 4.0;
+
+const LAKE_THRESHOLD_PLAINS =    -0.95;
+const LAKE_THRESHOLD_MOUNTAINS = -0.9;
+
+const elevationScale = d3.scaleLinear().domain([0.0, 1.6]).range([0, 7000]).clamp(true);
+
+const lakeThresholdScale = d3.scaleLinear()
+    .domain([0.3, 1.3])
+    .range([LAKE_THRESHOLD_PLAINS, LAKE_THRESHOLD_MOUNTAINS])
+    .clamp(true);
+
+const ELEVATION_THRESHOLDS_METERS = {
+    PLAINS:     500,
+    HILLS:     1000,
+    HIGHLANDS: 2000,
+    MOUNTAINS: 3000,
+    PEAKS:     4000,
 };
 
-const SNOW_LINE_NORTH = 0.15;
-const DESERT_LATITUDE = 0.4;
+const SNOW_TRANSITION_LATITUDE = 0.1; 
+const DESERT_LATITUDE_START = 0.5;
+const DESERT_LATITUDE_END =   0.6;
 
 const TERRAIN_COLORS_SLG = {
-    DEEP_OCEAN: '#136', OCEAN: '#248', LAKE: '#358',
-    PLAINS: '#9a8', HILLS: '#465', MOUNTAINS: '#987',
-    PEAKS: '#abb', DESERT: '#ddb', TUNDRA: '#dee',
-    SNOW_MOUNTAIN: '#fff',
+    DEEP_OCEAN: '#136', OCEAN:      '#248', LAKE:       '#058',
+    PLAINS:    '#ab7', HILLS:     '#897', HIGHLANDS: '#9a9',
+    MOUNTAINS: '#997', PEAKS:     '#666', DESERT:    '#edb',
+    TUNDRA:              '#fff', SNOWY_HILLS:         '#eee',
+    DEEP_SNOW_HIGHLANDS: '#ddd', DEEP_SNOW_MOUNTAINS: '#ccc',
+    DEEP_SNOW_PEAKS:     '#fff',
 };
 
-// ★★★ 魔力オーバーレイ用のカラーマッピング ★★★
-// 0(低)から1(高)の値を紫系の色に変換
 const manaColor = d3.scaleSequential(d3.interpolatePurples).domain([0, 1]);
+const climateColor = d3.scaleSequential(d3.interpolateTurbo).domain([-15, 35]);
+const elevationColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 7000]);
 
 
 // ================================================================
-// データ生成ロジック (プロパティ追加)
+// データ生成ロジック
+// (このセクションに変更はありません)
 // ================================================================
 const centerX = COLS / 2;
 const centerY = ROWS / 2;
@@ -47,56 +67,73 @@ function generateHexData(col, row) {
   const nx = col * NOISE_SCALE;
   const ny = row * NOISE_SCALE;
   
-  // --- 地形生成 ---
-  const baseElevation = terrainNoise(nx, ny);
+  let baseElevation = terrainNoise(nx, ny);
+  if (baseElevation > 0) {
+      baseElevation = Math.pow(baseElevation, ELEVATION_PEAK_FACTOR);
+  }
   const distFromCenter = Math.sqrt(Math.pow(col - centerX, 2) + Math.pow(row - centerY, 2));
   const falloff = Math.pow(distFromCenter / maxDist, CONTINENT_FALLOFF_FACTOR);
-  const continentElevation = baseElevation + LAND_BIAS - falloff;
+  const internalElevation = baseElevation + LAND_BIAS - falloff;
 
-  let terrain;
-  const inlandWaterNoise = terrainNoise(nx + 100, ny + 100);
-  if (inlandWaterNoise < INLAND_SEA_THRESHOLD && continentElevation < ELEVATION_THRESHOLDS.MOUNTAINS) {
-    terrain = 'LAKE';
-  } else {
-    if (continentElevation < ELEVATION_THRESHOLDS.DEEP_OCEAN) terrain = 'DEEP_OCEAN';
-    else if (continentElevation < ELEVATION_THRESHOLDS.OCEAN) terrain = 'OCEAN';
-    else if (continentElevation < ELEVATION_THRESHOLDS.PLAINS) terrain = 'PLAINS';
-    else if (continentElevation < ELEVATION_THRESHOLDS.HILLS) terrain = 'HILLS';
-    else if (continentElevation < ELEVATION_THRESHOLDS.MOUNTAINS) terrain = 'MOUNTAINS';
-    else terrain = 'PEAKS';
-  }
-  
-  const latitude = row / ROWS;
-  if (latitude < SNOW_LINE_NORTH) {
-    if (terrain === 'PLAINS' || terrain === 'HILLS') terrain = 'TUNDRA';
-    else if (terrain === 'MOUNTAINS' || terrain === 'PEAKS') terrain = 'SNOW_MOUNTAIN';
-  } else if (latitude > DESERT_LATITUDE && latitude < (1 - DESERT_LATITUDE)) {
-    if (terrain === 'PLAINS' || terrain === 'HILLS') {
-        const desertNoise = terrainNoise(nx + 200, ny + 200);
-        if (desertNoise > 0.3) terrain = 'DESERT';
-    }
-  }
-
-  // ★★★ 魔力・資源・居住区などのプロパティを生成 ★★★
   const properties = {};
   
-  // 魔力値の生成 (0-1の範囲)
-  // absとpowで加工し、値が0に近い場所を線状のピーク(地脈)にする
-  const rawManaValue = manaNoise(nx / 2, ny / 2); // 地形より細かいパターンにする
-  properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
+  const inlandWaterNoise = terrainNoise(nx + 100, ny + 100);
+  const dynamicLakeThreshold = lakeThresholdScale(internalElevation);
   
-  // 魔力量ランク (S,A,B,C,D)
+  const isWater = internalElevation < 0.0 || (inlandWaterNoise < dynamicLakeThreshold && internalElevation < 1.3);
+  properties.elevation = isWater ? 0 : elevationScale(internalElevation);
+  
+  let terrain;
+  if (isWater) {
+      if (internalElevation < -0.4) terrain = 'DEEP_OCEAN';
+      else if (internalElevation < 0.0) terrain = 'OCEAN';
+      else terrain = 'LAKE';
+  } else {
+      if (properties.elevation >= ELEVATION_THRESHOLDS_METERS.PEAKS) terrain = 'PEAKS';
+      else if (properties.elevation >= ELEVATION_THRESHOLDS_METERS.MOUNTAINS) terrain = 'MOUNTAINS';
+      else if (properties.elevation >= ELEVATION_THRESHOLDS_METERS.HIGHLANDS) terrain = 'HIGHLANDS';
+      else if (properties.elevation >= ELEVATION_THRESHOLDS_METERS.HILLS) terrain = 'HILLS';
+      else terrain = 'PLAINS';
+  }
+
+  const latitude = row / ROWS;
+
+  const baseTemp = -5 + (latitude * 35);
+  properties.climate = baseTemp + climateNoise(nx, ny) * 5;
+
+  let elevationCorrection = 0;
+  if (properties.elevation > 0) {
+      elevationCorrection = (properties.elevation / 100) * 0.6;
+  }
+  properties.temperature = properties.climate - elevationCorrection;
+
+  if (properties.temperature <= -10) {
+      switch(terrain) {
+          case 'PLAINS':    terrain = 'TUNDRA'; break;
+          case 'HILLS':     terrain = 'SNOWY_HILLS'; break;
+          case 'HIGHLANDS': terrain = 'DEEP_SNOW_HIGHLANDS'; break;
+          case 'MOUNTAINS': terrain = 'DEEP_SNOW_MOUNTAINS'; break;
+          case 'PEAKS':     terrain = 'DEEP_SNOW_PEAKS'; break;
+      }
+  } 
+  else if (latitude > DESERT_LATITUDE_START && latitude < DESERT_LATITUDE_END) {
+      if (terrain === 'PLAINS' || terrain === 'HILLS') {
+          const desertNoise = terrainNoise(nx + 200, ny + 200);
+          if (desertNoise > 0.3) terrain = 'DESERT';
+      }
+  }
+
+  const rawManaValue = manaNoise(nx / 2, ny / 2);
+  properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
   if (properties.manaValue > 0.9) properties.manaRank = 'S';
   else if (properties.manaValue > 0.7) properties.manaRank = 'A';
   else if (properties.manaValue > 0.4) properties.manaRank = 'B';
   else if (properties.manaValue > 0.1) properties.manaRank = 'C';
   else properties.manaRank = 'D';
 
-  // 資源量ランク (仮でランダム生成)
   const resourceSymbols = ['木', '石', '鉄', '金', '晶'];
   properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
   
-  // 居住区の生成 (仮でランダム生成、陸地のみ)
   if (!['OCEAN', 'DEEP_OCEAN', 'LAKE'].includes(terrain)) {
       const rand = Math.random();
       if (rand > 0.999) properties.settlement = '都';
@@ -108,8 +145,10 @@ function generateHexData(col, row) {
   return { terrain, properties };
 }
 
+
 // ================================================================
 // D3.jsによる描画
+// (このセクションに変更はありません)
 // ================================================================
 const svg = d3.select('#hexmap');
 const g = svg.append('g');
@@ -134,50 +173,79 @@ for (let row = 0; row < ROWS; row++) {
   }
 }
 
-// ★★★ レイヤー構造に変更 ★★★
-// 1. 地形レイヤー
-const terrainGroup = g.append('g').attr('class', 'terrain-layer');
-// 2. 魔力オーバーレイレイヤー (初期は非表示)
-const manaOverlayGroup = g.append('g').attr('class', 'mana-overlay-layer').style('display', 'none');
-// 3. ラベルレイヤー
-const labelGroup = g.append('g').attr('class', 'label-layer');
+const layers = {};
+function createLayer(name, visibleByDefault = true) {
+  const layerGroup = g.append('g').attr('class', `${name}-layer`);
+  layers[name] = { group: layerGroup, visible: visibleByDefault };
+  if (!visibleByDefault) {
+    layerGroup.style('display', 'none');
+  }
+  return layerGroup;
+}
 
-// --- 1. 地形レイヤーの描画 ---
-terrainGroup.selectAll('.hex')
-  .data(hexes)
-  .enter().append('polygon')
+const terrainLayer = createLayer('terrain');
+const manaOverlayLayer = createLayer('mana-overlay', false);
+const climateOverlayLayer = createLayer('climate-overlay', false);
+const tempOverlayLayer = createLayer('temp-overlay', false);
+const elevationOverlayLayer = createLayer('elevation-overlay', false);
+const labelLayer = createLayer('labels');
+
+terrainLayer.selectAll('.hex')
+  .data(hexes).enter().append('polygon')
   .attr('class', 'hex')
   .attr('points', d => d.points.map(p => p.join(',')).join(' '))
   .attr('fill', d => TERRAIN_COLORS_SLG[d.terrain]);
 
-// --- 2. 魔力オーバーレイレイヤーの描画 ---
-manaOverlayGroup.selectAll('.mana-hex')
-  .data(hexes)
-  .enter().append('polygon')
+manaOverlayLayer.selectAll('.mana-hex')
+  .data(hexes).enter().append('polygon')
   .attr('class', 'mana-hex')
   .attr('points', d => d.points.map(p => p.join(',')).join(' '))
   .attr('fill', d => manaColor(d.properties.manaValue))
   .style('fill-opacity', 0.6)
-  .style('pointer-events', 'none'); // マウスイベントを透過させる
+  .style('pointer-events', 'none');
 
-// --- 3. ラベルレイヤーの描画 (グループ化) ---
-const hexLabelGroups = labelGroup.selectAll('.hex-label-group')
-  .data(hexes)
-  .enter().append('g')
-  .attr('class', 'hex-label-group')
-  // .style('display', 'none'); // グループ全体を初期非表示
+climateOverlayLayer.selectAll('.climate-hex')
+  .data(hexes).enter().append('polygon')
+  .attr('class', 'climate-hex')
+  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+  .attr('fill', d => climateColor(d.properties.climate))
+  .style('fill-opacity', 0.6)
+  .style('pointer-events', 'none');
 
-// ツールチップ用タイトル (透明な領域)
+tempOverlayLayer.selectAll('.temp-hex')
+  .data(hexes).enter().append('polygon')
+  .attr('class', 'temp-hex')
+  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+  .attr('fill', d => climateColor(d.properties.temperature))
+  .style('fill-opacity', 0.6)
+  .style('pointer-events', 'none');
+
+elevationOverlayLayer.selectAll('.elevation-hex')
+  .data(hexes).enter().append('polygon')
+  .attr('class', 'elevation-hex')
+  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+  .attr('fill', d => elevationColor(d.properties.elevation))
+  .style('fill-opacity', 0.6)
+  .style('pointer-events', 'none');
+
+const hexLabelGroups = labelLayer.selectAll('.hex-label-group')
+  .data(hexes).enter().append('g')
+  .attr('class', 'hex-label-group');
+
 hexLabelGroups.append('polygon')
   .attr('points', d => d.points.map(p => p.join(',')).join(' '))
   .style('fill', 'transparent')
   .append('title')
-  .text(d => `E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
-             `Terrain: ${d.terrain}\n` +
-             `Mana: ${d.properties.manaRank} (${d.properties.manaValue.toFixed(2)})\n` +
-             `Resource: ${d.properties.resourceRank}`);
+  .text(d => 
+    `E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
+    `Terrain: ${d.terrain}\n` +
+    `Elevation: ${Math.round(d.properties.elevation)}m\n` +
+    `Climate: ${d.properties.climate.toFixed(1)}℃\n` +
+    `Temp: ${d.properties.temperature.toFixed(1)}℃\n` +
+    `Mana: ${d.properties.manaRank} (${d.properties.manaValue.toFixed(2)})\n` +
+    `Resource: ${d.properties.resourceRank}`
+  );
              
-// 座標ラベル
 hexLabelGroups.append('text').attr('class', 'hex-label')
   .attr('x', d => d.cx).attr('y', d => d.cy + hexHeight * 0.4)
   .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
@@ -185,14 +253,12 @@ hexLabelGroups.append('text').attr('class', 'hex-label')
   .style('display', 'none')
   .text(d => `${String(d.x).padStart(2, '0')}-${String(d.y).padStart(2, '0')}`);
 
-// 居住区ラベル
 hexLabelGroups.filter(d => d.properties.settlement).append('text').attr('class', 'settlement-label')
   .attr('x', d => d.cx).attr('y', d => d.cy)
   .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
   .style('font-size', `${r / 1.5}px`)
   .text(d => d.properties.settlement);
 
-// 魔力量ラベル
 hexLabelGroups.append('text').attr('class', 'property-label')
   .attr('x', d => d.cx - r * 0.7).attr('y', d => d.cy)
   .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
@@ -200,7 +266,6 @@ hexLabelGroups.append('text').attr('class', 'property-label')
   .style('display', 'none')
   .text(d => d.properties.manaRank);
 
-// 資源量ラベル
 hexLabelGroups.append('text').attr('class', 'property-label')
   .attr('x', d => d.cx + r * 0.7).attr('y', d => d.cy)
   .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
@@ -208,21 +273,60 @@ hexLabelGroups.append('text').attr('class', 'property-label')
   .style('display', 'none')
   .text(d => d.properties.resourceRank);
 
-// --- Zoomイベントハンドラ ---
 const zoom = d3.zoom().scaleExtent([0.2, 10]).on('zoom', (event) => {
     g.attr('transform', event.transform);
     const effectiveRadius = r * event.transform.k;
     
-    // 居住区以外のラベル（座標、魔力、資源）の表示/非表示を切り替える
-    labelGroup.selectAll('.hex-label, .property-label')
+    labelLayer.selectAll('.hex-label, .property-label')
       .style('display', effectiveRadius >= 70 ? 'inline' : 'none');
   });
 svg.call(zoom);
 
-// --- UIイベントハンドラ ---
+function toggleLayerVisibility(layerName, buttonElement, showText, hideText) {
+  const layer = layers[layerName];
+  layer.visible = !layer.visible;
+  layer.group.style('display', layer.visible ? 'inline' : 'none');
+  buttonElement.textContent = layer.visible ? hideText : showText;
+}
+
 d3.select('#toggleManaOverlay').on('click', function() {
-  const overlay = manaOverlayGroup;
-  const isHidden = overlay.style('display') === 'none';
-  overlay.style('display', isHidden ? 'inline' : 'none');
-  this.textContent = isHidden ? '龍脈非表示' : '龍脈表示';
+  toggleLayerVisibility('mana-overlay', this, '龍脈表示', '龍脈非表示');
 });
+d3.select('#toggleClimateOverlay').on('click', function() {
+  toggleLayerVisibility('climate-overlay', this, '気候表示', '気候非表示');
+});
+d3.select('#toggleTempOverlay').on('click', function() {
+    toggleLayerVisibility('temp-overlay', this, '気温表示', '気温非表示');
+});
+d3.select('#toggleElevationOverlay').on('click', function() {
+  toggleLayerVisibility('elevation-overlay', this, '標高表示', '標高非表示');
+});
+
+
+// ★★★ 以下を再追加 ★★★
+// --- 初期表示位置の設定 ---
+// 1. 中央にしたい目標のヘックス座標
+const targetX = 50;
+const targetY = 50;
+
+// 2. 画面のサイズを取得
+const svgWidth = svg.node().getBoundingClientRect().width;
+const svgHeight = svg.node().getBoundingClientRect().height;
+
+// 3. 目標ヘックスのデータを探す
+const targetHex = hexes.find(h => h.x === targetX && h.y === targetY);
+
+if (targetHex) {
+  // 4. 初期ズーム倍率を設定 (お好みで調整)
+  const initialScale = 1.5;
+
+  // 5. 目標ヘックスが画面中央に来るように移動量を計算
+  const translateX = svgWidth / 2 - targetHex.cx * initialScale;
+  const translateY = svgHeight / 2 - targetHex.cy * initialScale;
+
+  // 6. 計算した移動量と倍率で初期変換を作成
+  const initialTransform = d3.zoomIdentity.translate(translateX, translateY).scale(initialScale);
+  
+  // 7. SVGに初期変換を適用
+  svg.call(zoom.transform, initialTransform);
+}
