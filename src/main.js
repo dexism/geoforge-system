@@ -26,6 +26,7 @@ const taigaPotentialNoise = createNoise2D(); // 針葉樹林の育ちやすさ
 const junglePotentialNoise = createNoise2D(); // 密林の育ちやすさ
 const vegetationCoverageNoise = createNoise2D(); // 植生全体の量
 const grasslandPotentialNoise = createNoise2D(); // 草原の育ちやすさ
+const miningPotentialNoise = createNoise2D(); // 鉱業ポテンシャル
 
 // ----------------------------------------------------------------
 // ■ 地形生成パラメータ
@@ -33,8 +34,8 @@ const grasslandPotentialNoise = createNoise2D(); // 草原の育ちやすさ
 // ----------------------------------------------------------------
 const NOISE_SCALE =               0.05; 
 const LAND_BIAS =                 0.7; 
-const ELEVATION_PEAK_FACTOR =     4.0; 
-const CONTINENT_FALLOFF_FACTOR =  3.0;
+const ELEVATION_PEAK_FACTOR =     2.0; 
+const CONTINENT_FALLOFF_FACTOR =  4.0;
 const LAKE_THRESHOLD_PLAINS =    -0.90;
 const LAKE_THRESHOLD_MOUNTAINS = -0.85;
 const elevationScale = d3.scaleLinear().domain([0.0, 1.6]).range([0, 7000]).clamp(true);
@@ -136,7 +137,11 @@ const manaColor = d3.scaleSequential(d3.interpolatePurples).domain([0, 1]);
 const tempColor = d3.scaleSequential(d3.interpolateTurbo).domain([-15, 35]);
 const precipColor = d3.scaleSequential(d3.interpolateBlues).domain([0, 1]);
 // const elevationOverlayColor = d3.scaleSequential(d3.interpolateTurbo).domain([0, 7000]);
-
+// ★★★ 新規：各産業ポテンシャル用のカラーマップ ★★★
+const agriColor = d3.scaleSequential(d3.interpolateGreens).domain([0, 1]);
+const forestColor = d3.scaleSequential(d3.interpolateYlGn).domain([0, 1]);
+const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 1]);
+const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]);
 
 // ================================================================
 // データ生成ロジック
@@ -145,17 +150,15 @@ const centerX = COLS / 2;
 const centerY = ROWS / 2;
 const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
 
+const getIndex = (col, row) => row * COLS + col;
+
 /**
- * 座標(col, row)に基づいて、そのヘックスの全プロパティを生成する関数
- * @param {number} col - 列番号
- * @param {number} row - 行番号
- * @returns {object} { properties } - そのヘックスの全プロパティを含むオブジェクト
+ * 第1パス：物理的な基本プロパティを生成する関数
  */
-function generateHexData(col, row) {
+function generateBaseProperties(col, row) {
     const nx = col * NOISE_SCALE;
     const ny = row * NOISE_SCALE;
     
-    // --- 1. 標高の計算 ---
     let baseElevation = terrainNoise(nx, ny);
     if (baseElevation > 0) {
         baseElevation = Math.pow(baseElevation, ELEVATION_PEAK_FACTOR);
@@ -172,22 +175,20 @@ function generateHexData(col, row) {
     properties.isWater = isWater;
     properties.elevation = isWater ? 0 : elevationScale(internalElevation);
     
-    // --- 2. 気候・降水量の計算 ---
     const latitude = row / ROWS;
     const baseTemp = -5 + (latitude * 35);
-    properties.climate = baseTemp + climateNoise(nx, ny) * 5; // 基準気候
+    properties.climate = baseTemp + climateNoise(nx, ny) * 5;
     
     let elevationCorrection = 0;
     if (properties.elevation > 0) {
         elevationCorrection = (properties.elevation / 100) * 0.6;
     }
-    properties.temperature = properties.climate - elevationCorrection; // 実効気温
+    properties.temperature = properties.climate - elevationCorrection;
 
     const basePrecip = (col / COLS);
     const precipNoiseValue = precipitationNoise(nx, ny) * 0.2;
     properties.precipitation = Math.max(0, Math.min(1, basePrecip + precipNoiseValue));
     
-    // --- 3. 気候帯の決定 ---
     if (properties.climate < TEMP_ZONES.COLD) {
         if (properties.precipitation < PRECIP_ZONES.DRY) properties.climateZone = "砂漠気候(寒)";
         else if (properties.precipitation < PRECIP_ZONES.MODERATE) properties.climateZone = "ツンドラ気候";
@@ -202,71 +203,11 @@ function generateHexData(col, row) {
         else properties.climateZone = "熱帯雨林気候";
     }
 
-    // --- 4. 植生の決定 ---
-    // 1. まず、ポテンシャルモデルに基づいて「基本となる植生」を決定
-    if (isWater) {
-        if (internalElevation < -0.4) properties.vegetation = '深海';
-        else if (internalElevation < 0.0) properties.vegetation = '海洋';
-        else properties.vegetation = '湖沼';
-    } else if (properties.elevation > VEGETATION_THRESHOLDS.ALPINE_ELEVATION) {
-        properties.vegetation = '高山';
-    } else if (properties.temperature < VEGETATION_THRESHOLDS.TUNDRA_TEMP) {
-        properties.vegetation = '荒れ地';
-    } else if (properties.precipitation < VEGETATION_THRESHOLDS.DESERT_PRECIP) {
-        properties.vegetation = '砂漠';
-    } else {
-        // (ポテンシャルモデルのロジックは前回から変更なし)
-        const totalCoverage = (1 + vegetationCoverageNoise(nx, ny)) / 2;
-        const potentials = {
-            '密林':     (1 + junglePotentialNoise(nx * 0.5, ny * 0.5)) / 2,
-            '森林':     (1 + forestPotentialNoise(nx, ny)) / 2,
-            '疎林':     (1 + forestPotentialNoise(nx, ny)) / 2,
-            '針葉樹林': (1 + taigaPotentialNoise(nx * 2, ny * 2)) / 2,
-            '草原':     (1 + grasslandPotentialNoise(nx, ny)) / 2,
-            '荒れ地':   0.1,
-        };
-        
-        const candidates = [];
-        if (properties.climate > TEMP_ZONES.TEMPERATE) {
-            if (properties.precipitation > VEGETATION_THRESHOLDS.JUNGLE_MIN_PRECIP) candidates.push('密林');
-            candidates.push('草原');
-        } else if (properties.climate > TEMP_ZONES.COLD) {
-            if (properties.precipitation > VEGETATION_THRESHOLDS.FOREST_MIN_PRECIP) candidates.push('森林');
-            if (properties.precipitation > VEGETATION_THRESHOLDS.SPARSE_MIN_PRECIP) candidates.push('疎林');
-            candidates.push('草原');
-        } else {
-            if (properties.precipitation > VEGETATION_THRESHOLDS.TAIGA_MIN_PRECIP) candidates.push('針葉樹林');
-            candidates.push('荒れ地');
-        }
-
-        let totalPotential = 0;
-        const proportions = [];
-        candidates.forEach(veg => { totalPotential += potentials[veg] || 0; });
-
-        if (totalPotential > 0) {
-            candidates.forEach(veg => {
-                proportions.push({ type: veg, percentage: (potentials[veg] / totalPotential) * totalCoverage });
-            });
-        }
-        
-        const bareGroundPercentage = 1.0 - proportions.reduce((sum, p) => sum + p.percentage, 0);
-        proportions.push({ type: '裸地', percentage: bareGroundPercentage });
-        
-        let dominantVeg = { type: '裸地', percentage: -1 };
-        proportions.forEach(p => {
-            if (p.percentage > dominantVeg.percentage) { dominantVeg = p; }
-        });
-        
-        properties.vegetation = (dominantVeg.type === '裸地') ? '標高ベース' : dominantVeg.type;
-    }
-    
-    // 2. 次に、植生とは独立して「積雪しているか」を判定し、フラグを立てる
     properties.hasSnow = false;
     if (!isWater && properties.temperature <= SNOW_THRESHOLDS.TEMPERATURE && properties.precipitation > SNOW_THRESHOLDS.PRECIPITATION_LIGHT) {
         properties.hasSnow = true;
     }
 
-    // --- 5. その他のプロパティ生成 ---
     const rawManaValue = manaNoise(nx / 2, ny / 2);
     properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
     if (properties.manaValue > 0.9) properties.manaRank = 'S';
@@ -278,110 +219,196 @@ function generateHexData(col, row) {
     const resourceSymbols = ['木', '石', '鉄', '金', '晶'];
     properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
     
-    if (!isWater && properties.vegetation !== '高山') {
-        const rand = Math.random();
-        if (rand > 0.999) properties.settlement = '都';
-        else if (rand > 0.99) properties.settlement = '街';
-        else if (rand > 0.97) properties.settlement = '町';
-        else if (rand > 0.9) properties.settlement = '村';
-    }
-
-    return { properties };
+    return properties;
 }
 
+
 // ================================================================
-// 水系生成ロジック
+// ★★★ 変更点：データ生成プロセスを3つのパスに再構築 ★★★
 // ================================================================
+
+// --- 第1パス：全ヘックスの基本プロパティを生成 ---
 const allHexes = [];
 for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
-        const { properties } = generateHexData(col, row);
-        allHexes.push({ col, row, properties });
+        allHexes.push({ col, row, properties: generateBaseProperties(col, row) });
     }
 }
+// 隣接情報をキャッシュ
+allHexes.forEach(h => {
+    const { col, row } = h;
+    const isOddCol = col % 2 !== 0;
+    h.neighbors = [
+        { col: col, row: row - 1 }, { col: col, row: row + 1 },
+        { col: col - 1, row: row }, { col: col + 1, row: row },
+        { col: col - 1, row: isOddCol ? row + 1 : row - 1 },
+        { col: col + 1, row: isOddCol ? row + 1 : row - 1 },
+    ].filter(n => n.col >= 0 && n.col < COLS && n.row >= 0 && n.row < ROWS)
+     .map(n => getIndex(n.col, n.row));
+});
 
-// ★★★ 変更点：水源地の特定ロジックを修正 ★★★
+// --- 第2パス：水系を生成 ---
 const riverSources = allHexes.filter(h => {
-    // 水源になるための基本条件：水域でなく、標高が1000m以上であること
-    if (h.properties.isWater || h.properties.elevation < 1000) {
-        return false;
-    }
-    
-    // 条件1: 降水量が多い山地（従来の条件）
+    if (h.properties.isWater || h.properties.elevation < 1000) return false;
     const isRainyMountain = h.properties.elevation > 1500 && h.properties.precipitation > 0.5;
-    
-    // 条件2: 降水量に関わらず、非常に高い山（湧水や雪解け水のイメージ）
     const isHighPeak = h.properties.elevation > 2000;
-
-    // 確率を計算：雨の多い山は発生しやすく、高い山はそれより少し発生しにくい
     let probability = 0;
-    if (isRainyMountain) {
-        probability = 0.20; // 20%
-    } else if (isHighPeak) {
-        probability = 0.20; // 20%
-    }
-
+    if (isRainyMountain) probability = 0.20;
+    else if (isHighPeak) probability = 0.20;
     return Math.random() < probability;
 });
 
 allHexes.forEach(h => h.properties.flow = 0);
 
-const getIndex = (col, row) => row * COLS + col;
-
 riverSources.forEach(source => {
     let currentCol = source.col;
     let currentRow = source.row;
-    
     for (let i = 0; i < 50; i++) {
         const currentIndex = getIndex(currentCol, currentRow);
         allHexes[currentIndex].properties.flow += 1;
-
-        const isOddCol = currentCol % 2 !== 0;
-        const neighborsCoords = [
-            { col: currentCol, row: currentRow - 1 }, { col: currentCol, row: currentRow + 1 },
-            { col: currentCol - 1, row: currentRow }, { col: currentCol + 1, row: currentRow },
-            { col: currentCol - 1, row: isOddCol ? currentRow + 1 : currentRow - 1 },
-            { col: currentCol + 1, row: isOddCol ? currentRow + 1 : currentRow - 1 },
-        ];
-        
+        const neighbors = allHexes[currentIndex].neighbors.map(i => allHexes[i]);
         let lowestNeighbor = null;
         let minElevation = allHexes[currentIndex].properties.elevation;
-
-        neighborsCoords.forEach(n => {
-            if (n.col >= 0 && n.col < COLS && n.row >= 0 && n.row < ROWS) {
-                const neighborIndex = getIndex(n.col, n.row);
-                const neighborElevation = allHexes[neighborIndex].properties.elevation;
-                if (neighborElevation < minElevation) {
-                    minElevation = neighborElevation;
-                    lowestNeighbor = n;
-                }
+        neighbors.forEach(n => {
+            if (n.properties.elevation < minElevation) {
+                minElevation = n.properties.elevation;
+                lowestNeighbor = n;
             }
         });
-
         if (lowestNeighbor) {
             currentCol = lowestNeighbor.col;
             currentRow = lowestNeighbor.row;
-            const nextIndex = getIndex(currentCol, currentRow);
-            if (allHexes[nextIndex].properties.isWater) {
-                allHexes[nextIndex].properties.flow += 1;
+            if (lowestNeighbor.properties.isWater) {
+                lowestNeighbor.properties.flow += 1;
                 break;
             }
         } else {
             if (!allHexes[currentIndex].properties.isWater) {
-                 allHexes[currentIndex].properties.vegetation = '湖沼';
-                 allHexes[currentIndex].properties.isWater = true; // 湖になったことを記録
+                 allHexes[currentIndex].properties.isWater = true;
             }
             break;
         }
     }
 });
 
-// 流量のある土地に沖積平野フラグを立てる
+// --- 第3パス：水系情報を元に、最終的なプロパティ（植生、産業ポテンシャル）を計算 ---
 allHexes.forEach(h => {
-    // ↓↓↓ このブロックを以下のように書き換えます ↓↓↓
-    h.properties.isAlluvial = false; // まず全ヘックスをfalseで初期化
-    if (h.properties.flow > 0 && !h.properties.isWater && h.properties.vegetation !== '高山') {
-        h.properties.isAlluvial = true;
+    const { properties, col, row } = h;
+    const { isWater, elevation, temperature, precipitation, climate } = properties;
+    const nx = col * NOISE_SCALE;
+    const ny = row * NOISE_SCALE;
+
+    // 1. 沖積平野フラグ
+    properties.isAlluvial = properties.flow > 0 && !isWater && elevation < 4000;
+
+    // 2. 最終的な植生
+    if (isWater) {
+        if (elevationScale.invert(elevation) < -0.4) properties.vegetation = '深海';
+        else if (elevationScale.invert(elevation) < 0.0) properties.vegetation = '海洋';
+        else properties.vegetation = '湖沼';
+    } else if (elevation > VEGETATION_THRESHOLDS.ALPINE_ELEVATION) {
+        properties.vegetation = '高山';
+    } else if (temperature < VEGETATION_THRESHOLDS.TUNDRA_TEMP) {
+        properties.vegetation = '荒れ地';
+    } else if (precipitation < VEGETATION_THRESHOLDS.DESERT_PRECIP) {
+        properties.vegetation = '砂漠';
+    } else {
+        const totalCoverage = (1 + vegetationCoverageNoise(nx, ny)) / 2;
+        const potentials = {
+            '密林': (1 + junglePotentialNoise(nx * 0.5, ny * 0.5)) / 2,
+            '森林': (1 + forestPotentialNoise(nx, ny)) / 2,
+            '疎林': (1 + forestPotentialNoise(nx, ny)) / 2,
+            '針葉樹林': (1 + taigaPotentialNoise(nx * 2, ny * 2)) / 2,
+            '草原': (1 + grasslandPotentialNoise(nx, ny)) / 2,
+            '荒れ地': 0.1,
+        };
+        const candidates = [];
+        if (climate > TEMP_ZONES.TEMPERATE) {
+            if (precipitation > VEGETATION_THRESHOLDS.JUNGLE_MIN_PRECIP) candidates.push('密林');
+            candidates.push('草原');
+        } else if (climate > TEMP_ZONES.COLD) {
+            if (precipitation > VEGETATION_THRESHOLDS.FOREST_MIN_PRECIP) candidates.push('森林');
+            if (precipitation > VEGETATION_THRESHOLDS.SPARSE_MIN_PRECIP) candidates.push('疎林');
+            candidates.push('草原');
+        } else {
+            if (precipitation > VEGETATION_THRESHOLDS.TAIGA_MIN_PRECIP) candidates.push('針葉樹林');
+            candidates.push('荒れ地');
+        }
+        let totalPotential = 0;
+        const proportions = [];
+        candidates.forEach(veg => { totalPotential += potentials[veg] || 0; });
+        if (totalPotential > 0) {
+            candidates.forEach(veg => {
+                proportions.push({ type: veg, percentage: (potentials[veg] / totalPotential) * totalCoverage });
+            });
+        }
+        const bareGroundPercentage = 1.0 - proportions.reduce((sum, p) => sum + p.percentage, 0);
+        proportions.push({ type: '裸地', percentage: bareGroundPercentage });
+        let dominantVeg = { type: '裸地', percentage: -1 };
+        proportions.forEach(p => { if (p.percentage > dominantVeg.percentage) { dominantVeg = p; } });
+        properties.vegetation = (dominantVeg.type === '裸地') ? '標高ベース' : dominantVeg.type;
+    }
+
+    // 3. 産業ポテンシャル
+    let agriPotential = 0;
+    if (!isWater) {
+        if (properties.isAlluvial) agriPotential += 0.5;
+        if (h.neighbors.some(nIndex => allHexes[nIndex].properties.vegetation === '湖沼')) agriPotential += 0.3;
+        if (properties.vegetation === '草原') agriPotential += 0.2;
+        const idealTemp = 17.5;
+        const tempFactor = Math.max(0, 1 - Math.abs(temperature - idealTemp) / 15);
+        agriPotential += tempFactor * 0.3;
+        const idealPrecip = 0.55;
+        const precipFactor = Math.max(0, 1 - Math.abs(precipitation - idealPrecip) / 0.3);
+        agriPotential += precipFactor * 0.2;
+    }
+    properties.agriPotential = Math.min(1.0, agriPotential);
+
+    let forestPotential = 0;
+    switch (properties.vegetation) {
+        case '密林': forestPotential = 1.0; break;
+        case '森林': forestPotential = 0.8; break;
+        case '針葉樹林': forestPotential = 0.6; break;
+        case '疎林': forestPotential = 0.3; break;
+    }
+    properties.forestPotential = forestPotential;
+
+    let miningPotential = 0;
+    if (!isWater) {
+        miningPotential += (elevation / 7000) * 0.5;
+        miningPotential += ((1 + miningPotentialNoise(nx * 3, ny * 3)) / 2) * 0.5;
+    }
+    properties.miningPotential = Math.min(1.0, miningPotential);
+    
+    let fishingPotential = 0;
+    if (!isWater) {
+        let waterBonus = 0;
+        h.neighbors.forEach(nIndex => {
+            const neighborHex = allHexes[nIndex];
+            if (neighborHex.properties.isWater) {
+                if (neighborHex.properties.vegetation === '海洋' || neighborHex.properties.vegetation === '深海') waterBonus = Math.max(waterBonus, 0.9);
+                else if (neighborHex.properties.vegetation === '湖沼') waterBonus = Math.max(waterBonus, 0.6);
+            }
+        });
+        fishingPotential += waterBonus;
+        if (properties.isAlluvial) {
+            fishingPotential += Math.min(Math.sqrt(properties.flow) * 0.15, 0.4);
+            const isEstuary = h.neighbors.some(nIndex => {
+                const neighborVeg = allHexes[nIndex].properties.vegetation;
+                return neighborVeg === '海洋' || neighborVeg === '深海';
+            });
+            if (isEstuary) fishingPotential += 0.2;
+        }
+    }
+    properties.fishingPotential = Math.min(1.0, fishingPotential);
+
+    // 4. 居住区
+    if (!isWater && properties.vegetation !== '高山') {
+        const rand = Math.random();
+        if (rand > 0.999) properties.settlement = '都';
+        else if (rand > 0.99) properties.settlement = '街';
+        else if (rand > 0.97) properties.settlement = '町';
+        else if (rand > 0.9) properties.settlement = '村';
     }
 });
 
@@ -462,6 +489,11 @@ const precipOverlayLayer = createLayer('precip-overlay', false);
 const tempOverlayLayer = createLayer('temp-overlay', false);
 const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false);
 const manaOverlayLayer = createLayer('mana-overlay', false);
+// ★★★ 新規：産業ポテンシャルレイヤーを追加 ★★★
+const agriOverlayLayer = createLayer('agri-overlay', false);
+const forestOverlayLayer = createLayer('forest-overlay', false);
+const miningOverlayLayer = createLayer('mining-overlay', false);
+const fishingOverlayLayer = createLayer('fishing-overlay', false);
 const labelLayer = createLayer('labels');
 
 // --- 3. 各レイヤーの描画 ---
@@ -489,7 +521,7 @@ riverLayer.selectAll('.river-path')
     .attr('x2', d => d.downstream.cx) // 保存した下流の座標を使用
     .attr('y2', d => d.downstream.cy) // 保存した下流の座標を使用
     .attr('stroke', '#058')
-    .attr('stroke-width', d => Math.min(Math.sqrt(d.properties.flow) * 2, r * 1)) // 太くなりすぎないように上限を設定
+    .attr('stroke-width', d => Math.min(Math.sqrt(d.properties.flow) * 2, r)) // 太くなりすぎないように上限を設定
     .attr('stroke-linecap', 'round')
     .style('pointer-events', 'none');
 
@@ -500,8 +532,8 @@ snowLayer.selectAll('.snow-hex')
     .enter().append('polygon')
     .attr('class', 'snow-hex')
     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-    .attr('fill', '#ffffff') // 雪の色
-    .style('fill-opacity', 0.7) // 半透明にして下の地形がうっすら見えるように
+    .attr('fill', '#fff') // 雪の色
+    .style('fill-opacity', 0.8) // 半透明にして下の地形がうっすら見えるように
     .style('pointer-events', 'none'); // マウスイベントを透過させる
 
 // 3f. 標高オーバーレイ (植生なしの標高グラデーション)
@@ -511,7 +543,7 @@ elevationOverlayLayer.selectAll('.elevation-hex')
     .attr('class', 'elevation-hex')
     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
     .attr('fill', d => getElevationColor(d.properties.elevation))
-    .style('fill-opacity', 0.8) // 少し不透明度を上げて見やすく
+    .style('fill-opacity', 0.9) // 少し不透明度を上げて見やすく
     .style('pointer-events', 'none');
 
 // 3c. 気候帯オーバーレイ
@@ -546,26 +578,60 @@ manaOverlayLayer.selectAll('.mana-hex')
     .attr('fill', d => manaColor(d.properties.manaValue))
     .style('fill-opacity', 0.6).style('pointer-events', 'none');
 
+// ★★★ 新規：産業ポテンシャルレイヤーの描画 ★★★
+// 農業
+agriOverlayLayer.selectAll('.agri-hex')
+    .data(hexes).enter().append('polygon')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => agriColor(d.properties.agriPotential))
+    .style('fill-opacity', 0.7).style('pointer-events', 'none');
+
+// 林業
+forestOverlayLayer.selectAll('.forest-hex')
+    .data(hexes).enter().append('polygon')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => forestColor(d.properties.forestPotential))
+    .style('fill-opacity', 0.7).style('pointer-events', 'none');
+
+// 鉱業
+miningOverlayLayer.selectAll('.mining-hex')
+    .data(hexes).enter().append('polygon')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => miningColor(d.properties.miningPotential))
+    .style('fill-opacity', 0.7).style('pointer-events', 'none');
+
+// 漁業
+fishingOverlayLayer.selectAll('.fishing-hex')
+    .data(hexes).enter().append('polygon')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => fishingColor(d.properties.fishingPotential))
+    .style('fill-opacity', 0.7).style('pointer-events', 'none');
+
 // 3g. ラベルレイヤー
 const hexLabelGroups = labelLayer.selectAll('.hex-label-group')
     .data(hexes).enter().append('g')
     .attr('class', 'hex-label-group');
 
 // ツールチップ
+// ★★★ 変更点：ツールチップに産業ポテンシャル情報を追加 ★★★
 hexLabelGroups.append('polygon')
     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
     .style('fill', 'transparent')
     .append('title')
     .text(d => 
         `E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
-        // ↓↓↓ この行を以下のように書き換えます ↓↓↓
-        `Terrain: ${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
+        `Vegetation: ${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
         `Climate Zone: ${d.properties.climateZone}\n` +
         `Elevation: ${Math.round(d.properties.elevation)}m\n` +
         `Temp: ${d.properties.temperature.toFixed(1)}℃\n` +
         `Precipitation: ${(d.properties.precipitation * 100).toFixed(0)}%\n` +
         `Mana: ${d.properties.manaRank} (${d.properties.manaValue.toFixed(2)})\n` +
-        `Resource: ${d.properties.resourceRank}`
+        `Resource: ${d.properties.resourceRank}\n` +
+        `--- Potentials ---\n` +
+        `Agriculture: ${(d.properties.agriPotential * 100).toFixed(0)}%\n` +
+        `Forestry:    ${(d.properties.forestPotential * 100).toFixed(0)}%\n` +
+        `Mining:      ${(d.properties.miningPotential * 100).toFixed(0)}%\n` +
+        `Fishing:     ${(d.properties.fishingPotential * 100).toFixed(0)}%`
     );
              
 // 座標ラベル
@@ -632,6 +698,19 @@ d3.select('#toggleTempOverlay').on('click', function() {
 });
 d3.select('#toggleElevationOverlay').on('click', function() {
     toggleLayerVisibility('elevation-overlay', this, '土地利用消去', '土地利用表示');
+});
+// ★★★ 新規：産業ポテンシャルボタンのイベントハンドラを追加 ★★★
+d3.select('#toggleAgriOverlay').on('click', function() {
+    toggleLayerVisibility('agri-overlay', this, '農業', '農業');
+});
+d3.select('#toggleForestOverlay').on('click', function() {
+    toggleLayerVisibility('forest-overlay', this, '林業', '林業');
+});
+d3.select('#toggleMiningOverlay').on('click', function() {
+    toggleLayerVisibility('mining-overlay', this, '鉱業', '鉱業');
+});
+d3.select('#toggleFishingOverlay').on('click', function() {
+    toggleLayerVisibility('fishing-overlay', this, '漁業', '漁業');
 });
 
 // --- 5. 初期表示位置の設定 ---

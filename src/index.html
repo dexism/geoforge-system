@@ -8,11 +8,16 @@
 <body>
   <div class="ui-container">
     <button id="toggleManaOverlay">龍脈表示</button>
-    <!-- ★★★ 変更点：ボタンの構成を更新 ★★★ -->
     <button id="toggleClimateZoneOverlay">気候帯表示</button>
     <button id="togglePrecipOverlay">降水量表示</button>
     <button id="toggleTempOverlay">気温表示</button>
     <button id="toggleElevationOverlay">土地利用消去</button>
+    <!-- ★★★ 以下を追記 ★★★ -->
+    <hr> <!-- 区切り線 -->
+    <button id="toggleAgriOverlay">農業</button>
+    <button id="toggleForestOverlay">林業</button>
+    <button id="toggleMiningOverlay">鉱業</button>
+    <button id="toggleFishingOverlay">漁業</button>
   </div>
   <svg id="hexmap"></svg>
   <script type="module" src="./main.js"></script>
