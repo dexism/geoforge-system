@@ -9,7 +9,7 @@ import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/
 // ■ 基本設定
 // ----------------------------------------------------------------
 const COLS = 100;
-const ROWS = 100;
+const ROWS = 87;
 const HEX_SIZE_KM = 20;
 const r = 20;
 
@@ -33,10 +33,10 @@ const grasslandPotentialNoise = createNoise2D(); // 草原の育ちやすさ
 // ----------------------------------------------------------------
 const NOISE_SCALE = 0.06; 
 const LAND_BIAS =   0.8; 
-const ELEVATION_PEAK_FACTOR =    5.0; 
+const ELEVATION_PEAK_FACTOR =    4.0; 
 const CONTINENT_FALLOFF_FACTOR = 4.0;
-const LAKE_THRESHOLD_PLAINS =    -0.95;
-const LAKE_THRESHOLD_MOUNTAINS = -0.9;
+const LAKE_THRESHOLD_PLAINS =    -0.90;
+const LAKE_THRESHOLD_MOUNTAINS = -0.85;
 const elevationScale = d3.scaleLinear().domain([0.0, 1.6]).range([0, 7000]).clamp(true);
 const lakeThresholdScale = d3.scaleLinear()
     .domain([0.3, 1.3])
@@ -80,6 +80,10 @@ const TERRAIN_COLORS = {
     森林: '#6aa84f', 
     針葉樹林: '#3b6e4f', 
     密林: '#1b5e20',
+    // 積雪地形（上書き用）
+    // 積雪ツンドラ: '#eef',
+    // 積雪地: '#dde',
+    // 深雪地: '#fff',
 };
 
 // 3. 標高値から対応するグラデーション色を返すヘルパー関数
@@ -97,12 +101,19 @@ function getElevationColor(elevation) {
 // 植生タイプを決定するための物理的な閾値
 const VEGETATION_THRESHOLDS = {
     ALPINE_ELEVATION: 4000, 
-    TUNDRA_TEMP: -10, 
+    TUNDRA_TEMP:  -10, 
     DESERT_PRECIP: 0.04,
     JUNGLE_MIN_PRECIP: 0.10, 
     FOREST_MIN_PRECIP: 0.10,
     SPARSE_MIN_PRECIP: 0.10, 
-    TAIGA_MIN_PRECIP: 0.01,
+    TAIGA_MIN_PRECIP: 0.00,
+};
+
+// ★★★ 新規：積雪を判定するための閾値 ★★★
+const SNOW_THRESHOLDS = {
+    TEMPERATURE: -10,       // -15℃以下で積雪の可能性
+    PRECIPITATION_LIGHT: 0.1, // 降水量10%以上で積雪
+    PRECIPITATION_HEAVY: 0.4, // 降水量40%以上で深雪
 };
 
 // 基準気候と降水量から9つの気候帯を定義するための閾値
@@ -111,11 +122,16 @@ const PRECIP_ZONES = { DRY: 0.35, MODERATE: 0.65 };
 
 // 9つの気候帯の色分け
 const CLIMATE_ZONE_COLORS = {
-    "砂漠気候(寒)": '#c1bba4', "ツンドラ気候": '#aed6f1', "亜寒帯湿潤気候": '#85c1e9',
-    "ステップ気候": '#f5b7b1', "地中海性気候": '#a9dfbf', "温暖湿潤気候": '#7dcea0',
-    "砂漠気候(熱)": '#f7dc6f', "熱帯草原気候": '#f9e79f', "熱帯雨林気候": '#27ae60',
+  "砂漠気候(寒)":   '#d2b48c', // タン系：寒冷砂漠の乾いた土色
+  "ツンドラ気候":   '#5dade2', // 明るい寒色：氷雪と苔をイメージ
+  "亜寒帯湿潤気候": '#2874a6', // 濃い青緑：タイガの深い森
+  "ステップ気候":   '#e67e22', // オレンジ寄り：乾いた草原
+  "地中海性気候":   '#58d68d', // 明るい緑：オリーブや低木林
+  "温暖湿潤気候":   '#239b56', // 深緑：落葉広葉樹林
+  "砂漠気候(熱)":   '#f4d03f', // 鮮やかな黄色：灼熱の砂漠
+  "熱帯草原気候":   '#f5b041', // 黄土色：サバンナの草原
+  "熱帯雨林気候":   '#145a32'  // 濃い緑：密林の深い緑
 };
-
 // ----------------------------------------------------------------
 // ■ オーバーレイ用のカラーマップ
 // ----------------------------------------------------------------
@@ -190,6 +206,7 @@ function generateHexData(col, row) {
   }
 
   // --- 4. 植生の決定 ---
+  // 1. まず、ポテンシャルモデルに基づいて「基本となる植生」を決定
   if (isWater) {
       if (internalElevation < -0.4) properties.vegetation = '深海';
       else if (internalElevation < 0.0) properties.vegetation = '海洋';
@@ -201,6 +218,7 @@ function generateHexData(col, row) {
   } else if (properties.precipitation < VEGETATION_THRESHOLDS.DESERT_PRECIP) {
       properties.vegetation = '砂漠';
   } else {
+      // (ポテンシャルモデルのロジックは前回から変更なし)
       const totalCoverage = (1 + vegetationCoverageNoise(nx, ny)) / 2;
       const potentials = {
           '密林':     (1 + junglePotentialNoise(nx * 0.5, ny * 0.5)) / 2,
@@ -243,6 +261,12 @@ function generateHexData(col, row) {
       });
       
       properties.vegetation = (dominantVeg.type === '裸地') ? '標高ベース' : dominantVeg.type;
+  }
+  
+  // 2. 次に、植生とは独立して「積雪しているか」を判定し、フラグを立てる
+  properties.hasSnow = false;
+  if (!isWater && properties.temperature <= SNOW_THRESHOLDS.TEMPERATURE && properties.precipitation > SNOW_THRESHOLDS.PRECIPITATION_LIGHT) {
+      properties.hasSnow = true;
   }
 
   // --- 5. その他のプロパティ生成 ---
@@ -306,56 +330,38 @@ function createLayer(name, visibleByDefault = true) {
 
 // レイヤーを定義順に作成
 const terrainLayer = createLayer('terrain');
-const manaOverlayLayer = createLayer('mana-overlay', false);
-const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false);
+const snowLayer = createLayer('snow');
+const elevationOverlayLayer = createLayer('elevation-overlay', false);
 const precipOverlayLayer = createLayer('precip-overlay', false);
 const tempOverlayLayer = createLayer('temp-overlay', false);
-const elevationOverlayLayer = createLayer('elevation-overlay', false);
+const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false);
+const manaOverlayLayer = createLayer('mana-overlay', false);
 const labelLayer = createLayer('labels');
 
 // --- 3. 各レイヤーの描画 ---
-// 3a. 地形レイヤー (デフォルト表示)
+// 1. 地形レイヤー (積雪のロジックを削除)
 terrainLayer.selectAll('.hex')
   .data(hexes).enter().append('polygon')
   .attr('class', 'hex')
   .attr('points', d => d.points.map(p => p.join(',')).join(' '))
   .attr('fill', d => {
       const veg = d.properties.vegetation;
-      if (TERRAIN_COLORS[veg]) { return TERRAIN_COLORS[veg]; }
+      if (TERRAIN_COLORS[veg]) {
+          return TERRAIN_COLORS[veg];
+      }
       return getElevationColor(d.properties.elevation);
   });
 
-// 3b. 魔力オーバーレイ
-manaOverlayLayer.selectAll('.mana-hex')
-  .data(hexes).enter().append('polygon')
-  .attr('class', 'mana-hex')
+// ★★★ 新規：積雪レイヤーの描画 ★★★
+snowLayer.selectAll('.snow-hex')
+  // hasSnowがtrueのヘックスのみをフィルタリング
+  .data(hexes.filter(d => d.properties.hasSnow))
+  .enter().append('polygon')
+  .attr('class', 'snow-hex')
   .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => manaColor(d.properties.manaValue))
-  .style('fill-opacity', 0.6).style('pointer-events', 'none');
-
-// 3c. 気候帯オーバーレイ
-climateZoneOverlayLayer.selectAll('.climate-zone-hex')
-  .data(hexes).enter().append('polygon')
-  .attr('class', 'climate-zone-hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => CLIMATE_ZONE_COLORS[d.properties.climateZone])
-  .style('fill-opacity', 0.7).style('pointer-events', 'none');
-
-// 3d. 降水量オーバーレイ
-precipOverlayLayer.selectAll('.precip-hex')
-  .data(hexes).enter().append('polygon')
-  .attr('class', 'precip-hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => precipColor(d.properties.precipitation))
-  .style('fill-opacity', 0.6).style('pointer-events', 'none');
-
-// 3e. 気温オーバーレイ
-tempOverlayLayer.selectAll('.temp-hex')
-  .data(hexes).enter().append('polygon')
-  .attr('class', 'temp-hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => tempColor(d.properties.temperature))
-  .style('fill-opacity', 0.6).style('pointer-events', 'none');
+  .attr('fill', '#ffffff') // 雪の色
+  .style('fill-opacity', 0.7) // 半透明にして下の地形がうっすら見えるように
+  .style('pointer-events', 'none'); // マウスイベントを透過させる
 
 // 3f. 標高オーバーレイ (植生なしの標高グラデーション)
 elevationOverlayLayer.selectAll('.elevation-hex')
@@ -366,6 +372,38 @@ elevationOverlayLayer.selectAll('.elevation-hex')
   .attr('fill', d => getElevationColor(d.properties.elevation))
   .style('fill-opacity', 0.8) // 少し不透明度を上げて見やすく
   .style('pointer-events', 'none');
+
+// 3c. 気候帯オーバーレイ
+climateZoneOverlayLayer.selectAll('.climate-zone-hex')
+  .data(hexes).enter().append('polygon')
+  .attr('class', 'climate-zone-hex')
+  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+  .attr('fill', d => CLIMATE_ZONE_COLORS[d.properties.climateZone])
+  .style('fill-opacity', 0.8).style('pointer-events', 'none');
+
+// 3e. 気温オーバーレイ
+tempOverlayLayer.selectAll('.temp-hex')
+  .data(hexes).enter().append('polygon')
+  .attr('class', 'temp-hex')
+  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+  .attr('fill', d => tempColor(d.properties.temperature))
+  .style('fill-opacity', 0.6).style('pointer-events', 'none');
+
+// 3d. 降水量オーバーレイ
+precipOverlayLayer.selectAll('.precip-hex')
+  .data(hexes).enter().append('polygon')
+  .attr('class', 'precip-hex')
+  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+  .attr('fill', d => precipColor(d.properties.precipitation))
+  .style('fill-opacity', 0.6).style('pointer-events', 'none');
+
+// 3b. 魔力オーバーレイ
+manaOverlayLayer.selectAll('.mana-hex')
+  .data(hexes).enter().append('polygon')
+  .attr('class', 'mana-hex')
+  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+  .attr('fill', d => manaColor(d.properties.manaValue))
+  .style('fill-opacity', 0.6).style('pointer-events', 'none');
 
 // 3g. ラベルレイヤー
 const hexLabelGroups = labelLayer.selectAll('.hex-label-group')
@@ -379,7 +417,8 @@ hexLabelGroups.append('polygon')
   .append('title')
   .text(d => 
     `E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
-    `Vegetation: ${d.properties.vegetation}\n` +
+    // 積雪している場合は、植生名に（積雪）を追記
+    `Vegetation: ${d.properties.vegetation}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
     `Climate Zone: ${d.properties.climateZone}\n` +
     `Elevation: ${Math.round(d.properties.elevation)}m\n` +
     `Temp: ${d.properties.temperature.toFixed(1)}℃\n` +
@@ -452,12 +491,12 @@ d3.select('#toggleTempOverlay').on('click', function() {
     toggleLayerVisibility('temp-overlay', this, '気温表示', '気温非表示');
 });
 d3.select('#toggleElevationOverlay').on('click', function() {
-  toggleLayerVisibility('elevation-overlay', this, '標高表示', '標高非表示');
+  toggleLayerVisibility('elevation-overlay', this, '土地利用消去', '土地利用表示');
 });
 
 // --- 5. 初期表示位置の設定 ---
 const targetX = 50;
-const targetY = 50;
+const targetY = 43;
 const svgWidth = svg.node().getBoundingClientRect().width;
 const svgHeight = svg.node().getBoundingClientRect().height;
 const targetHex = hexes.find(h => h.x === targetX && h.y === targetY);
