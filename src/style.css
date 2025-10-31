@@ -15,6 +15,11 @@ svg {
   stroke-width: 1;
 }
 
+button {
+  font-size: 1.0rem;
+  font-weight: bold;
+  cursor: pointer;
+}
 /* --- ★★★ 以下を追記・修正 ★★★ --- */
 
 /* UIコンテナ */
@@ -42,7 +47,7 @@ svg {
   font-size: 1.0em;
   fill: #222;
   paint-order: stroke;
-  stroke: #fff8;
+  stroke: #fff;
   stroke-width: 0.3px;
   stroke-linecap: butt;
   stroke-linejoin: miter;
@@ -51,7 +56,7 @@ svg {
 /* 座標ラベル (E00-N00) */
 .hex-label {
   font-weight: 900;
-  fill: #444;
+  fill: #222;
 }
 
 /* 居住区ラベル (都, 街) */

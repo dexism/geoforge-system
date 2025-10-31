@@ -1,5 +1,6 @@
 import * as d3 from 'd3';
 import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
+// import { astar as aStar } from 'https://cdn.jsdelivr.net/npm/tiny-astar@1.0.3/dist/tiny-astar.mjs';
 
 // ================================================================
 // GeoForge System 設定
@@ -142,6 +143,7 @@ const agriColor = d3.scaleSequential(d3.interpolateGreens).domain([0, 1]);
 const forestColor = d3.scaleSequential(d3.interpolateYlGn).domain([0, 1]);
 const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 1]);
 const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]);
+const populationColor = d3.scaleLinear().domain([0, 150000]).range(["black", "red"]);
 
 // ================================================================
 // データ生成ロジック
@@ -401,15 +403,328 @@ allHexes.forEach(h => {
         }
     }
     properties.fishingPotential = Math.min(1.0, fishingPotential);
+});
 
-    // 4. 居住区
-    if (!isWater && properties.vegetation !== '高山') {
-        const rand = Math.random();
-        if (rand > 0.999) properties.settlement = '都';
-        else if (rand > 0.99) properties.settlement = '街';
-        else if (rand > 0.97) properties.settlement = '町';
-        else if (rand > 0.9) properties.settlement = '村';
+// --- ★★★ 新規：第4パス：居住地の配置 ★★★ ---
+
+// 1. 各ヘックスの居住適性スコアを計算
+allHexes.forEach(h => {
+    const p = h.properties;
+    let score = 0;
+    if (!p.isWater && p.vegetation !== '高山' && p.vegetation !== '砂漠') {
+        // 農業ポテンシャルは最も重要
+        score += p.agriPotential * 40;
+        // 漁業ポテンシャルも重要
+        score += p.fishingPotential * 20;
+        // 気温が快適か (10-25度が最適)
+        const idealTemp = 17.5;
+        score += Math.max(0, 1 - Math.abs(p.temperature - idealTemp) / 15) * 15;
+        // 魔力も少し影響
+        score += p.manaValue * 10;
+        // 鉱業・林業も少し影響
+        score += p.miningPotential * 5;
+        score += p.forestPotential * 5;
     }
+    p.habitability = score; // 0-100のスコア
+});
+
+// 2. 居住地候補をスコア順にソート
+const settlementCandidates = allHexes
+    .filter(h => h.properties.habitability > 0)
+    .sort((a, b) => b.properties.habitability - a.properties.habitability);
+
+// 距離を計算するヘルパー関数
+const getDistance = (h1, h2) => {
+    // 簡易的なヘックス距離計算
+    const dx = Math.abs(h1.col - h2.col);
+    const dy = Math.abs(h1.row - h2.row);
+    return Math.max(dx, dy);
+};
+
+// 3. 都市を階層的に配置
+const settlements = [];
+const MIN_DISTANCES = { '都': 20, '街': 10, '町': 4 };
+
+// 3a. 「都」を配置
+// ★★★ 変更点：都の数と人口を調整 ★★★
+const numCapitals = 3;
+for (let i = 0; i < settlementCandidates.length && settlements.filter(s => s.type === '都').length < numCapitals; i++) {
+    const candidate = settlementCandidates[i];
+    // isSettledプロパティで配置済みかを確認
+    if (!candidate.properties.isSettled && settlements.every(s => getDistance(s.hex, candidate) > MIN_DISTANCES['都'])) {
+        candidate.properties.settlement = '都';
+        // 人口を5万〜15万人に設定
+        candidate.properties.population = Math.floor(50000 + Math.random() * 100000);
+        candidate.properties.isSettled = true; // 配置済みフラグ
+        settlements.push({ hex: candidate, type: '都' });
+    }
+}
+
+// 3b. 「街」を配置
+// ★★★ 変更点：街の数と人口を調整 ★★★
+const numCities = 8;
+for (let i = 0; i < settlementCandidates.length && settlements.filter(s => s.type === '街').length < numCities; i++) {
+    const candidate = settlementCandidates[i];
+    if (!candidate.properties.isSettled && settlements.every(s => getDistance(s.hex, candidate) > MIN_DISTANCES['街'])) {
+        candidate.properties.settlement = '街';
+        // 人口を1万〜5万人に設定
+        candidate.properties.population = Math.floor(10000 + Math.random() * 40000);
+        candidate.properties.isSettled = true;
+        settlements.push({ hex: candidate, type: '街' });
+    }
+}
+
+// 4. 町と村を拡散させる
+settlements.forEach(city => {
+    const 庇護人口 = city.hex.properties.population * 1.5;
+    let currentPopulation = 0;
+    const nearbyHexes = allHexes
+        .filter(h => h.properties.habitability > 0 && !h.properties.isSettled) // 未配置の土地のみ
+        .sort((a, b) => getDistance(city.hex, a) - getDistance(city.hex, b));
+
+    for (const nearbyHex of nearbyHexes) {
+        if (currentPopulation > 庇護人口) break;
+        if (nearbyHex.properties.isSettled) continue;
+
+        const dist = getDistance(city.hex, nearbyHex);
+        const probability = (nearbyHex.properties.habitability / 100) * Math.pow(0.85, dist);
+        
+        if (Math.random() < probability) {
+            // ★★★ 変更点：町と村の人口を調整 ★★★
+            if (probability > 0.3 && dist < 10) {
+                nearbyHex.properties.settlement = '町';
+                // 人口を1,000〜10,000人に設定
+                const pop = Math.floor(1000 + Math.random() * 9000);
+                nearbyHex.properties.population = pop;
+                currentPopulation += pop;
+            } else {
+                nearbyHex.properties.settlement = '村';
+                // 人口を100〜1,000人に設定
+                const pop = Math.floor(100 + Math.random() * 900);
+                nearbyHex.properties.population = pop;
+                currentPopulation += pop;
+            }
+            nearbyHex.properties.isSettled = true; // 配置済みにする
+        }
+    }
+});
+
+// 5. 人口が設定されていないヘックスに、居住適性に応じた「散居人口」を設定する
+allHexes.forEach(h => {
+    // ↓↓↓ このブロック全体を以下のように書き換えます ↓↓↓
+    if (!h.properties.isSettled && h.properties.habitability > 5) {
+        // 居住適性スコアが高いほど、100人未満の人口が割り当てられやすくなる
+        // Math.random() < (h.properties.habitability / 150) で発生確率を制御
+        if (Math.random() < (h.properties.habitability / 150)) {
+            // 人口はスコアに応じて1〜99人の間で変動
+            h.properties.population = Math.floor((h.properties.habitability / 100) * 80 + Math.random() * 20);
+        } else {
+            h.properties.population = 0;
+        }
+    } else if (!h.properties.population) {
+        // 居住適性が低い場所や、既に都市がある場所の人口が未設定なら0にする
+        h.properties.population = 0;
+    }
+});
+
+// --- 第5パス：街道の生成 ---
+
+// 事前に全ヘックスの最大人口を計算しておく
+// これを基準に、人口が少ない場所へのペナルティを計算する
+const maxPopulation = allHexes.reduce((max, h) => Math.max(max, h.properties.population || 0), 0);
+
+// 1. 各ヘックスに移動コストを設定
+allHexes.forEach(h => {
+    const p = h.properties;
+    let cost = 1;
+    if (p.isWater && p.vegetation !== '湖沼') cost = 9999;
+    if (p.vegetation === '湖沼') cost = 50;
+    if (p.vegetation === '森林' || p.vegetation === '疎林') cost += 2;
+    if (p.vegetation === '密林' || p.vegetation === '針葉樹林') cost += 4;
+
+    // 標高が1000mを超えたあたりから、指数関数的にコストが増加するように変更。
+    // これにより、丘陵地帯はまだ通行可能だが、急峻な山岳地帯は非常に通りにくくなる。
+    if (p.elevation > 1000) {
+        // (標高 / 基準標高) の N乗でコストを計算する。
+        // 基準標高を700、指数を3.0に設定。この値を調整することでペナルティの強さを変更できます。
+        const elevationFactor = p.elevation / 1000;
+        const elevationPenalty = Math.pow(elevationFactor, 5.0);
+        cost += elevationPenalty;
+    }
+    if (p.flow > 2) cost += p.flow * 3;
+    p.movementCost = cost;
+});
+
+/**
+ * A* Pathfinding Algorithm (自己完結型)
+ */
+function findAStarPath(options) {
+    const start = options.start;
+    const isEnd = options.isEnd;
+    const neighbor = options.neighbor;
+    const cost = options.cost;
+    const heuristic = options.heuristic;
+
+    const toVisit = [{ node: start, f: 0, g: 0 }];
+    const visited = new Map();
+    visited.set(`${start.x}-${start.y}`, { parent: null, g: 0 });
+
+    while (toVisit.length > 0) {
+        toVisit.sort((a, b) => a.f - b.f);
+        const current = toVisit.shift();
+
+        if (isEnd(current.node)) {
+            const path = [];
+            let curr = current.node;
+            while (curr) {
+                path.unshift(curr);
+                const visitedNode = visited.get(`${curr.x}-${curr.y}`);
+                curr = visitedNode ? visitedNode.parent : null;
+            }
+            return path;
+        }
+
+        neighbor(current.node).forEach(n => {
+            const gScore = current.g + cost(current.node, n);
+            const visitedNeighbor = visited.get(`${n.x}-${n.y}`);
+
+            if (!visitedNeighbor || gScore < visitedNeighbor.g) {
+                visited.set(`${n.x}-${n.y}`, { parent: current.node, g: gScore });
+                const fScore = gScore + heuristic(n);
+                toVisit.push({ node: n, f: fScore, g: gScore });
+            }
+        });
+    }
+    return null;
+}
+
+// 2. 街道ネットワークを定義
+const roads = [];
+// ★★★ 変更点：allHexesから直接、各居住地タイプのリストを生成する ★★★
+const allSettlements = allHexes.filter(h => h.properties.settlement);
+const capitals = allSettlements.filter(h => h.properties.settlement === '都');
+const cities = allSettlements.filter(h => h.properties.settlement === '街');
+const towns = allSettlements.filter(h => h.properties.settlement === '町');
+const villages = allSettlements.filter(h => h.properties.settlement === '村');
+
+
+// A*探索用のグラフを準備
+const graph = {
+    grid: allHexes.map(h => h.properties.movementCost),
+    width: COLS,
+    height: ROWS
+};
+
+// ヘルパー：2点間の最短経路を探す関数
+const findPath = (startHex, endHex) => {
+    const path = findAStarPath({
+        start: {x: startHex.col, y: startHex.row},
+        isEnd: (node) => node.x === endHex.col && node.y === endHex.row,
+        neighbor: (node) => {
+            const hex = allHexes[getIndex(node.x, node.y)];
+            return hex.neighbors.map(nIndex => {
+                const neighborHex = allHexes[nIndex];
+                return { x: neighborHex.col, y: neighborHex.row };
+            });
+        },
+        // ★★★ この cost 関数を以下のように修正 ★★★
+        cost: (nodeA, nodeB) => {
+            const targetHex = allHexes[getIndex(nodeB.x, nodeB.y)];
+            const properties = targetHex.properties;
+            const movementCost = properties.movementCost;
+
+            // 人口が少ないほどコストが高くなるペナルティを追加する
+            // (1.0 - 人口/最大人口) で、人口が多いほど0に近づく係数を計算
+            const populationFactor = 1.0 - (properties.population / maxPopulation);
+
+            // populationPenaltyFactorでペナルティの重みを調整する
+            // この値が大きいほど、アルゴリズムは人口の多い場所を強く優先するようになる
+            const populationPenaltyFactor = 15; // この値は10〜20程度で調整してみてください
+            const populationPenalty = populationFactor * populationPenaltyFactor;
+
+            return movementCost + populationPenalty;
+        },
+        heuristic: (node) => {
+            return getDistance(allHexes[getIndex(node.x, node.y)], endHex);
+        }
+    });
+
+    if (path) {
+        // console.log(`[DEBUG] 経路発見成功: ${startHex.properties.settlement || '中継点'} -> ${endHex.properties.settlement || '中継点'}, 長さ: ${path.length}`);
+        return path.map(node => getIndex(node.x, node.y));
+    }
+    // console.error(`[DEBUG] 経路発見失敗: ${startHex.properties.settlement || '中継点'} -> ${endHex.properties.settlement || '中継点'}`);
+    return [];
+};
+
+// ヘルパー：最も近いターゲットを探す関数
+const findClosest = (source, targets) => {
+    let closest = null;
+    let minDistance = Infinity;
+    targets.forEach(target => {
+        const d = getDistance(source, target);
+        if (d < minDistance) {
+            minDistance = d;
+            closest = target;
+        }
+    });
+    return closest;
+};
+
+console.log(`[DEBUG] 居住地チェック: 都(${capitals.length}), 街(${cities.length}), 町(${towns.length}), 村(${villages.length})`);
+
+// 3. 階層的に街道を生成
+villages.forEach(v => {
+    const closest = findClosest(v, [...towns, ...cities, ...capitals]);
+    if (closest) {
+        const path = findPath(v, closest);
+        // ★★★ 経路が見つかった場合のみroads配列に追加する ★★★
+        if (path.length > 0) {
+            roads.push({ path: path, traffic: v.properties.population });
+        }
+    }
+});
+towns.forEach(t => {
+    const closest = findClosest(t, [...cities, ...capitals]);
+    if (closest) {
+        const path = findPath(t, closest);
+        // ★★★ 経路が見つかった場合のみroads配列に追加する ★★★
+        if (path.length > 0) {
+            roads.push({ path: path, traffic: t.properties.population });
+        }
+    }
+});
+cities.forEach(c => {
+    const closest = findClosest(c, capitals);
+    if (closest) {
+        const path = findPath(c, closest);
+        // ★★★ 経路が見つかった場合のみroads配列に追加する ★★★
+        if (path.length > 0) {
+            roads.push({ path: path, traffic: c.properties.population });
+        }
+    }
+});
+// 都同士を結ぶ幹線道路
+for(let i = 0; i < capitals.length; i++) {
+    for (let j = i + 1; j < capitals.length; j++) {
+        const path = findPath(capitals[i], capitals[j]);
+        // ★★★ 経路が見つかった場合のみroads配列に追加する ★★★
+        if (path.length > 0) {
+            roads.push({ path: path, traffic: 100000 }); // 幹線は高い交通量
+        }
+    }
+}
+
+// 4. 交通量をシミュレート
+allHexes.forEach(h => {
+    // ★★★ propertiesの中にroadTrafficを初期化する ★★★
+    h.properties.roadTraffic = 0;
+});
+roads.forEach(road => {
+    road.path.forEach(hexIndex => {
+        // ★★★ propertiesの中のroadTrafficに加算する ★★★
+        allHexes[hexIndex].properties.roadTraffic += road.traffic;
+    });
 });
 
 // ================================================================
@@ -463,10 +778,11 @@ for (let row = 0; row < ROWS; row++) {
         }
 
         hexes.push({
-        x: col, y: (ROWS - 1) - row, cx: cx, cy: cy,
-        points: d3.range(6).map(i => [cx + r * Math.cos(Math.PI / 3 * i), cy + r * Math.sin(Math.PI / 3 * i)]),
-        properties: hexData.properties,
-        downstream: downstreamHex, // 下流の情報を追加
+            x: col, y: (ROWS - 1) - row, cx: cx, cy: cy,
+            points: d3.range(6).map(i => [cx + r * Math.cos(Math.PI / 3 * i), cy + r * Math.sin(Math.PI / 3 * i)]),
+            properties: hexData.properties,
+            downstream: downstreamHex, // 下流の情報を追加
+            neighbors: hexData.neighbors, // 描画用データに隣接情報をコピーする
         });
     }
 }
@@ -485,6 +801,7 @@ const terrainLayer = createLayer('terrain');
 const snowLayer = createLayer('snow');
 const elevationOverlayLayer = createLayer('elevation-overlay', false);
 const riverLayer = createLayer('river');
+const roadLayer = createLayer('road');
 const precipOverlayLayer = createLayer('precip-overlay', false);
 const tempOverlayLayer = createLayer('temp-overlay', false);
 const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false);
@@ -494,6 +811,8 @@ const agriOverlayLayer = createLayer('agri-overlay', false);
 const forestOverlayLayer = createLayer('forest-overlay', false);
 const miningOverlayLayer = createLayer('mining-overlay', false);
 const fishingOverlayLayer = createLayer('fishing-overlay', false);
+const populationOverlayLayer = createLayer('population-overlay', false);
+
 const labelLayer = createLayer('labels');
 
 // --- 3. 各レイヤーの描画 ---
@@ -503,6 +822,18 @@ terrainLayer.selectAll('.hex')
     .attr('class', 'hex')
     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
     .attr('fill', d => {
+        // 最優先で居住地の種類をチェックし、色を決定する
+        if (d.properties.settlement === '都') {
+            return '#f00'; // やや落ち着いた赤
+        }
+        if (d.properties.settlement === '街') {
+            return '#f80'; // やや落ち着いたオレンジ
+        }
+        if (d.properties.settlement === '町') {
+            return '#ff0'; // やや落ち着いたオレンジ
+        }
+
+        // 既存の地形・植生の色分けロジック
         if (d.properties.vegetation === '湖沼') return TERRAIN_COLORS['湖沼'];
         const veg = d.properties.vegetation;
         if (TERRAIN_COLORS[veg]) {
@@ -535,6 +866,35 @@ snowLayer.selectAll('.snow-hex')
     .attr('fill', '#fff') // 雪の色
     .style('fill-opacity', 0.8) // 半透明にして下の地形がうっすら見えるように
     .style('pointer-events', 'none'); // マウスイベントを透過させる
+
+// 2b. 街道レイヤー
+const roadSegments = [];
+hexes.forEach(h => {
+    if (h.properties.roadTraffic > 0) {
+        // 隣接ヘックスをループ
+        h.neighbors.map(i => hexes[i]).forEach(n => {
+            // 重複描画を避けるため、インデックスが小さい方から大きい方へのみ線を描画
+            if (n && n.properties.roadTraffic > 0 && getIndex(h.x, (ROWS-1)-h.y) < getIndex(n.x, (ROWS-1)-n.y)) {
+                roadSegments.push({
+                    source: { cx: h.cx, cy: h.cy },
+                    target: { cx: n.cx, cy: n.cy },
+                    traffic: (h.properties.roadTraffic + n.properties.roadTraffic) / 2
+                });
+            }
+        });
+    }
+});
+roadLayer.selectAll('.road-segment')
+    .data(roadSegments)
+    .enter().append('line')
+    .attr('x1', d => d.source.cx)
+    .attr('y1', d => d.source.cy)
+    .attr('x2', d => d.target.cx)
+    .attr('y2', d => d.target.cy)
+    .attr('stroke', '#f00') // 赤色
+    .attr('stroke-width', d => Math.min(Math.log(d.traffic) * 0.5, r * 0.3))
+    .attr('stroke-dasharray', '4, 4')
+    .style('pointer-events', 'none');
 
 // 3f. 標高オーバーレイ (植生なしの標高グラデーション)
 elevationOverlayLayer.selectAll('.elevation-hex')
@@ -607,31 +967,43 @@ fishingOverlayLayer.selectAll('.fishing-hex')
     .attr('fill', d => fishingColor(d.properties.fishingPotential))
     .style('fill-opacity', 0.7).style('pointer-events', 'none');
 
+// ★★★ 新規：人口レイヤーの描画 ★★★
+populationOverlayLayer.selectAll('.population-hex')
+    .data(hexes.filter(d => d.properties.population > 0))
+    .enter().append('polygon')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => populationColor(d.properties.population))
+    .style('fill-opacity', 0.7)
+    .style('pointer-events', 'none');
+
 // 3g. ラベルレイヤー
 const hexLabelGroups = labelLayer.selectAll('.hex-label-group')
     .data(hexes).enter().append('g')
     .attr('class', 'hex-label-group');
 
 // ツールチップ
-// ★★★ 変更点：ツールチップに産業ポテンシャル情報を追加 ★★★
+// ★★★ 変更点：ツールチップに居住適性と人口を追加 ★★★
 hexLabelGroups.append('polygon')
     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
     .style('fill', 'transparent')
     .append('title')
     .text(d => 
-        `E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
-        `Vegetation: ${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
-        `Climate Zone: ${d.properties.climateZone}\n` +
-        `Elevation: ${Math.round(d.properties.elevation)}m\n` +
-        `Temp: ${d.properties.temperature.toFixed(1)}℃\n` +
-        `Precipitation: ${(d.properties.precipitation * 100).toFixed(0)}%\n` +
-        `Mana: ${d.properties.manaRank} (${d.properties.manaValue.toFixed(2)})\n` +
-        `Resource: ${d.properties.resourceRank}\n` +
-        `--- Potentials ---\n` +
-        `Agriculture: ${(d.properties.agriPotential * 100).toFixed(0)}%\n` +
-        `Forestry:    ${(d.properties.forestPotential * 100).toFixed(0)}%\n` +
-        `Mining:      ${(d.properties.miningPotential * 100).toFixed(0)}%\n` +
-        `Fishing:     ${(d.properties.fishingPotential * 100).toFixed(0)}%`
+        `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
+        `土地利用：${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
+        `人口　　：${d.properties.population.toLocaleString()}人\n` +
+        `居住適性：${d.properties.habitability.toFixed(1)}\n` +
+        `--- 土地詳細 ---\n` +
+        `気候帯　：${d.properties.climateZone}\n` +
+        `標高　　：${Math.round(d.properties.elevation)}m\n` +
+        `気温　　：${d.properties.temperature.toFixed(1)}℃\n` +
+        `降水量　：${(d.properties.precipitation * 100).toFixed(0)}%\n` +
+        `魔力　　：${d.properties.manaRank}\n` +
+        `資源　　：${d.properties.resourceRank}\n` +
+        `--- 資源ポテンシャル ---\n` +
+        `農業適正：${(d.properties.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+        `林業適正：${(d.properties.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+        `鉱業適正：${(d.properties.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+        `漁業適正：${(d.properties.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%`
     );
              
 // 座標ラベル
@@ -640,7 +1012,7 @@ hexLabelGroups.append('text').attr('class', 'hex-label')
     .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
     .style('font-size', `${r / 4}px`)
     .style('display', 'none')
-    .text(d => `${String(d.x).padStart(2, '0')}-${String(d.y).padStart(2, '0')}`);
+    .text(d => `${String(d.x).padStart(2, '0')}${String(d.y).padStart(2, '0')}`);
 
 // 居住区ラベル
 hexLabelGroups.filter(d => d.properties.settlement).append('text').attr('class', 'settlement-label')
@@ -711,6 +1083,10 @@ d3.select('#toggleMiningOverlay').on('click', function() {
 });
 d3.select('#toggleFishingOverlay').on('click', function() {
     toggleLayerVisibility('fishing-overlay', this, '漁業', '漁業');
+});
+// ★★★ 新規：人口ボタンのイベントハンドラを追加 ★★★
+d3.select('#togglePopulationOverlay').on('click', function() {
+  toggleLayerVisibility('population-overlay', this, '人口', '人口');
 });
 
 // --- 5. 初期表示位置の設定 ---
