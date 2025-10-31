@@ -31,10 +31,10 @@ const grasslandPotentialNoise = createNoise2D(); // 草原の育ちやすさ
 // ■ 地形生成パラメータ
 //    - 大陸の形状や険しさをコントロールする
 // ----------------------------------------------------------------
-const NOISE_SCALE = 0.06; 
-const LAND_BIAS =   0.8; 
-const ELEVATION_PEAK_FACTOR =    4.0; 
-const CONTINENT_FALLOFF_FACTOR = 4.0;
+const NOISE_SCALE =               0.05; 
+const LAND_BIAS =                 0.7; 
+const ELEVATION_PEAK_FACTOR =     4.0; 
+const CONTINENT_FALLOFF_FACTOR =  3.0;
 const LAKE_THRESHOLD_PLAINS =    -0.90;
 const LAKE_THRESHOLD_MOUNTAINS = -0.85;
 const elevationScale = d3.scaleLinear().domain([0.0, 1.6]).range([0, 7000]).clamp(true);
@@ -48,28 +48,28 @@ const lakeThresholdScale = d3.scaleLinear()
 // ----------------------------------------------------------------
 // 1. 各標高帯に対応するグラデーションを定義
 const elevationColor_0_1k = d3.scaleLinear()
-  .domain([0, 1000])
-  .range(['#d8ecd3', '#a8d5a2']); // 明るい黄緑〜淡緑
+    .domain([0, 1000])
+    .range(['#d8ecd3', '#a8d5a2']); // 明るい黄緑〜淡緑
 
 // 丘陵〜低山（1000–2000m）：緑から薄いベージュ
 const elevationColor_1k_2k = d3.scaleLinear()
-  .domain([1000, 2000])
-  .range(['#a8d5a2', '#dcd5c9']); // 淡緑〜砂色
+    .domain([1000, 2000])
+    .range(['#a8d5a2', '#dcd5c9']); // 淡緑〜砂色
 
 // 中山帯（2000–3000m）：ベージュから薄茶
 const elevationColor_2k_3k = d3.scaleLinear()
-  .domain([2000, 3000])
-  .range(['#dcd5c9', '#c2a383']); // 砂色〜薄茶
+    .domain([2000, 3000])
+    .range(['#dcd5c9', '#c2a383']); // 砂色〜薄茶
 
 // 高山帯（3000–4000m）：薄茶からグレー
 const elevationColor_3k_4k = d3.scaleLinear()
-  .domain([3000, 4000])
-  .range(['#c2a383', '#b0b0b0']); // 薄茶〜明るい灰色
+    .domain([3000, 4000])
+    .range(['#c2a383', '#b0b0b0']); // 薄茶〜明るい灰色
 
 // 雪山（4000m以上）：グレーから白
 const elevationColor_4k_plus = d3.scaleLinear()
-  .domain([4000, 7000])
-  .range(['#b0b0b0', '#ffffff']); // 灰色〜白
+    .domain([4000, 7000])
+    .range(['#b0b0b0', '#ffffff']); // 灰色〜白
 
 // 2. 水域と、標高図に上書きする植生の固定色を定義
 const TERRAIN_COLORS = {
@@ -80,10 +80,7 @@ const TERRAIN_COLORS = {
     森林: '#6aa84f', 
     針葉樹林: '#3b6e4f', 
     密林: '#1b5e20',
-    // 積雪地形（上書き用）
-    // 積雪ツンドラ: '#eef',
-    // 積雪地: '#dde',
-    // 深雪地: '#fff',
+    // 沖積平野: '#b8d698'
 };
 
 // 3. 標高値から対応するグラデーション色を返すヘルパー関数
@@ -122,15 +119,15 @@ const PRECIP_ZONES = { DRY: 0.35, MODERATE: 0.65 };
 
 // 9つの気候帯の色分け
 const CLIMATE_ZONE_COLORS = {
-  "砂漠気候(寒)":   '#d2b48c', // タン系：寒冷砂漠の乾いた土色
-  "ツンドラ気候":   '#5dade2', // 明るい寒色：氷雪と苔をイメージ
-  "亜寒帯湿潤気候": '#2874a6', // 濃い青緑：タイガの深い森
-  "ステップ気候":   '#e67e22', // オレンジ寄り：乾いた草原
-  "地中海性気候":   '#58d68d', // 明るい緑：オリーブや低木林
-  "温暖湿潤気候":   '#239b56', // 深緑：落葉広葉樹林
-  "砂漠気候(熱)":   '#f4d03f', // 鮮やかな黄色：灼熱の砂漠
-  "熱帯草原気候":   '#f5b041', // 黄土色：サバンナの草原
-  "熱帯雨林気候":   '#145a32'  // 濃い緑：密林の深い緑
+    "砂漠気候(寒)":   '#d2b48c', // タン系：寒冷砂漠の乾いた土色
+    "ツンドラ気候":   '#5dade2', // 明るい寒色：氷雪と苔をイメージ
+    "亜寒帯湿潤気候": '#2874a6', // 濃い青緑：タイガの深い森
+    "ステップ気候":   '#e67e22', // オレンジ寄り：乾いた草原
+    "地中海性気候":   '#58d68d', // 明るい緑：オリーブや低木林
+    "温暖湿潤気候":   '#239b56', // 深緑：落葉広葉樹林
+    "砂漠気候(熱)":   '#f4d03f', // 鮮やかな黄色：灼熱の砂漠
+    "熱帯草原気候":   '#f5b041', // 黄土色：サバンナの草原
+    "熱帯雨林気候":   '#145a32'  // 濃い緑：密林の深い緑
 };
 // ----------------------------------------------------------------
 // ■ オーバーレイ用のカラーマップ
@@ -138,7 +135,7 @@ const CLIMATE_ZONE_COLORS = {
 const manaColor = d3.scaleSequential(d3.interpolatePurples).domain([0, 1]);
 const tempColor = d3.scaleSequential(d3.interpolateTurbo).domain([-15, 35]);
 const precipColor = d3.scaleSequential(d3.interpolateBlues).domain([0, 1]);
-const elevationOverlayColor = d3.scaleSequential(d3.interpolateTurbo).domain([0, 7000]);
+// const elevationOverlayColor = d3.scaleSequential(d3.interpolateTurbo).domain([0, 7000]);
 
 
 // ================================================================
@@ -155,143 +152,238 @@ const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
  * @returns {object} { properties } - そのヘックスの全プロパティを含むオブジェクト
  */
 function generateHexData(col, row) {
-  const nx = col * NOISE_SCALE;
-  const ny = row * NOISE_SCALE;
-  
-  // --- 1. 標高の計算 ---
-  let baseElevation = terrainNoise(nx, ny);
-  if (baseElevation > 0) {
-      baseElevation = Math.pow(baseElevation, ELEVATION_PEAK_FACTOR);
-  }
-  const distFromCenter = Math.sqrt(Math.pow(col - centerX, 2) + Math.pow(row - centerY, 2));
-  const falloff = Math.pow(distFromCenter / maxDist, CONTINENT_FALLOFF_FACTOR);
-  const internalElevation = baseElevation + LAND_BIAS - falloff;
+    const nx = col * NOISE_SCALE;
+    const ny = row * NOISE_SCALE;
+    
+    // --- 1. 標高の計算 ---
+    let baseElevation = terrainNoise(nx, ny);
+    if (baseElevation > 0) {
+        baseElevation = Math.pow(baseElevation, ELEVATION_PEAK_FACTOR);
+    }
+    const distFromCenter = Math.sqrt(Math.pow(col - centerX, 2) + Math.pow(row - centerY, 2));
+    const falloff = Math.pow(distFromCenter / maxDist, CONTINENT_FALLOFF_FACTOR);
+    const internalElevation = baseElevation + LAND_BIAS - falloff;
 
-  const properties = {};
-  
-  const inlandWaterNoise = terrainNoise(nx + 100, ny + 100);
-  const dynamicLakeThreshold = lakeThresholdScale(internalElevation);
-  const isWater = internalElevation < 0.0 || (inlandWaterNoise < dynamicLakeThreshold && internalElevation < 1.3);
-  properties.isWater = isWater;
-  properties.elevation = isWater ? 0 : elevationScale(internalElevation);
-  
-  // --- 2. 気候・降水量の計算 ---
-  const latitude = row / ROWS;
-  const baseTemp = -5 + (latitude * 35);
-  properties.climate = baseTemp + climateNoise(nx, ny) * 5; // 基準気候
-  
-  let elevationCorrection = 0;
-  if (properties.elevation > 0) {
-      elevationCorrection = (properties.elevation / 100) * 0.6;
-  }
-  properties.temperature = properties.climate - elevationCorrection; // 実効気温
+    const properties = {};
+    
+    const inlandWaterNoise = terrainNoise(nx + 100, ny + 100);
+    const dynamicLakeThreshold = lakeThresholdScale(internalElevation);
+    const isWater = internalElevation < 0.0 || (inlandWaterNoise < dynamicLakeThreshold && internalElevation < 1.3);
+    properties.isWater = isWater;
+    properties.elevation = isWater ? 0 : elevationScale(internalElevation);
+    
+    // --- 2. 気候・降水量の計算 ---
+    const latitude = row / ROWS;
+    const baseTemp = -5 + (latitude * 35);
+    properties.climate = baseTemp + climateNoise(nx, ny) * 5; // 基準気候
+    
+    let elevationCorrection = 0;
+    if (properties.elevation > 0) {
+        elevationCorrection = (properties.elevation / 100) * 0.6;
+    }
+    properties.temperature = properties.climate - elevationCorrection; // 実効気温
 
-  const basePrecip = (col / COLS);
-  const precipNoiseValue = precipitationNoise(nx, ny) * 0.2;
-  properties.precipitation = Math.max(0, Math.min(1, basePrecip + precipNoiseValue));
-  
-  // --- 3. 気候帯の決定 ---
-  if (properties.climate < TEMP_ZONES.COLD) {
-      if (properties.precipitation < PRECIP_ZONES.DRY) properties.climateZone = "砂漠気候(寒)";
-      else if (properties.precipitation < PRECIP_ZONES.MODERATE) properties.climateZone = "ツンドラ気候";
-      else properties.climateZone = "亜寒帯湿潤気候";
-  } else if (properties.climate < TEMP_ZONES.TEMPERATE) {
-      if (properties.precipitation < PRECIP_ZONES.DRY) properties.climateZone = "ステップ気候";
-      else if (properties.precipitation < PRECIP_ZONES.MODERATE) properties.climateZone = "地中海性気候";
-      else properties.climateZone = "温暖湿潤気候";
-  } else {
-      if (properties.precipitation < PRECIP_ZONES.DRY) properties.climateZone = "砂漠気候(熱)";
-      else if (properties.precipitation < PRECIP_ZONES.MODERATE) properties.climateZone = "熱帯草原気候";
-      else properties.climateZone = "熱帯雨林気候";
-  }
+    const basePrecip = (col / COLS);
+    const precipNoiseValue = precipitationNoise(nx, ny) * 0.2;
+    properties.precipitation = Math.max(0, Math.min(1, basePrecip + precipNoiseValue));
+    
+    // --- 3. 気候帯の決定 ---
+    if (properties.climate < TEMP_ZONES.COLD) {
+        if (properties.precipitation < PRECIP_ZONES.DRY) properties.climateZone = "砂漠気候(寒)";
+        else if (properties.precipitation < PRECIP_ZONES.MODERATE) properties.climateZone = "ツンドラ気候";
+        else properties.climateZone = "亜寒帯湿潤気候";
+    } else if (properties.climate < TEMP_ZONES.TEMPERATE) {
+        if (properties.precipitation < PRECIP_ZONES.DRY) properties.climateZone = "ステップ気候";
+        else if (properties.precipitation < PRECIP_ZONES.MODERATE) properties.climateZone = "地中海性気候";
+        else properties.climateZone = "温暖湿潤気候";
+    } else {
+        if (properties.precipitation < PRECIP_ZONES.DRY) properties.climateZone = "砂漠気候(熱)";
+        else if (properties.precipitation < PRECIP_ZONES.MODERATE) properties.climateZone = "熱帯草原気候";
+        else properties.climateZone = "熱帯雨林気候";
+    }
 
-  // --- 4. 植生の決定 ---
-  // 1. まず、ポテンシャルモデルに基づいて「基本となる植生」を決定
-  if (isWater) {
-      if (internalElevation < -0.4) properties.vegetation = '深海';
-      else if (internalElevation < 0.0) properties.vegetation = '海洋';
-      else properties.vegetation = '湖沼';
-  } else if (properties.elevation > VEGETATION_THRESHOLDS.ALPINE_ELEVATION) {
-      properties.vegetation = '高山';
-  } else if (properties.temperature < VEGETATION_THRESHOLDS.TUNDRA_TEMP) {
-      properties.vegetation = '荒れ地';
-  } else if (properties.precipitation < VEGETATION_THRESHOLDS.DESERT_PRECIP) {
-      properties.vegetation = '砂漠';
-  } else {
-      // (ポテンシャルモデルのロジックは前回から変更なし)
-      const totalCoverage = (1 + vegetationCoverageNoise(nx, ny)) / 2;
-      const potentials = {
-          '密林':     (1 + junglePotentialNoise(nx * 0.5, ny * 0.5)) / 2,
-          '森林':     (1 + forestPotentialNoise(nx, ny)) / 2,
-          '疎林':     (1 + forestPotentialNoise(nx, ny)) / 2,
-          '針葉樹林': (1 + taigaPotentialNoise(nx * 2, ny * 2)) / 2,
-          '草原':     (1 + grasslandPotentialNoise(nx, ny)) / 2,
-          '荒れ地':   0.1,
-      };
-      
-      const candidates = [];
-      if (properties.climate > TEMP_ZONES.TEMPERATE) {
-          if (properties.precipitation > VEGETATION_THRESHOLDS.JUNGLE_MIN_PRECIP) candidates.push('密林');
-          candidates.push('草原');
-      } else if (properties.climate > TEMP_ZONES.COLD) {
-          if (properties.precipitation > VEGETATION_THRESHOLDS.FOREST_MIN_PRECIP) candidates.push('森林');
-          if (properties.precipitation > VEGETATION_THRESHOLDS.SPARSE_MIN_PRECIP) candidates.push('疎林');
-          candidates.push('草原');
-      } else {
-          if (properties.precipitation > VEGETATION_THRESHOLDS.TAIGA_MIN_PRECIP) candidates.push('針葉樹林');
-          candidates.push('荒れ地');
-      }
+    // --- 4. 植生の決定 ---
+    // 1. まず、ポテンシャルモデルに基づいて「基本となる植生」を決定
+    if (isWater) {
+        if (internalElevation < -0.4) properties.vegetation = '深海';
+        else if (internalElevation < 0.0) properties.vegetation = '海洋';
+        else properties.vegetation = '湖沼';
+    } else if (properties.elevation > VEGETATION_THRESHOLDS.ALPINE_ELEVATION) {
+        properties.vegetation = '高山';
+    } else if (properties.temperature < VEGETATION_THRESHOLDS.TUNDRA_TEMP) {
+        properties.vegetation = '荒れ地';
+    } else if (properties.precipitation < VEGETATION_THRESHOLDS.DESERT_PRECIP) {
+        properties.vegetation = '砂漠';
+    } else {
+        // (ポテンシャルモデルのロジックは前回から変更なし)
+        const totalCoverage = (1 + vegetationCoverageNoise(nx, ny)) / 2;
+        const potentials = {
+            '密林':     (1 + junglePotentialNoise(nx * 0.5, ny * 0.5)) / 2,
+            '森林':     (1 + forestPotentialNoise(nx, ny)) / 2,
+            '疎林':     (1 + forestPotentialNoise(nx, ny)) / 2,
+            '針葉樹林': (1 + taigaPotentialNoise(nx * 2, ny * 2)) / 2,
+            '草原':     (1 + grasslandPotentialNoise(nx, ny)) / 2,
+            '荒れ地':   0.1,
+        };
+        
+        const candidates = [];
+        if (properties.climate > TEMP_ZONES.TEMPERATE) {
+            if (properties.precipitation > VEGETATION_THRESHOLDS.JUNGLE_MIN_PRECIP) candidates.push('密林');
+            candidates.push('草原');
+        } else if (properties.climate > TEMP_ZONES.COLD) {
+            if (properties.precipitation > VEGETATION_THRESHOLDS.FOREST_MIN_PRECIP) candidates.push('森林');
+            if (properties.precipitation > VEGETATION_THRESHOLDS.SPARSE_MIN_PRECIP) candidates.push('疎林');
+            candidates.push('草原');
+        } else {
+            if (properties.precipitation > VEGETATION_THRESHOLDS.TAIGA_MIN_PRECIP) candidates.push('針葉樹林');
+            candidates.push('荒れ地');
+        }
 
-      let totalPotential = 0;
-      const proportions = [];
-      candidates.forEach(veg => { totalPotential += potentials[veg] || 0; });
+        let totalPotential = 0;
+        const proportions = [];
+        candidates.forEach(veg => { totalPotential += potentials[veg] || 0; });
 
-      if (totalPotential > 0) {
-          candidates.forEach(veg => {
-              proportions.push({ type: veg, percentage: (potentials[veg] / totalPotential) * totalCoverage });
-          });
-      }
-      
-      const bareGroundPercentage = 1.0 - proportions.reduce((sum, p) => sum + p.percentage, 0);
-      proportions.push({ type: '裸地', percentage: bareGroundPercentage });
-      
-      let dominantVeg = { type: '裸地', percentage: -1 };
-      proportions.forEach(p => {
-          if (p.percentage > dominantVeg.percentage) { dominantVeg = p; }
-      });
-      
-      properties.vegetation = (dominantVeg.type === '裸地') ? '標高ベース' : dominantVeg.type;
-  }
-  
-  // 2. 次に、植生とは独立して「積雪しているか」を判定し、フラグを立てる
-  properties.hasSnow = false;
-  if (!isWater && properties.temperature <= SNOW_THRESHOLDS.TEMPERATURE && properties.precipitation > SNOW_THRESHOLDS.PRECIPITATION_LIGHT) {
-      properties.hasSnow = true;
-  }
+        if (totalPotential > 0) {
+            candidates.forEach(veg => {
+                proportions.push({ type: veg, percentage: (potentials[veg] / totalPotential) * totalCoverage });
+            });
+        }
+        
+        const bareGroundPercentage = 1.0 - proportions.reduce((sum, p) => sum + p.percentage, 0);
+        proportions.push({ type: '裸地', percentage: bareGroundPercentage });
+        
+        let dominantVeg = { type: '裸地', percentage: -1 };
+        proportions.forEach(p => {
+            if (p.percentage > dominantVeg.percentage) { dominantVeg = p; }
+        });
+        
+        properties.vegetation = (dominantVeg.type === '裸地') ? '標高ベース' : dominantVeg.type;
+    }
+    
+    // 2. 次に、植生とは独立して「積雪しているか」を判定し、フラグを立てる
+    properties.hasSnow = false;
+    if (!isWater && properties.temperature <= SNOW_THRESHOLDS.TEMPERATURE && properties.precipitation > SNOW_THRESHOLDS.PRECIPITATION_LIGHT) {
+        properties.hasSnow = true;
+    }
 
-  // --- 5. その他のプロパティ生成 ---
-  const rawManaValue = manaNoise(nx / 2, ny / 2);
-  properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
-  if (properties.manaValue > 0.9) properties.manaRank = 'S';
-  else if (properties.manaValue > 0.7) properties.manaRank = 'A';
-  else if (properties.manaValue > 0.4) properties.manaRank = 'B';
-  else if (properties.manaValue > 0.1) properties.manaRank = 'C';
-  else properties.manaRank = 'D';
+    // --- 5. その他のプロパティ生成 ---
+    const rawManaValue = manaNoise(nx / 2, ny / 2);
+    properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
+    if (properties.manaValue > 0.9) properties.manaRank = 'S';
+    else if (properties.manaValue > 0.7) properties.manaRank = 'A';
+    else if (properties.manaValue > 0.4) properties.manaRank = 'B';
+    else if (properties.manaValue > 0.1) properties.manaRank = 'C';
+    else properties.manaRank = 'D';
 
-  const resourceSymbols = ['木', '石', '鉄', '金', '晶'];
-  properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
-  
-  if (!isWater && properties.vegetation !== '高山') {
-      const rand = Math.random();
-      if (rand > 0.999) properties.settlement = '都';
-      else if (rand > 0.99) properties.settlement = '街';
-      else if (rand > 0.97) properties.settlement = '町';
-      else if (rand > 0.9) properties.settlement = '村';
-  }
+    const resourceSymbols = ['木', '石', '鉄', '金', '晶'];
+    properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
+    
+    if (!isWater && properties.vegetation !== '高山') {
+        const rand = Math.random();
+        if (rand > 0.999) properties.settlement = '都';
+        else if (rand > 0.99) properties.settlement = '街';
+        else if (rand > 0.97) properties.settlement = '町';
+        else if (rand > 0.9) properties.settlement = '村';
+    }
 
-  return { properties };
+    return { properties };
 }
 
+// ================================================================
+// 水系生成ロジック
+// ================================================================
+const allHexes = [];
+for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+        const { properties } = generateHexData(col, row);
+        allHexes.push({ col, row, properties });
+    }
+}
+
+// ★★★ 変更点：水源地の特定ロジックを修正 ★★★
+const riverSources = allHexes.filter(h => {
+    // 水源になるための基本条件：水域でなく、標高が1000m以上であること
+    if (h.properties.isWater || h.properties.elevation < 1000) {
+        return false;
+    }
+    
+    // 条件1: 降水量が多い山地（従来の条件）
+    const isRainyMountain = h.properties.elevation > 1500 && h.properties.precipitation > 0.5;
+    
+    // 条件2: 降水量に関わらず、非常に高い山（湧水や雪解け水のイメージ）
+    const isHighPeak = h.properties.elevation > 2000;
+
+    // 確率を計算：雨の多い山は発生しやすく、高い山はそれより少し発生しにくい
+    let probability = 0;
+    if (isRainyMountain) {
+        probability = 0.20; // 20%
+    } else if (isHighPeak) {
+        probability = 0.20; // 20%
+    }
+
+    return Math.random() < probability;
+});
+
+allHexes.forEach(h => h.properties.flow = 0);
+
+const getIndex = (col, row) => row * COLS + col;
+
+riverSources.forEach(source => {
+    let currentCol = source.col;
+    let currentRow = source.row;
+    
+    for (let i = 0; i < 50; i++) {
+        const currentIndex = getIndex(currentCol, currentRow);
+        allHexes[currentIndex].properties.flow += 1;
+
+        const isOddCol = currentCol % 2 !== 0;
+        const neighborsCoords = [
+            { col: currentCol, row: currentRow - 1 }, { col: currentCol, row: currentRow + 1 },
+            { col: currentCol - 1, row: currentRow }, { col: currentCol + 1, row: currentRow },
+            { col: currentCol - 1, row: isOddCol ? currentRow + 1 : currentRow - 1 },
+            { col: currentCol + 1, row: isOddCol ? currentRow + 1 : currentRow - 1 },
+        ];
+        
+        let lowestNeighbor = null;
+        let minElevation = allHexes[currentIndex].properties.elevation;
+
+        neighborsCoords.forEach(n => {
+            if (n.col >= 0 && n.col < COLS && n.row >= 0 && n.row < ROWS) {
+                const neighborIndex = getIndex(n.col, n.row);
+                const neighborElevation = allHexes[neighborIndex].properties.elevation;
+                if (neighborElevation < minElevation) {
+                    minElevation = neighborElevation;
+                    lowestNeighbor = n;
+                }
+            }
+        });
+
+        if (lowestNeighbor) {
+            currentCol = lowestNeighbor.col;
+            currentRow = lowestNeighbor.row;
+            const nextIndex = getIndex(currentCol, currentRow);
+            if (allHexes[nextIndex].properties.isWater) {
+                allHexes[nextIndex].properties.flow += 1;
+                break;
+            }
+        } else {
+            if (!allHexes[currentIndex].properties.isWater) {
+                 allHexes[currentIndex].properties.vegetation = '湖沼';
+                 allHexes[currentIndex].properties.isWater = true; // 湖になったことを記録
+            }
+            break;
+        }
+    }
+});
+
+// 流量のある土地に沖積平野フラグを立てる
+allHexes.forEach(h => {
+    // ↓↓↓ このブロックを以下のように書き換えます ↓↓↓
+    h.properties.isAlluvial = false; // まず全ヘックスをfalseで初期化
+    if (h.properties.flow > 0 && !h.properties.isWater && h.properties.vegetation !== '高山') {
+        h.properties.isAlluvial = true;
+    }
+});
 
 // ================================================================
 // D3.jsによる描画
@@ -304,34 +396,68 @@ const hexes = [];
 const hexWidth = 2 * r;
 const hexHeight = Math.sqrt(3) * r;
 
+// ★★★ 変更点：下流のヘックス情報をプロパティに追加 ★★★
 for (let row = 0; row < ROWS; row++) {
-  for (let col = 0; col < COLS; col++) {
-    const offsetY = (col % 2 === 0) ? 0 : hexHeight / 2;
-    const cx = col * (hexWidth * 3 / 4) + r;
-    const cy = row * hexHeight + offsetY + r;
-    const { properties } = generateHexData(col, row);
+    for (let col = 0; col < COLS; col++) {
+        const offsetY = (col % 2 === 0) ? 0 : hexHeight / 2;
+        const cx = col * (hexWidth * 3 / 4) + r;
+        const cy = row * hexHeight + offsetY + r;
+        const hexData = allHexes[getIndex(col, row)];
+        
+        // 川が流れる場合、下流のヘックスを探す
+        let downstreamHex = null;
+        if (hexData.properties.flow > 0 && !hexData.properties.isWater) {
+            const isOddCol = col % 2 !== 0;
+            const neighborsCoords = [
+                { col: col, row: row - 1 }, { col: col, row: row + 1 },
+                { col: col - 1, row: row }, { col: col + 1, row: row },
+                { col: col - 1, row: isOddCol ? row + 1 : row - 1 },
+                { col: col + 1, row: isOddCol ? row + 1 : row - 1 },
+            ];
+            let lowestNeighbor = null;
+            let minElevation = hexData.properties.elevation;
+            neighborsCoords.forEach(n => {
+                if (n.col >= 0 && n.col < COLS && n.row >= 0 && n.row < ROWS) {
+                    const neighbor = allHexes[getIndex(n.col, n.row)];
+                    if (neighbor.properties.elevation < minElevation) {
+                        minElevation = neighbor.properties.elevation;
+                        lowestNeighbor = n;
+                    }
+                }
+            });
+            if(lowestNeighbor) {
+                // 下流のヘックスの中心座標を計算して保存
+                const downOffsetY = (lowestNeighbor.col % 2 === 0) ? 0 : hexHeight / 2;
+                downstreamHex = {
+                    cx: lowestNeighbor.col * (hexWidth * 3 / 4) + r,
+                    cy: lowestNeighbor.row * hexHeight + downOffsetY + r
+                };
+            }
+        }
 
-    hexes.push({
-      x: col, y: (ROWS - 1) - row, cx: cx, cy: cy,
-      points: d3.range(6).map(i => [cx + r * Math.cos(Math.PI / 3 * i), cy + r * Math.sin(Math.PI / 3 * i)]),
-      properties: properties,
-    });
-  }
+        hexes.push({
+        x: col, y: (ROWS - 1) - row, cx: cx, cy: cy,
+        points: d3.range(6).map(i => [cx + r * Math.cos(Math.PI / 3 * i), cy + r * Math.sin(Math.PI / 3 * i)]),
+        properties: hexData.properties,
+        downstream: downstreamHex, // 下流の情報を追加
+        });
+    }
 }
 
 // --- 2. レイヤー管理のセットアップ ---
 const layers = {};
 function createLayer(name, visibleByDefault = true) {
-  const layerGroup = g.append('g').attr('class', `${name}-layer`);
-  layers[name] = { group: layerGroup, visible: visibleByDefault };
-  if (!visibleByDefault) { layerGroup.style('display', 'none'); }
-  return layerGroup;
+    const layerGroup = g.append('g').attr('class', `${name}-layer`);
+    layers[name] = { group: layerGroup, visible: visibleByDefault };
+    if (!visibleByDefault) { layerGroup.style('display', 'none'); }
+    return layerGroup;
 }
 
 // レイヤーを定義順に作成
 const terrainLayer = createLayer('terrain');
 const snowLayer = createLayer('snow');
 const elevationOverlayLayer = createLayer('elevation-overlay', false);
+const riverLayer = createLayer('river');
 const precipOverlayLayer = createLayer('precip-overlay', false);
 const tempOverlayLayer = createLayer('temp-overlay', false);
 const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false);
@@ -341,123 +467,137 @@ const labelLayer = createLayer('labels');
 // --- 3. 各レイヤーの描画 ---
 // 1. 地形レイヤー (積雪のロジックを削除)
 terrainLayer.selectAll('.hex')
-  .data(hexes).enter().append('polygon')
-  .attr('class', 'hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => {
-      const veg = d.properties.vegetation;
-      if (TERRAIN_COLORS[veg]) {
-          return TERRAIN_COLORS[veg];
-      }
-      return getElevationColor(d.properties.elevation);
-  });
+    .data(hexes).enter().append('polygon')
+    .attr('class', 'hex')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => {
+        if (d.properties.vegetation === '湖沼') return TERRAIN_COLORS['湖沼'];
+        const veg = d.properties.vegetation;
+        if (TERRAIN_COLORS[veg]) {
+            return TERRAIN_COLORS[veg];
+        }
+        return getElevationColor(d.properties.elevation);
+    });
+
+// 2. 川レイヤー
+riverLayer.selectAll('.river-path')
+    .data(hexes.filter(d => d.properties.flow > 0 && d.downstream))
+    .enter().append('line')
+    .attr('class', 'river-path')
+    .attr('x1', d => d.cx)
+    .attr('y1', d => d.cy)
+    .attr('x2', d => d.downstream.cx) // 保存した下流の座標を使用
+    .attr('y2', d => d.downstream.cy) // 保存した下流の座標を使用
+    .attr('stroke', '#058')
+    .attr('stroke-width', d => Math.min(Math.sqrt(d.properties.flow) * 2, r * 1)) // 太くなりすぎないように上限を設定
+    .attr('stroke-linecap', 'round')
+    .style('pointer-events', 'none');
 
 // ★★★ 新規：積雪レイヤーの描画 ★★★
 snowLayer.selectAll('.snow-hex')
-  // hasSnowがtrueのヘックスのみをフィルタリング
-  .data(hexes.filter(d => d.properties.hasSnow))
-  .enter().append('polygon')
-  .attr('class', 'snow-hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', '#ffffff') // 雪の色
-  .style('fill-opacity', 0.7) // 半透明にして下の地形がうっすら見えるように
-  .style('pointer-events', 'none'); // マウスイベントを透過させる
+    // hasSnowがtrueのヘックスのみをフィルタリング
+    .data(hexes.filter(d => d.properties.hasSnow))
+    .enter().append('polygon')
+    .attr('class', 'snow-hex')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', '#ffffff') // 雪の色
+    .style('fill-opacity', 0.7) // 半透明にして下の地形がうっすら見えるように
+    .style('pointer-events', 'none'); // マウスイベントを透過させる
 
 // 3f. 標高オーバーレイ (植生なしの標高グラデーション)
 elevationOverlayLayer.selectAll('.elevation-hex')
-  .data(hexes.filter(d => !d.properties.isWater))
-  .enter().append('polygon')
-  .attr('class', 'elevation-hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => getElevationColor(d.properties.elevation))
-  .style('fill-opacity', 0.8) // 少し不透明度を上げて見やすく
-  .style('pointer-events', 'none');
+    .data(hexes.filter(d => !d.properties.isWater))
+    .enter().append('polygon')
+    .attr('class', 'elevation-hex')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => getElevationColor(d.properties.elevation))
+    .style('fill-opacity', 0.8) // 少し不透明度を上げて見やすく
+    .style('pointer-events', 'none');
 
 // 3c. 気候帯オーバーレイ
 climateZoneOverlayLayer.selectAll('.climate-zone-hex')
-  .data(hexes).enter().append('polygon')
-  .attr('class', 'climate-zone-hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => CLIMATE_ZONE_COLORS[d.properties.climateZone])
-  .style('fill-opacity', 0.8).style('pointer-events', 'none');
+    .data(hexes).enter().append('polygon')
+    .attr('class', 'climate-zone-hex')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => CLIMATE_ZONE_COLORS[d.properties.climateZone])
+    .style('fill-opacity', 0.8).style('pointer-events', 'none');
 
 // 3e. 気温オーバーレイ
 tempOverlayLayer.selectAll('.temp-hex')
-  .data(hexes).enter().append('polygon')
-  .attr('class', 'temp-hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => tempColor(d.properties.temperature))
-  .style('fill-opacity', 0.6).style('pointer-events', 'none');
+    .data(hexes).enter().append('polygon')
+    .attr('class', 'temp-hex')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => tempColor(d.properties.temperature))
+    .style('fill-opacity', 0.6).style('pointer-events', 'none');
 
 // 3d. 降水量オーバーレイ
 precipOverlayLayer.selectAll('.precip-hex')
-  .data(hexes).enter().append('polygon')
-  .attr('class', 'precip-hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => precipColor(d.properties.precipitation))
-  .style('fill-opacity', 0.6).style('pointer-events', 'none');
+    .data(hexes).enter().append('polygon')
+    .attr('class', 'precip-hex')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => precipColor(d.properties.precipitation))
+    .style('fill-opacity', 0.6).style('pointer-events', 'none');
 
 // 3b. 魔力オーバーレイ
 manaOverlayLayer.selectAll('.mana-hex')
-  .data(hexes).enter().append('polygon')
-  .attr('class', 'mana-hex')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .attr('fill', d => manaColor(d.properties.manaValue))
-  .style('fill-opacity', 0.6).style('pointer-events', 'none');
+    .data(hexes).enter().append('polygon')
+    .attr('class', 'mana-hex')
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .attr('fill', d => manaColor(d.properties.manaValue))
+    .style('fill-opacity', 0.6).style('pointer-events', 'none');
 
 // 3g. ラベルレイヤー
 const hexLabelGroups = labelLayer.selectAll('.hex-label-group')
-  .data(hexes).enter().append('g')
-  .attr('class', 'hex-label-group');
+    .data(hexes).enter().append('g')
+    .attr('class', 'hex-label-group');
 
 // ツールチップ
 hexLabelGroups.append('polygon')
-  .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-  .style('fill', 'transparent')
-  .append('title')
-  .text(d => 
-    `E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
-    // 積雪している場合は、植生名に（積雪）を追記
-    `Vegetation: ${d.properties.vegetation}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
-    `Climate Zone: ${d.properties.climateZone}\n` +
-    `Elevation: ${Math.round(d.properties.elevation)}m\n` +
-    `Temp: ${d.properties.temperature.toFixed(1)}℃\n` +
-    `Precipitation: ${(d.properties.precipitation * 100).toFixed(0)}%\n` +
-    `Mana: ${d.properties.manaRank} (${d.properties.manaValue.toFixed(2)})\n` +
-    `Resource: ${d.properties.resourceRank}`
-  );
+    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+    .style('fill', 'transparent')
+    .append('title')
+    .text(d => 
+        `E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
+        // ↓↓↓ この行を以下のように書き換えます ↓↓↓
+        `Terrain: ${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
+        `Climate Zone: ${d.properties.climateZone}\n` +
+        `Elevation: ${Math.round(d.properties.elevation)}m\n` +
+        `Temp: ${d.properties.temperature.toFixed(1)}℃\n` +
+        `Precipitation: ${(d.properties.precipitation * 100).toFixed(0)}%\n` +
+        `Mana: ${d.properties.manaRank} (${d.properties.manaValue.toFixed(2)})\n` +
+        `Resource: ${d.properties.resourceRank}`
+    );
              
 // 座標ラベル
 hexLabelGroups.append('text').attr('class', 'hex-label')
-  .attr('x', d => d.cx).attr('y', d => d.cy + hexHeight * 0.4)
-  .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-  .style('font-size', `${r / 4}px`)
-  .style('display', 'none')
-  .text(d => `${String(d.x).padStart(2, '0')}-${String(d.y).padStart(2, '0')}`);
+    .attr('x', d => d.cx).attr('y', d => d.cy + hexHeight * 0.4)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+    .style('font-size', `${r / 4}px`)
+    .style('display', 'none')
+    .text(d => `${String(d.x).padStart(2, '0')}-${String(d.y).padStart(2, '0')}`);
 
 // 居住区ラベル
 hexLabelGroups.filter(d => d.properties.settlement).append('text').attr('class', 'settlement-label')
-  .attr('x', d => d.cx).attr('y', d => d.cy)
-  .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-  .style('font-size', `${r / 1.5}px`)
-  .text(d => d.properties.settlement);
+    .attr('x', d => d.cx).attr('y', d => d.cy)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+    .style('font-size', `${r / 1.5}px`)
+    .text(d => d.properties.settlement);
 
 // 魔力ラベル
 hexLabelGroups.append('text').attr('class', 'property-label')
-  .attr('x', d => d.cx - r * 0.7).attr('y', d => d.cy)
-  .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-  .style('font-size', `${r / 4}px`)
-  .style('display', 'none')
-  .text(d => d.properties.manaRank);
+    .attr('x', d => d.cx - r * 0.7).attr('y', d => d.cy)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+    .style('font-size', `${r / 4}px`)
+    .style('display', 'none')
+    .text(d => d.properties.manaRank);
 
 // 資源ラベル
 hexLabelGroups.append('text').attr('class', 'property-label')
-  .attr('x', d => d.cx + r * 0.7).attr('y', d => d.cy)
-  .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-  .style('font-size', `${r / 4}px`)
-  .style('display', 'none')
-  .text(d => d.properties.resourceRank);
-
+    .attr('x', d => d.cx + r * 0.7).attr('y', d => d.cy)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+    .style('font-size', `${r / 4}px`)
+    .style('display', 'none')
+    .text(d => d.properties.resourceRank);
 
 // --- 4. ZoomとUIイベントハンドラ ---
 const zoom = d3.zoom().scaleExtent([0.2, 10]).on('zoom', (event) => {
@@ -465,33 +605,33 @@ const zoom = d3.zoom().scaleExtent([0.2, 10]).on('zoom', (event) => {
     const effectiveRadius = r * event.transform.k;
     
     labelLayer.selectAll('.hex-label, .property-label')
-      .style('display', effectiveRadius >= 70 ? 'inline' : 'none');
-  });
+        .style('display', effectiveRadius >= 50 ? 'inline' : 'none');
+});
 svg.call(zoom);
 
 // 汎用的なレイヤー切り替え関数
 function toggleLayerVisibility(layerName, buttonElement, showText, hideText) {
-  const layer = layers[layerName];
-  layer.visible = !layer.visible;
-  layer.group.style('display', layer.visible ? 'inline' : 'none');
-  buttonElement.textContent = layer.visible ? hideText : showText;
+    const layer = layers[layerName];
+    layer.visible = !layer.visible;
+    layer.group.style('display', layer.visible ? 'inline' : 'none');
+    buttonElement.textContent = layer.visible ? hideText : showText;
 }
 
 // 各ボタンにイベントを割り当て
 d3.select('#toggleManaOverlay').on('click', function() {
-  toggleLayerVisibility('mana-overlay', this, '龍脈表示', '龍脈非表示');
+    toggleLayerVisibility('mana-overlay', this, '龍脈表示', '龍脈非表示');
 });
 d3.select('#toggleClimateZoneOverlay').on('click', function() {
-  toggleLayerVisibility('climate-zone-overlay', this, '気候帯表示', '気候帯非表示');
+    toggleLayerVisibility('climate-zone-overlay', this, '気候帯表示', '気候帯非表示');
 });
 d3.select('#togglePrecipOverlay').on('click', function() {
-  toggleLayerVisibility('precip-overlay', this, '降水量表示', '降水量非表示');
+    toggleLayerVisibility('precip-overlay', this, '降水量表示', '降水量非表示');
 });
 d3.select('#toggleTempOverlay').on('click', function() {
     toggleLayerVisibility('temp-overlay', this, '気温表示', '気温非表示');
 });
 d3.select('#toggleElevationOverlay').on('click', function() {
-  toggleLayerVisibility('elevation-overlay', this, '土地利用消去', '土地利用表示');
+    toggleLayerVisibility('elevation-overlay', this, '土地利用消去', '土地利用表示');
 });
 
 // --- 5. 初期表示位置の設定 ---
@@ -501,9 +641,9 @@ const svgWidth = svg.node().getBoundingClientRect().width;
 const svgHeight = svg.node().getBoundingClientRect().height;
 const targetHex = hexes.find(h => h.x === targetX && h.y === targetY);
 if (targetHex) {
-  const initialScale = 1.5;
-  const translateX = svgWidth / 2 - targetHex.cx * initialScale;
-  const translateY = svgHeight / 2 - targetHex.cy * initialScale;
-  const initialTransform = d3.zoomIdentity.translate(translateX, translateY).scale(initialScale);
-  svg.call(zoom.transform, initialTransform);
+    const initialScale = 1.0;
+    const translateX = svgWidth / 2 - targetHex.cx * initialScale;
+    const translateY = svgHeight / 2 - targetHex.cy * initialScale;
+    const initialTransform = d3.zoomIdentity.translate(translateX, translateY).scale(initialScale);
+    svg.call(zoom.transform, initialTransform);
 }
