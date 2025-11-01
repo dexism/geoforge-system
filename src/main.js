@@ -606,6 +606,116 @@ isolatedClusters.forEach(cluster => {
     }
 });
 
+// --- ★★★ 新規：第4.7パス：食料経済のシミュレーション ★★★ ---
+await addLogMessage("各地域の食料需給を計算中...");
+
+// 1. 経済パラメータの定義
+const HEX_AREA_HA = 34641; // 1ヘックスの面積 (ha)
+const CROP_DATA = {
+    '小麦': { yield: 0.60, type: '畑作', cultivation_ha_per_person: 1.5 },
+    '大麦': { yield: 0.75, type: '畑作', cultivation_ha_per_person: 1.5 },
+    '雑穀': { yield: 0.65, type: '畑作', cultivation_ha_per_person: 1.5 },
+    '稲':   { yield: 1.35, type: '水田', cultivation_ha_per_person: 0.8 },
+};
+
+const SETTLEMENT_PARAMS = {
+    '都':     { labor_rate: 0.25, consumption_t_per_person: 0.30, infra_coeff: 1.1, head_cap_base: 0.40, head_cap_bonus: 0.10 },
+    '街':     { labor_rate: 0.40, consumption_t_per_person: 0.25, infra_coeff: 1.05, head_cap_base: 0.35, head_cap_bonus: 0.05 },
+    '町':     { labor_rate: 0.60, consumption_t_per_person: 0.22, infra_coeff: 1.0, head_cap_base: 0.30, head_cap_bonus: 0.0 },
+    '村':     { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.9, head_cap_base: 0.25, head_cap_bonus: 0.0 },
+    '散居':   { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.85, head_cap_base: 0.20, head_cap_bonus: 0.0 }
+};
+
+const LIVESTOCK_COEFF = 1.0; // 家畜係数 (人力1.0) ※家畜利用は1.8
+const CONSOLIDATION_COEFF = 1.0; // 連坦係数 (連坦1.0) ※分散は0.8
+
+// 2. 各ヘックスの食料需給を計算
+allHexes.forEach(h => {
+    const p = h.properties;
+    p.surplus = {}; // 余剰プロパティを初期化
+    p.shortage = {}; // 不足プロパティを初期化
+    
+    if (p.population <= 0 || p.isWater) {
+        return; // 人口がいない、または水域なら計算しない
+    }
+
+    // A. 需要の計算
+    // ---------------------------------
+    const settlementType = p.settlement ? p.settlement : '散居';
+    const settlementInfo = SETTLEMENT_PARAMS[settlementType];
+    const annualConsumptionPerPerson = settlementInfo.consumption_t_per_person;
+    const totalDemand = p.population * annualConsumptionPerPerson;
+
+    // B. 供給の計算
+    // ---------------------------------
+    // B-1. 主食と作付け割合の決定
+    let mainCrops = {};
+    const climate = p.climateZone;
+    if (climate.includes("亜寒帯") || climate.includes("ツンドラ") || climate.includes("ステップ") || climate.includes("砂漠(寒)")) {
+        mainCrops = { '大麦': 0.6, '雑穀': 0.4 };
+    } else if (climate.includes("温暖") || climate.includes("地中海")) {
+        mainCrops = { '小麦': 0.7, '雑穀': 0.3 };
+    } else if (climate.includes("熱帯")) {
+        mainCrops = p.isAlluvial ? { '稲': 0.8, '雑穀': 0.2 } : { '雑穀': 1.0 };
+    } else {
+        mainCrops = { '雑穀': 1.0 }; // デフォルト
+    }
+
+    // B-2. 耕作可能面積の計算
+    // ヘッドキャップ (上限)
+    // 居住地3%, 土地ポテンシャルに応じて20%～50%、都市部はボーナス
+    const headCapPotential = settlementInfo.head_cap_base + p.agriPotential * (0.5 - settlementInfo.head_cap_base) + settlementInfo.head_cap_bonus;
+    const maxCultivationArea = HEX_AREA_HA * Math.max(0.03, headCapPotential);
+
+    // 労働力ベース
+    const laborPopulation = p.population * settlementInfo.labor_rate;
+    let avgCultivationHaPerPerson = 0;
+    Object.keys(mainCrops).forEach(cropName => {
+        avgCultivationHaPerPerson += CROP_DATA[cropName].cultivation_ha_per_person * mainCrops[cropName];
+    });
+    
+    // 家畜係数と連坦係数を仮で設定（本来は地域や文化レベルで変動）
+    const livestockCoeff = p.settlement === '村' ? 1.0 : 1.8; // 村は人力、町以上は家畜利用が多いと仮定
+    const consolidationCoeff = p.settlement === '村' ? 0.8 : 1.0; // 村は分散、町以上は連坦と仮定
+
+    const laborBasedArea = laborPopulation * avgCultivationHaPerPerson * livestockCoeff * consolidationCoeff * settlementInfo.infra_coeff;
+
+    // 最終的な耕作面積の決定
+    const finalCultivationArea = Math.min(maxCultivationArea, laborBasedArea);
+    
+    // B-3. 収穫量の計算
+    let totalSupply = 0;
+    const yieldFluctuation = 0.7 + Math.random() * 0.6; // 並作(1.0)から±30%の変動
+    
+    Object.keys(mainCrops).forEach(cropName => {
+        const crop = CROP_DATA[cropName];
+        const cropArea = finalCultivationArea * mainCrops[cropName];
+        const cropYield = cropArea * crop.yield * yieldFluctuation;
+        totalSupply += cropYield;
+    });
+    
+    // C. 需給バランスの決定
+    // ---------------------------------
+    const balance = totalSupply - totalDemand;
+    
+    if (balance > 0) {
+        // 自給量、備蓄を差し引いた残りを余剰とする（租税＋商品化量）
+        const surplusAmount = balance * 0.7; // 30%は備蓄やロスと仮定
+        if (surplusAmount > 0) {
+            Object.keys(mainCrops).forEach(cropName => {
+                const share = (surplusAmount * mainCrops[cropName]).toFixed(1);
+                if (parseFloat(share) > 0) p.surplus[cropName] = share;
+            });
+        }
+    } else {
+        Object.keys(mainCrops).forEach(cropName => {
+            const share = (Math.abs(balance) * mainCrops[cropName]).toFixed(1);
+             if (parseFloat(share) > 0) p.shortage[cropName] = share;
+        });
+    }
+});
+
+
 // --- 第5パス：街道の生成 ---
 await addLogMessage("街道の整備を開始しました...");
 
@@ -1077,29 +1187,45 @@ const hexLabelGroups = labelLayer.selectAll('.hex-label-group')
     .attr('class', 'hex-label-group');
 
 // ツールチップ
-// ★★★ 変更点：ツールチップに居住適性と人口を追加 ★★★
+// ★★★ 変更点：ツールチップに食料需給情報を追加 ★★★
 hexLabelGroups.append('polygon')
     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
     .style('fill', 'transparent')
     .append('title')
-    .text(d => 
-        `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
-        `土地利用：${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
-        `人口　　：${d.properties.population.toLocaleString()}人\n` +
-        `居住適性：${d.properties.habitability.toFixed(1)}\n` +
-        `--- 土地詳細 ---\n` +
-        `気候帯　：${d.properties.climateZone}\n` +
-        `標高　　：${Math.round(d.properties.elevation)}m\n` +
-        `気温　　：${d.properties.temperature.toFixed(1)}℃\n` +
-        `降水量　：${(d.properties.precipitation * 100).toFixed(0)}%\n` +
-        `魔力　　：${d.properties.manaRank}\n` +
-        `資源　　：${d.properties.resourceRank}\n` +
-        `--- 資源ポテンシャル ---\n` +
-        `農業適正：${(d.properties.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-        `林業適正：${(d.properties.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-        `鉱業適正：${(d.properties.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-        `漁業適正：${(d.properties.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%`
-    );
+    .text(d => {
+        let text = `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
+               `土地利用：${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
+               `人口　　：${d.properties.population.toLocaleString()}人\n` +
+               `居住適性：${d.properties.habitability.toFixed(1)}\n` +
+               `--- 土地詳細 ---\n` +
+               `気候帯　：${d.properties.climateZone}\n` +
+               `標高　　：${Math.round(d.properties.elevation)}m\n` +
+               `気温　　：${d.properties.temperature.toFixed(1)}℃\n` +
+               `降水量　：${(d.properties.precipitation * 100).toFixed(0)}%\n` +
+               `魔力　　：${d.properties.manaRank}\n` +
+               `資源　　：${d.properties.resourceRank}\n` +
+               `--- 資源ポテンシャル ---\n` +
+               `農業適正：${(d.properties.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+               `林業適正：${(d.properties.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+               `鉱業適正：${(d.properties.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+               `漁業適正：${(d.properties.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%`;
+        
+        const surplusKeys = Object.keys(d.properties.surplus || {});
+        const shortageKeys = Object.keys(d.properties.shortage || {});
+
+        if (surplusKeys.length > 0 || shortageKeys.length > 0) {
+            text += `\n--- 食料需給 (t/年) ---`;
+            if (surplusKeys.length > 0) {
+                let surplusText = surplusKeys.map(key => `${key} ${d.properties.surplus[key]}`).join('t\n　　　　　');
+                text += `\n余剰　　：${surplusText}t`;
+            }
+            if (shortageKeys.length > 0) {
+                let shortageText = shortageKeys.map(key => `${key} ${d.properties.shortage[key]}`).join('t\n　　　　　');
+                text += `\n不足　　：${shortageText}t`;
+            }
+        }
+        return text;
+    });
              
 // 座標ラベル
 hexLabelGroups.append('text').attr('class', 'hex-label')
