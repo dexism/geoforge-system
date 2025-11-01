@@ -6,6 +6,13 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="loading-overlay">
+    <div class="loading-content">
+      <h1 id="loading-title">GeoForge System で<br>世界を創造しています！</h1>
+      <div id="loading-log"></div>
+    </div>
+  </div>
+
   <div class="ui-container">
     <button id="toggleManaOverlay">龍脈表示</button>
     <button id="toggleClimateZoneOverlay">気候帯表示</button>
@@ -21,6 +28,9 @@
     <hr>
     <button id="togglePopulationOverlay">人口</button>
   </div>
+  
+  <div id="population-display"></div>
+
   <svg id="hexmap"></svg>
   <script type="module" src="./main.js"></script>
 </body>

@@ -1,11 +1,34 @@
 import * as d3 from 'd3';
 import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
-// import { astar as aStar } from 'https://cdn.jsdelivr.net/npm/tiny-astar@1.0.3/dist/tiny-astar.mjs';
 
+const loadingOverlay = document.getElementById('loading-overlay');
+const logContainer = document.getElementById('loading-log'); // ログコンテナを取得
+const uiContainer = document.querySelector('.ui-container');
+const populationDisplay = document.getElementById('population-display');
+
+// ★★★ 処理を一時停止し、ブラウザに描画する時間を与えるためのヘルパー関数 ★★★
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// ★★★ メッセージを「追加」していく新しい関数 ★★★
+async function addLogMessage(message) {
+    console.log(message);
+    const entry = document.createElement('p');
+    entry.className = 'log-entry';
+    entry.textContent = `・ ${message}`;
+    logContainer.appendChild(entry);
+    // 自動で一番下までスクロールさせる
+    logContainer.scrollTop = logContainer.scrollHeight;
+    
+    // ★★★ メッセージを描画させるために、ここで必ず少し待つ ★★★
+    await sleep(20);
+}
+
+// ★★★ 全体の処理を非同期関数でラップする ★★★
+async function runWorldGeneration() {
 // ================================================================
 // GeoForge System 設定
 // ================================================================
-
+await addLogMessage("世界の原型を創造中...");
 // ----------------------------------------------------------------
 // ■ 基本設定
 // ----------------------------------------------------------------
@@ -230,6 +253,7 @@ function generateBaseProperties(col, row) {
 // ================================================================
 
 // --- 第1パス：全ヘックスの基本プロパティを生成 ---
+await addLogMessage("地面の起伏を生成しています...");
 const allHexes = [];
 for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
@@ -250,6 +274,7 @@ allHexes.forEach(h => {
 });
 
 // --- 第2パス：水系を生成 ---
+await addLogMessage("水系と河川を配置しています...");
 const riverSources = allHexes.filter(h => {
     if (h.properties.isWater || h.properties.elevation < 1000) return false;
     const isRainyMountain = h.properties.elevation > 1500 && h.properties.precipitation > 0.5;
@@ -294,6 +319,7 @@ riverSources.forEach(source => {
 });
 
 // --- 第3パス：水系情報を元に、最終的なプロパティ（植生、産業ポテンシャル）を計算 ---
+ await addLogMessage("気候と植生を計算しています...");
 allHexes.forEach(h => {
     const { properties, col, row } = h;
     const { isWater, elevation, temperature, precipitation, climate } = properties;
@@ -406,7 +432,7 @@ allHexes.forEach(h => {
 });
 
 // --- ★★★ 新規：第4パス：居住地の配置 ★★★ ---
-
+await addLogMessage("居住に適した土地を探しています...");
 // 1. 各ヘックスの居住適性スコアを計算
 allHexes.forEach(h => {
     const p = h.properties;
@@ -527,31 +553,85 @@ allHexes.forEach(h => {
     }
 });
 
+// ★★★ 居住地生成の後に人口を計算して表示 ★★★
+const totalPopulation = allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
+await addLogMessage(`居住地が生まれました... 総人口: ${totalPopulation.toLocaleString()}人`);
+
+// --- ★★★ 新規：第4.5パス：辺境のハブとなる「町」の追加 ★★★ ---
+await addLogMessage("辺境のハブ都市を創設しています...");
+// 1. 既存の町や都市から遠く離れた、孤立している村をリストアップする
+const HUB_SEARCH_RADIUS = 10; // この半径内に町がない村を「孤立」と見なす
+const majorSettlements = allHexes.filter(h => ['町', '街', '都'].includes(h.properties.settlement));
+
+let isolatedVillages = allHexes.filter(h => {
+    if (h.properties.settlement !== '村') {
+        return false;
+    }
+    // 最も近い主要な居住地を探し、その距離を測る
+    const isIsolated = !majorSettlements.some(s => getDistance(h, s) <= HUB_SEARCH_RADIUS);
+    return isIsolated;
+});
+
+// 2. 孤立した村々を、地理的に近いクラスター（集団）にグループ化する
+const isolatedClusters = [];
+while (isolatedVillages.length > 0) {
+    const seed = isolatedVillages.shift(); // 最初の村をクラスタの核とする
+    const currentCluster = [seed];
+    
+    // 核の周辺にある他の孤立した村をクラスタに追加する
+    // Arrayを逆順でループすると、安全に要素を削除できる
+    for (let i = isolatedVillages.length - 1; i >= 0; i--) {
+        const otherVillage = isolatedVillages[i];
+        if (getDistance(seed, otherVillage) < HUB_SEARCH_RADIUS) {
+            currentCluster.push(otherVillage);
+            isolatedVillages.splice(i, 1); // クラスタに追加した村はリストから削除
+        }
+    }
+    isolatedClusters.push(currentCluster);
+}
+
+// 3. 各クラスター内で、最もポテンシャルの高い村を「町」に昇格させる
+isolatedClusters.forEach(cluster => {
+    if (cluster.length > 0) {
+        // クラスター内で最も人口の多い村をハブ候補とする
+        cluster.sort((a, b) => b.properties.population - a.properties.population);
+        const hubVillage = cluster[0];
+
+        // 候補の村を「町」に昇格させる
+        hubVillage.properties.settlement = '町';
+        // 人口も町らしく少し増やす（最低1000人を保証）
+        hubVillage.properties.population = Math.max(hubVillage.properties.population, 1000 + Math.floor(Math.random() * 2000));
+        
+        console.log(`[DEBUG] 辺境ハブ生成: E${hubVillage.col}-N${(ROWS - 1) - hubVillage.row} の村を町に昇格させました。`);
+    }
+});
+
 // --- 第5パス：街道の生成 ---
+await addLogMessage("街道の整備を開始しました...");
 
 // 事前に全ヘックスの最大人口を計算しておく
 // これを基準に、人口が少ない場所へのペナルティを計算する
 const maxPopulation = allHexes.reduce((max, h) => Math.max(max, h.properties.population || 0), 0);
+// ★★★ 街道生成ロジック内で総延長を計算する ★★★
+let totalRoadHexes = 0; // 街道が通るヘックスの総数をカウント
 
 // 1. 各ヘックスに移動コストを設定
 allHexes.forEach(h => {
+    // ... (この部分は前回から変更なし) ...
     const p = h.properties;
     let cost = 1;
-    if (p.isWater && p.vegetation !== '湖沼') cost = 9999;
-    if (p.vegetation === '湖沼') cost = 50;
-    if (p.vegetation === '森林' || p.vegetation === '疎林') cost += 2;
-    if (p.vegetation === '密林' || p.vegetation === '針葉樹林') cost += 4;
-
-    // 標高が1000mを超えたあたりから、指数関数的にコストが増加するように変更。
-    // これにより、丘陵地帯はまだ通行可能だが、急峻な山岳地帯は非常に通りにくくなる。
-    if (p.elevation > 1000) {
-        // (標高 / 基準標高) の N乗でコストを計算する。
-        // 基準標高を700、指数を3.0に設定。この値を調整することでペナルティの強さを変更できます。
-        const elevationFactor = p.elevation / 1000;
-        const elevationPenalty = Math.pow(elevationFactor, 5.0);
-        cost += elevationPenalty;
+    if (p.isWater) cost = Infinity; // ★★★ isWaterフラグで一括して通行不可にする ★★★
+    else {
+        if (p.vegetation === '湖沼') cost = 50; // isWaterがfalseの湖沼(干拓地など)は高コスト
+        if (p.vegetation === '森林' || p.vegetation === '疎林') cost += 2;
+        if (p.vegetation === '密林' || p.vegetation === '針葉樹林') cost += 4;
+        if (p.elevation > 1000) {
+            const elevationFactor = p.elevation / 700;
+            const elevationPenalty = Math.pow(elevationFactor, 2.8);
+            cost += elevationPenalty;
+        }
+        if (p.flow > 2) cost += p.flow * 3;
     }
-    if (p.flow > 2) cost += p.flow * 3;
     p.movementCost = cost;
 });
 
@@ -584,8 +664,11 @@ function findAStarPath(options) {
             return path;
         }
 
+        // ★★★ この neighbor(current.node).forEach の中を修正 ★★★
+        const parentNode = visited.get(`${current.node.x}-${current.node.y}`).parent;
         neighbor(current.node).forEach(n => {
-            const gScore = current.g + cost(current.node, n);
+            // cost関数に3番目の引数として parentNode を渡す
+            const gScore = current.g + cost(current.node, n, parentNode);
             const visitedNeighbor = visited.get(`${n.x}-${n.y}`);
 
             if (!visitedNeighbor || gScore < visitedNeighbor.g) {
@@ -598,23 +681,9 @@ function findAStarPath(options) {
     return null;
 }
 
-// 2. 街道ネットワークを定義
-const roads = [];
-// ★★★ 変更点：allHexesから直接、各居住地タイプのリストを生成する ★★★
-const allSettlements = allHexes.filter(h => h.properties.settlement);
-const capitals = allSettlements.filter(h => h.properties.settlement === '都');
-const cities = allSettlements.filter(h => h.properties.settlement === '街');
-const towns = allSettlements.filter(h => h.properties.settlement === '町');
-const villages = allSettlements.filter(h => h.properties.settlement === '村');
-
-
-// A*探索用のグラフを準備
-const graph = {
-    grid: allHexes.map(h => h.properties.movementCost),
-    width: COLS,
-    height: ROWS
-};
-
+/**
+ * A* Pathfinding Algorithm (自己完結型)
+ */
 // ヘルパー：2点間の最短経路を探す関数
 const findPath = (startHex, endHex) => {
     const path = findAStarPath({
@@ -622,27 +691,52 @@ const findPath = (startHex, endHex) => {
         isEnd: (node) => node.x === endHex.col && node.y === endHex.row,
         neighbor: (node) => {
             const hex = allHexes[getIndex(node.x, node.y)];
-            return hex.neighbors.map(nIndex => {
-                const neighborHex = allHexes[nIndex];
-                return { x: neighborHex.col, y: neighborHex.row };
-            });
+            return hex.neighbors
+                .map(nIndex => allHexes[nIndex])
+                .filter(neighborHex => !neighborHex.properties.isWater)
+                .map(neighborHex => ({ x: neighborHex.col, y: neighborHex.row }));
         },
-        // ★★★ この cost 関数を以下のように修正 ★★★
-        cost: (nodeA, nodeB) => {
+        // ★★★ この cost 関数を以下のように全面的に書き換えます ★★★
+        cost: (nodeA, nodeB, parentNode) => {
             const targetHex = allHexes[getIndex(nodeB.x, nodeB.y)];
-            const properties = targetHex.properties;
-            const movementCost = properties.movementCost;
 
-            // 人口が少ないほどコストが高くなるペナルティを追加する
-            // (1.0 - 人口/最大人口) で、人口が多いほど0に近づく係数を計算
-            const populationFactor = 1.0 - (properties.population / maxPopulation);
+            // --- ルール1：既存の街道があるなら、それが最優先 ---
+            // 既存の街道上を移動するコストは限りなくゼロに近い。
+            if (targetHex.properties.roadTraffic > 0) {
+                return 0.1;
+            }
 
-            // populationPenaltyFactorでペナルティの重みを調整する
-            // この値が大きいほど、アルゴリズムは人口の多い場所を強く優先するようになる
-            const populationPenaltyFactor = 15; // この値は10〜20程度で調整してみてください
-            const populationPenalty = populationFactor * populationPenaltyFactor;
+            const startHex = allHexes[getIndex(nodeA.x, nodeA.y)];
+            
+            // --- ルール2：地形のコストは「勾配」を最重視する ---
+            // 標高差が大きい（急な坂）ほど、コストが爆発的に増加する。
+            const elevationDifference = Math.abs(startHex.properties.elevation - targetHex.properties.elevation);
+            const slopePenaltyFactor = 20; // 勾配へのペナルティを強化 (調整点)
+            let terrainCost = 1 + Math.pow(elevationDifference / 100, 2) * slopePenaltyFactor;
 
-            return movementCost + populationPenalty;
+            // 絶対的な標高や植生は、補助的なコストとして少しだけ加算する
+            terrainCost += (targetHex.properties.movementCost -1) * 0.5; // movementCostの基本値1を除いたペナルティを半減させて加える
+
+            // --- ルール3：遠回りの三角形や不自然な蛇行を抑制する「直進性」ペナルティ ---
+            let turnPenalty = 0;
+            if (parentNode) {
+                const dx1 = nodeA.x - parentNode.x;
+                const dy1 = nodeA.y - parentNode.y;
+                const dx2 = nodeB.x - nodeA.x;
+                const dy2 = nodeB.y - nodeA.y;
+                // 移動方向が変わった場合（直進でない場合）にペナルティ
+                if (dx1 !== dx2 || dy1 !== dy2) {
+                    turnPenalty = 20; // 直進を促すための固定ペナルティ (調整点)
+                }
+            }
+            
+            // --- ルール4：人口は、最終的な微調整のための要素 ---
+            // 人口が少ない場所へのペナルティは、他の要因に比べ影響を小さくする
+            const populationFactor = 1.0 - (targetHex.properties.population / maxPopulation);
+            const populationPenalty = populationFactor * 5; // ペナルティの重みを下げる (調整点)
+
+            // 全てのコストを合計して返す
+            return terrainCost + turnPenalty + populationPenalty;
         },
         heuristic: (node) => {
             return getDistance(allHexes[getIndex(node.x, node.y)], endHex);
@@ -650,10 +744,8 @@ const findPath = (startHex, endHex) => {
     });
 
     if (path) {
-        // console.log(`[DEBUG] 経路発見成功: ${startHex.properties.settlement || '中継点'} -> ${endHex.properties.settlement || '中継点'}, 長さ: ${path.length}`);
         return path.map(node => getIndex(node.x, node.y));
     }
-    // console.error(`[DEBUG] 経路発見失敗: ${startHex.properties.settlement || '中継点'} -> ${endHex.properties.settlement || '中継点'}`);
     return [];
 };
 
@@ -671,65 +763,68 @@ const findClosest = (source, targets) => {
     return closest;
 };
 
+// 2. 交通量を初期化し、階層的に街道を生成・交通量を即時反映
+
+// 2a. 全ヘックスの交通量をリセット
+allHexes.forEach(h => {
+    h.properties.roadTraffic = 0;
+});
+
+// 2b. 居住地リストを取得
+const allSettlements = allHexes.filter(h => h.properties.settlement);
+const capitals = allSettlements.filter(h => h.properties.settlement === '都');
+const cities = allSettlements.filter(h => h.properties.settlement === '街');
+const towns = allSettlements.filter(h => h.properties.settlement === '町');
+const villages = allSettlements.filter(h => h.properties.settlement === '村');
+
 console.log(`[DEBUG] 居住地チェック: 都(${capitals.length}), 街(${cities.length}), 町(${towns.length}), 村(${villages.length})`);
 
-// 3. 階層的に街道を生成
-villages.forEach(v => {
-    const closest = findClosest(v, [...towns, ...cities, ...capitals]);
-    if (closest) {
-        const path = findPath(v, closest);
-        // ★★★ 経路が見つかった場合のみroads配列に追加する ★★★
-        if (path.length > 0) {
-            roads.push({ path: path, traffic: v.properties.population });
+// 2c. 経路を探索し、見つけ次第すぐに交通量を更新する関数
+const connectSettlements = (sourceList, targetList) => {
+    sourceList.forEach(source => {
+        const closest = findClosest(source, targetList);
+        if (closest) {
+            const path = findPath(source, closest);
+            if (path.length > 0) {
+                // 経路が見つかったら、その経路上の各ヘックスの交通量をすぐに増やす
+                path.forEach(hexIndex => {
+                    allHexes[hexIndex].properties.roadTraffic += source.properties.population;
+                    totalRoadHexes++; // ★★★ カウントを増やす ★★★
+                });
+            }
         }
-    }
-});
-towns.forEach(t => {
-    const closest = findClosest(t, [...cities, ...capitals]);
-    if (closest) {
-        const path = findPath(t, closest);
-        // ★★★ 経路が見つかった場合のみroads配列に追加する ★★★
-        if (path.length > 0) {
-            roads.push({ path: path, traffic: t.properties.population });
-        }
-    }
-});
-cities.forEach(c => {
-    const closest = findClosest(c, capitals);
-    if (closest) {
-        const path = findPath(c, closest);
-        // ★★★ 経路が見つかった場合のみroads配列に追加する ★★★
-        if (path.length > 0) {
-            roads.push({ path: path, traffic: c.properties.population });
-        }
-    }
-});
-// 都同士を結ぶ幹線道路
-for(let i = 0; i < capitals.length; i++) {
+    });
+};
+
+// 2d. 階層が下の居住地から順に、上位の居住地へ道を繋いでいく
+// これにより、村が作った道を町が利用し、町が作った道を街が利用する...という流れが生まれる
+await addLogMessage("集落間の道を整備中...");
+connectSettlements(villages, [...towns, ...cities, ...capitals]);
+await addLogMessage("地方の道を幹線に接続中...");
+connectSettlements(towns, [...cities, ...capitals]);
+await addLogMessage("主要都市間を結んでいます...");
+connectSettlements(cities, capitals);
+await addLogMessage("国家間の大動脈を敷設中...");
+// 2e. 最後に、都同士を幹線道路で結ぶ
+for (let i = 0; i < capitals.length; i++) {
     for (let j = i + 1; j < capitals.length; j++) {
         const path = findPath(capitals[i], capitals[j]);
-        // ★★★ 経路が見つかった場合のみroads配列に追加する ★★★
         if (path.length > 0) {
-            roads.push({ path: path, traffic: 100000 }); // 幹線は高い交通量
+            path.forEach(hexIndex => {
+                allHexes[hexIndex].properties.roadTraffic += 100000; // 幹線は高い交通量
+                totalRoadHexes++; // ★★★ カウントを増やす ★★★
+            });
         }
     }
 }
-
-// 4. 交通量をシミュレート
-allHexes.forEach(h => {
-    // ★★★ propertiesの中にroadTrafficを初期化する ★★★
-    h.properties.roadTraffic = 0;
-});
-roads.forEach(road => {
-    road.path.forEach(hexIndex => {
-        // ★★★ propertiesの中のroadTrafficに加算する ★★★
-        allHexes[hexIndex].properties.roadTraffic += road.traffic;
-    });
-});
+// ★★★ 街道生成完了後に総延長を表示 ★★★
+const totalRoadKm = totalRoadHexes * HEX_SIZE_KM;
+await addLogMessage(`街道網が完成しました！ 総延長: ${totalRoadKm.toLocaleString()} km`);
 
 // ================================================================
 // D3.jsによる描画
 // ================================================================
+await addLogMessage("世界を描画しています...");
 const svg = d3.select('#hexmap');
 const g = svg.append('g');
 
@@ -1102,3 +1197,18 @@ if (targetHex) {
     const initialTransform = d3.zoomIdentity.translate(translateX, translateY).scale(initialScale);
     svg.call(zoom.transform, initialTransform);
 }
+
+// ★★★ 最後にローディング画面を非表示にする ★★★
+    await sleep(500); // 最後のメッセージを読む時間を少し確保
+    loadingOverlay.style.opacity = '0';
+    populationDisplay.textContent = `総人口: ${totalPopulation.toLocaleString()}人`;
+    populationDisplay.style.display = 'block';
+    uiContainer.style.display = 'block';
+
+    setTimeout(() => {
+        loadingOverlay.style.display = 'none';
+    }, 500);
+}
+
+// ★★★ 非同期関数を実行してワールド生成を開始 ★★★
+runWorldGeneration();
