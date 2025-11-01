@@ -634,6 +634,7 @@ allHexes.forEach(h => {
     const p = h.properties;
     p.surplus = {}; // 余剰プロパティを初期化
     p.shortage = {}; // 不足プロパティを初期化
+    p.cultivatedArea = 0; // ★★★ 変更点：農地面積を初期化 ★★★
     
     if (p.population <= 0 || p.isWater) {
         return; // 人口がいない、または水域なら計算しない
@@ -682,6 +683,7 @@ allHexes.forEach(h => {
 
     // 最終的な耕作面積の決定
     const finalCultivationArea = Math.min(maxCultivationArea, laborBasedArea);
+    p.cultivatedArea = finalCultivationArea; // ★★★ 変更点：農地面積をプロパティに保存 ★★★
     
     // B-3. 収穫量の計算
     let totalSupply = 0;
@@ -1187,7 +1189,7 @@ const hexLabelGroups = labelLayer.selectAll('.hex-label-group')
     .attr('class', 'hex-label-group');
 
 // ツールチップ
-// ★★★ 変更点：ツールチップに食料需給情報を追加 ★★★
+// ★★★ 変更点：ツールチップに農地面積を追加 ★★★
 hexLabelGroups.append('polygon')
     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
     .style('fill', 'transparent')
@@ -1196,6 +1198,7 @@ hexLabelGroups.append('polygon')
         let text = `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
                `土地利用：${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
                `人口　　：${d.properties.population.toLocaleString()}人\n` +
+               `農地面積：${Math.round(d.properties.cultivatedArea).toLocaleString()} ha\n` + // ★★★ 変更点 ★★★
                `居住適性：${d.properties.habitability.toFixed(1)}\n` +
                `--- 土地詳細 ---\n` +
                `気候帯　：${d.properties.climateZone}\n` +
