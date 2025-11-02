@@ -2,13 +2,13 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>GeoForge System - World Map v0.9.1</title>
+  <title>GeoForge System - World Map v1.1.0</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="loading-overlay">
     <div class="loading-content">
-      <h1 id="loading-title">GeoForge SYSTEM v0.9.1<br>世界を創造しています！</h1>
+      <h1 id="loading-title">GeoForge SYSTEM v1.1.0<br>世界を創造しています！</h1>
       <div id="loading-log"></div>
     </div>
   </div>
@@ -32,6 +32,16 @@
   <div id="population-display"></div>
 
   <svg id="hexmap"></svg>
+  
+  <div id="info-window" class="hidden">
+    <div class="info-window-header">
+      <span id="info-coord"></span>
+      <button id="info-close-btn" title="閉じる">×</button>
+    </div>
+    <div id="info-window-content">
+    </div>
+  </div>
+
   <script type="module" src="./main.js"></script>
   <script src="//accaii.com/geoforge/script.js" async></script><noscript><img src="//accaii.com/geoforge/script?guid=on"></noscript>
 </body>

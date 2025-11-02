@@ -138,3 +138,67 @@ button {
   font-weight: bold;
   fill: #222;
 }
+
+/* ================================================================
+   フローティング情報ウィンドウ スタイル
+   ================================================================ */
+#info-window {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  width: 320px; 
+  max-width: 90vw; /* スマホ画面では幅を可変に */
+  max-height: 90vh; /* 高くなりすぎないように制限 */
+  background-color: rgba(10, 20, 40, 0.95);
+  color: #e0e0e0;
+  border: 1px solid #999;
+  border-radius: 8px;
+  z-index: 20; /* UIボタンより手前に表示 */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  font-size: 0.9rem;
+  
+  /* 表示・非表示のアニメーション */
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#info-window.hidden {
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none; /* 非表示時はクリックイベントを受け付けない */
+}
+
+.info-window-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: rgba(0,0,0,0.4);
+  border-bottom: 1px solid #999;
+  font-weight: bold;
+}
+
+#info-close-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.8em;
+  line-height: 1;
+  padding: 0 5px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+#info-close-btn:hover {
+  opacity: 1;
+}
+
+#info-window-content {
+  padding: 12px;
+  overflow-y: auto;
+  /* (max-height - ヘッダーの高さ) で計算 */
+  max-height: calc(90vh - 45px); 
+  /* \n などの改行を正しく表示するための設定 */
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
