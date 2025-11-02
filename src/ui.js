@@ -191,7 +191,7 @@ export function setupUI(allHexes) {
     
     // 情報を整形する共有関数
     function getInfoText(d) {
-        let text = `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n\n` +
+        let text = `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
                    `土地利用： ${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
                    `人口　　： ${d.properties.population.toLocaleString()}人\n` +
                    `農地面積： ${Math.round(d.properties.cultivatedArea).toLocaleString()} ha\n` +
@@ -288,11 +288,21 @@ export function setupUI(allHexes) {
     svg.call(zoom);
 
     // ウィンドウを閉じるためのイベントリスナー
-    infoCloseBtn.addEventListener('click', () => {
+    // ウィンドウを閉じるためのイベントリスナーをタッチ対応に変更
+    function closeInfoWindow(event) {
         infoWindow.classList.add('hidden');
-    });
-    svg.on('click', () => { // マップの何もない部分をクリックしたとき
-        infoWindow.classList.add('hidden');
+        if (event) event.preventDefault(); // ゴーストクリック防止
+    }
+
+    infoCloseBtn.addEventListener('click', closeInfoWindow);
+    infoCloseBtn.addEventListener('touchend', closeInfoWindow);
+
+    svg.on('click', closeInfoWindow);
+    svg.on('touchend', (event) => {
+        // ヘックス以外の部分(SVGの背景)をタップした時のみ閉じる
+        if (event.target === svg.node()) {
+            closeInfoWindow(event);
+        }
     });
 
     d3.select('#toggleManaOverlay').on('click', function() { toggleLayerVisibility('mana-overlay', this, '龍脈表示', '龍脈非表示'); });
