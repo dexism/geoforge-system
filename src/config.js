@@ -8,7 +8,7 @@ import * as d3 from 'd3';
 // ■ 基本設定
 // ----------------------------------------------------------------
 export const COLS = 115;
-export const ROWS = 100; // 1000km四方に近づけるため調整
+export const ROWS = 100; 
 export const HEX_SIZE_KM = 10; // 1ヘックスの差し渡し距離 (km)
 export const r = 20; // 描画用のヘックス半径 (pixel)
 
@@ -104,7 +104,7 @@ export const populationColor = d3.scaleLinear().domain([0, 150000]).range(["blac
 // ----------------------------------------------------------------
 // ■ 文明生成パラメータ
 // ----------------------------------------------------------------
-export const NUM_NATIONS = 5; // 国家の数
+export const NUM_NATIONS = 4; // 国家の数
 export const NATION_NAMES = [
     "アルファ国", 
     "ブラボー国", 

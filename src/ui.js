@@ -103,6 +103,7 @@ export function setupUI(allHexes) {
     const fishingOverlayLayer = createLayer('fishing-overlay', false);
     const populationOverlayLayer = createLayer('population-overlay', false);
     const territoryOverlayLayer = createLayer('territory-overlay', false); // ★★★ 新規追加 ★★★
+    const highlightOverlayLayer = createLayer('highlight-overlay');
     const borderLayer = createLayer('border');
     const labelLayer = createLayer('labels');
     const interactionLayer = createLayer('interaction');
@@ -114,11 +115,11 @@ export function setupUI(allHexes) {
     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
     .attr('fill', d => {
         switch (d.properties.settlement) {
-            case '首都': return '#ff0000';
-            case '都市': return '#ff4500';
-            case '領都': return '#ffa500';
-            case '街':   return '#ffd700';
-            case '町':   return '#ffff00';
+            case '首都': return '#f0f';
+            case '都市': return '#f00';
+            case '領都': return '#f60';
+            case '街':   return '#fa0';
+            case '町':   return '#ff0';
         }
         const veg = d.properties.vegetation;
         if (config.TERRAIN_COLORS[veg]) return config.TERRAIN_COLORS[veg];
@@ -268,59 +269,105 @@ export function setupUI(allHexes) {
         .style('fill-opacity', 0.7).style('pointer-events', 'none');
 
     // ★★★ [更新] 領地オーバーレイヤーの描画ロジック ★★★
-    const nationColor = d3.scaleOrdinal(d3.schemeCategory10); // 国のIDで色分けするスケール
+    const nationColor = d3.scaleOrdinal(d3.schemeTableau10); // 色覚多様性対応のカラースケール
     territoryOverlayLayer.selectAll('.territory-hex').data(hexes).enter().append('polygon')
         .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-        .attr('fill', d => d.properties.nationId === 0 ? '#555' : nationColor(d.properties.nationId)) // nationIdで色分け
-        .style('fill-opacity', 0.6)
-        .style('stroke', d => nationColor(d.properties.nationId)) // nationIdで枠線色分け
-        .style('stroke-width', 0.1)
+        .attr('fill', d => d.properties.nationId === 0 ? '#555' : nationColor(d.properties.nationId))
+        .style('fill-opacity', 0.5)
         .style('pointer-events', 'none');
         
     // --- 3f. 情報ウィンドウとインタラクション ---
     
     // ★★★ [更新] 情報を整形する共有関数 ★★★
     function getInfoText(d) {
+        const p = d.properties;
         let superiorText = 'なし';
-        if (d.properties.directSuperiorId !== null) {
-            const superiorHex = allHexes[d.properties.directSuperiorId];
-            superiorText = `${superiorHex.properties.settlement} (E${superiorHex.col}-N${(config.ROWS-1)-superiorHex.row})`;
-        } else if (d.properties.territoryId !== null && getIndex(d.x, (config.ROWS - 1) - d.y) !== d.properties.territoryId) {
-            const territoryHub = allHexes[d.properties.territoryId];
-            superiorText = `[中枢] ${territoryHub.properties.settlement} (E${territoryHub.col}-N${(config.ROWS-1)-territoryHub.row})`;
+        if (p.parentHexId != null) {
+            const superiorHex = allHexes[p.parentHexId];
+            if (superiorHex) {
+                superiorText = `${superiorHex.properties.settlement} (E${superiorHex.col}-N${(config.ROWS-1)-superiorHex.row})`;
+            }
+        } else if (p.territoryId != null && getIndex(d.x, (config.ROWS - 1) - d.y) !== p.territoryId) {
+            const territoryHub = allHexes[p.territoryId];
+             if (territoryHub) {
+                superiorText = `[中枢] ${territoryHub.properties.settlement} (E${territoryHub.col}-N${(config.ROWS-1)-territoryHub.row})`;
+            }
         }
 
-        // 国IDから国名を取得（存在しないIDの場合は「辺境」）
-        const nationName = d.properties.nationId > 0 && config.NATION_NAMES[d.properties.nationId - 1] 
-            ? config.NATION_NAMES[d.properties.nationId - 1] 
+        const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] 
+            ? config.NATION_NAMES[p.nationId - 1] 
             : '辺境';
 
+        // ★★★ [復元] あなたの元の詳細な情報表示を完全に復元 ★★★
         let text = `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
-                   `所属国家：${nationName}\n` + // ★★★ 国名を表示 ★★★
+                   `所属国家：${nationName}\n` +
                    `直轄上位：${superiorText}\n`+
-                   `土地利用： ${d.properties.vegetation}${d.properties.isAlluvial ? ' (河川)' : ''}${d.properties.hasSnow ? ' (積雪)' : ''}\n` +
-                   `人口　　： ${d.properties.population.toLocaleString()}人\n` +
-                   `農地面積： ${Math.round(d.properties.cultivatedArea).toLocaleString()} ha\n` +
-                   `居住適性： ${d.properties.habitability.toFixed(1)}\n` +
-                   `\n--- 土地詳細 ---\n` +
-                   `気候帯　： ${d.properties.climateZone}\n` +
-                   `標高　　： ${Math.round(d.properties.elevation)}m\n` +
-                   `気温　　： ${d.properties.temperature.toFixed(1)}℃\n` +
-                   `降水量　： ${(d.properties.precipitation * 100).toFixed(0)}%\n` +
-                   `魔力　　： ${d.properties.manaRank}\n` +
-                   `資源　　： ${d.properties.resourceRank}\n` +
-                   `\n--- 資源ポテンシャル ---\n` +
-                   `農業適正： ${(d.properties.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-                   `林業適正： ${(d.properties.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-                   `鉱業適正： ${(d.properties.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-                   `漁業適正： ${(d.properties.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%`;
-        const surplusKeys = Object.keys(d.properties.surplus || {});
-        const shortageKeys = Object.keys(d.properties.shortage || {});
-        if (surplusKeys.length > 0 || shortageKeys.length > 0) {
-            text += `\n\n--- 食料需給 (t/年) ---`;
-            if (surplusKeys.length > 0) text += `\n余剰：${surplusKeys.map(key => `${key} ${d.properties.surplus[key]}`).join('t\n　　　')}t`;
-            if (shortageKeys.length > 0) text += `\n不足：${shortageKeys.map(key => `${key} ${d.properties.shortage[key]}`).join('t\n　　　')}t`;
+                   `土地利用： ${p.vegetation}${p.isAlluvial ? ' (河川)' : ''}${p.hasSnow ? ' (積雪)' : ''}\n` +
+                   `人口　　： ${p.population.toLocaleString()}人\n` +
+                   `農地面積： ${Math.round(p.cultivatedArea).toLocaleString()} ha\n` +
+                   `居住適性： ${p.habitability.toFixed(1)}\n` +
+                   `--- 土地詳細 ---\n` +
+                   `気候帯　： ${p.climateZone}\n` +
+                   `標高　　： ${Math.round(p.elevation)}m\n` +
+                   `気温　　： ${p.temperature.toFixed(1)}℃\n` +
+                   `降水量　： ${(p.precipitation * 100).toFixed(0)}%\n` +
+                   `魔力　　： ${p.manaRank}\n` +
+                   `資源　　： ${p.resourceRank}\n` +
+                   `--- 資源ポテンシャル ---\n` +
+                   `農業適正： ${(p.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+                   `林業適正： ${(p.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+                   `鉱業適正： ${(p.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+                   `漁業適正： ${(p.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%`;
+
+        const surplusKeys = Object.keys(p.surplus || {});
+        const shortageKeys = Object.keys(p.shortage || {});
+        // ★★★ [修正] 食料需給セクションを、生産量->余剰/不足の順で表示するように整形 ★★★
+        if (Object.keys(p.production || {}).length > 0 || surplusKeys.length > 0 || shortageKeys.length > 0) {
+            text += `\n--- 食料需給 (t/年) ---`;
+            const productionText = Object.entries(p.production || {})
+                .map(([crop, amount]) => `${crop} ${Math.round(amount).toLocaleString()}`)
+                .join('t\n　　　') + 't';
+            if(Object.keys(p.production || {}).length > 0) text += `\n生産：${productionText}`;
+            if (surplusKeys.length > 0) text += `\n余剰：${surplusKeys.map(key => `${key} ${p.surplus[key]}`).join('t\n　　　')}t`;
+            if (shortageKeys.length > 0) text += `\n不足：${shortageKeys.map(key => `${key} ${p.shortage[key]}`).join('t\n　　　')}t`;
         }
+        
+        // ★★★ [新規] 主要都市の場合、庇護下の集計情報を表示 ★★★
+        if (['首都', '都市', '領都'].includes(p.settlement) && p.territoryData) {
+            const data = p.territoryData;
+            text += `\n--- 庇護下領域 集計 ---`;
+
+            // ★★★ [新規] 庇護下集落の数を指定フォーマットで表示 ★★★
+            const settlementCountText = Object.entries(data.settlementCounts)
+                .filter(([, count]) => count > 0) // 数が0のものは表示しない
+                .map(([type, count]) => {
+                    // あなたの指定フォーマットに合わせてタイプ名を短縮
+                    const shortName = { '都市': '都', '領都': '領', '街': '街', '町': '町', '村': '村' }[type];
+                    return `${shortName}${count}`;
+                })
+                .join(', ');
+            if(settlementCountText) text += `\n直轄地　： ${settlementCountText}`;
+
+            text += `\n合計人口： ${data.population.toLocaleString()}人`;
+            text += `\n合計農地： ${Math.round(data.cultivatedArea).toLocaleString()}ha`;
+
+            const totalProductionText = Object.entries(data.production)
+                .map(([crop, amount]) => `${crop} ${Math.round(amount).toLocaleString()}t`)
+                .join('\n　　　　　');
+            text += `\n生産合計：${totalProductionText}`;
+
+            const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement];
+            const totalDemand = data.population * settlementInfo.consumption_t_per_person; 
+            const totalSupply = Object.values(data.production).reduce((a, b) => a + b, 0);
+            const balance = totalSupply - totalDemand;
+            
+            if (balance >= 0) {
+                text += `\n食料収支：+${Math.round(balance).toLocaleString()}t の余剰`;
+            } else {
+                text += `\n食料収支：${Math.round(balance).toLocaleString()}t の不足`;
+            }
+        }
+        
         return text;
     }
     
@@ -339,6 +386,28 @@ export function setupUI(allHexes) {
 
     interactiveHexes.append('title').text(d => getInfoText(d));
     interactiveHexes.on('click', (event, d) => {
+        // 1. 既存のハイライトを全てクリア
+        highlightOverlayLayer.selectAll('*').remove();
+
+        // 2. クリックされたのが主要都市の場合、領地をハイライト
+        const p = d.properties;
+        if (['首都', '都市', '領都'].includes(p.settlement)) {
+            const territoryId = p.territoryId;
+            if (territoryId != null) {
+                const territoryHexes = hexes.filter(h => h.properties.territoryId === territoryId);
+                
+                highlightOverlayLayer.selectAll('.highlight-hex')
+                    .data(territoryHexes)
+                    .enter().append('polygon')
+                    .attr('class', 'highlight-hex')
+                    .attr('points', h => h.points.map(pt => pt.join(',')).join(' '))
+                    .attr('fill', 'red')
+                    .style('fill-opacity', 0.4)
+                    .style('pointer-events', 'none');
+            }
+        }
+
+        // 3. 情報ウィンドウを更新
         updateInfoWindow(d);
         event.stopPropagation();
     });
@@ -374,8 +443,10 @@ export function setupUI(allHexes) {
     });
     svg.call(zoom);
 
+    // ★★★ [更新] ウィンドウを閉じる際にハイライトもクリアする ★★★
     function closeInfoWindow(event) {
         infoWindow.classList.add('hidden');
+        highlightOverlayLayer.selectAll('*').remove(); // ハイライトをクリア
         if (event) event.preventDefault();
     }
     infoCloseBtn.addEventListener('click', closeInfoWindow);

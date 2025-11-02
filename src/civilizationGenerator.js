@@ -8,13 +8,13 @@ import { getDistance, getIndex } from './utils.js'; // ★ getIndexをインポ�
 /**
  * 各ヘックスの居住適性スコアを計算する
  * @param {Array<object>} allHexes - 全ヘックスのデータ
- */
+ */calculateHabitability
 function calculateHabitability(allHexes) {
     allHexes.forEach(h => {
         const p = h.properties;
         let score = 0;
         if (!p.isWater && p.vegetation !== '高山' && p.vegetation !== '砂漠') {
-            score += p.agriPotential * 40;   
+            score += p.agriPotential * 30;   
             score += p.fishingPotential * 20; 
             const idealTemp = 17.5;
             score += Math.max(0, 1 - Math.abs(p.temperature - idealTemp) / 15) * 15;
@@ -158,13 +158,10 @@ export async function generateCivilization(allHexes, addLogMessage) {
     // パス3：各国家の主要都市を配置
     await addLogMessage("主要な都市を配置しています...");
     nations.forEach(nation => {
-        // 都市
         let newCities = placeSettlementType(settlementCandidates, allSettlements, nation.id, '都市', config.CITIES_PER_NATION, config.CITY_MIN_DISTANCE, {min: 30000, max: 70000});
         allSettlements.push(...newCities);
-        // 領都
         let newRegionalCapitals = placeSettlementType(settlementCandidates, allSettlements, nation.id, '領都', config.REGIONAL_CAPITALS_PER_NATION, config.TOWN_MIN_DISTANCE, {min: 10000, max: 20000});
         allSettlements.push(...newRegionalCapitals);
-        // 街
         let newTowns = placeSettlementType(settlementCandidates, allSettlements, nation.id, '街', config.TOWNS_PER_NATION, config.TOWN_MIN_DISTANCE, {min: 3000, max: 7000});
         allSettlements.push(...newTowns);
     });
@@ -206,7 +203,7 @@ export async function generateCivilization(allHexes, addLogMessage) {
     await addLogMessage("国境の防衛拠点を築いています...");
     placeDefenseHubs(allHexes, allSettlements.filter(s => s.properties.isSettled));
 
-    // パス6: 散居人口（集落）の設定
+    // パス6: 散居人口とプロパティ初期化
     allHexes.forEach(h => {
         if (!h.properties.isSettled && h.properties.habitability > 5) {
             if (Math.random() < (h.properties.habitability / 70)) {
@@ -217,10 +214,8 @@ export async function generateCivilization(allHexes, addLogMessage) {
         } else if (!h.properties.population) {
             h.properties.population = 0;
         }
-        // プロパティ初期化
         h.properties.parentHexId = null;
         h.properties.territoryId = null;
-        h.properties.directSuperiorId = null;
     });
     
     const totalPopulation = allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
@@ -230,75 +225,84 @@ export async function generateCivilization(allHexes, addLogMessage) {
 }
 
 /**
- * ★★★ [アルゴリズム刷新] 街道情報と領土の連続性を元に領地と階層構造を決定する関数 ★★★
+ * ★★★ [バグ修正版 v2] 階層を辿り、すべての集落に正しい中枢IDを設定する関数 ★★★
  * @param {Array<object>} allHexes - 街道生成後の全ヘックスデータ
  * @param {Function} addLogMessage - ログ出力用の関数
  * @returns {Array<object>} - 領地情報が追加された全ヘックスデータ
  */
 export async function determineTerritories(allHexes, addLogMessage) {
-    await addLogMessage("各居住地の所属を最終決定しています...");
+    await addLogMessage("国家の領土を確定させています...");
 
+    const UNCLAIMED_HABITABILITY_THRESHOLD = 5;
     const settlements = allHexes.filter(h => h.properties.settlement);
-    const hubs = allHexes.filter(h => ['首都', '都市'].includes(h.properties.settlement));
-    const hubMap = new Map(hubs.map(h => [getIndex(h.col, h.row), h]));
+    const hubs = new Map(allHexes.filter(h => ['首都', '都市', '領都'].includes(h.properties.settlement)).map(h => [getIndex(h.col, h.row), h]));
 
-    // --- 1. 居住地の所属情報を roadGenerator の結果から追認 ---
+    // 1. ★★★ [バグ修正] 全ての集落に対して、parentHexIdの連鎖を辿り、最終的な中枢ID (territoryId) を設定する ★★★
     settlements.forEach(s => {
-        // 直轄上位
-        if (s.properties.parentHexId !== null) {
-            s.properties.directSuperiorId = s.properties.parentHexId;
-        }
-        // 所属中枢
         let current = s;
-        let visited = new Set([getIndex(s.col, s.row)]);
+        let visited = new Set([getIndex(s.col, s.row)]); // 無限ループ防止用
         let loops = 0;
-        while (current && !hubMap.has(getIndex(current.col, current.row)) && loops < 100) {
+
+        // 現在地が中枢都市になるか、親がなくなるまで、parentHexIdを辿り続ける
+        while (current && !hubs.has(getIndex(current.col, current.row)) && loops < 100) {
             const parentId = current.properties.parentHexId;
-            if (parentId === null || visited.has(parentId)) break;
-            current = allHexes[parentId];
-            if(!current) break; // 親が見つからない場合はループを抜ける
+
+            // 親がいない、またはループが検出されたら探索終了
+            if (parentId == null || visited.has(parentId)) {
+                current = null; // 中枢が見つからなかったことを示す
+                break;
+            }
+            
+            const parentHex = allHexes[parentId];
+            if (!parentHex) { // 親データが存在しない場合も終了
+                current = null;
+                break;
+            }
+
+            current = parentHex;
             visited.add(parentId);
             loops++;
         }
-        if (current && hubMap.has(getIndex(current.col, current.row))) {
+
+        // 最終的に辿り着いたのが中枢都市であれば、そのIDを元の集落のterritoryIdに設定
+        if (current && hubs.has(getIndex(current.col, current.row))) {
              s.properties.territoryId = getIndex(current.col, current.row);
         } else {
-             s.properties.territoryId = getIndex(s.col, s.row); // 中枢が見つからなければ自分が中心
+             // 中枢が見つからなければ、自分自身が中枢（小規模な独立勢力）となる
+             s.properties.territoryId = getIndex(s.col, s.row);
         }
     });
     
-    await addLogMessage("国家の領土を確定させています...");
-
-    // --- 2. ★★★ [復元] ボロノイ方式による高速な空白地所属決定 ★★★
-    const UNCLAIMED_HABITABILITY_THRESHOLD = 5;
-
-    const unassignedHexes = allHexes.filter(h => !h.properties.settlement);
-    
-    unassignedHexes.forEach(h => {
-        // 領土になりえない土地は未所属のまま
-        if (h.properties.isWater || h.properties.habitability <= UNCLAIMED_HABITABILITY_THRESHOLD) {
+    // 2. 空白地の所属を、洪水充填法で確定させる（ここは変更なし）
+    allHexes.forEach(h => {
+        if (!h.properties.settlement) {
             h.properties.nationId = 0;
             h.properties.territoryId = null;
-            return;
-        }
-
-        // 最も近い「居住地」を探し、その所属を引き継ぐ
-        let closestSettlement = null;
-        let minDistance = Infinity;
-
-        settlements.forEach(s => {
-            const d = getDistance(h, s);
-            if (d < minDistance) {
-                minDistance = d;
-                closestSettlement = s;
-            }
-        });
-
-        if (closestSettlement) {
-            h.properties.nationId = closestSettlement.properties.nationId;
-            h.properties.territoryId = closestSettlement.properties.territoryId;
         }
     });
+    const queue = allHexes.filter(h => 
+        h.properties.settlement && 
+        h.properties.nationId > 0 && 
+        h.properties.population > 100
+    );
+    const visited = new Set(queue.map(h => getIndex(h.col, h.row)));
+    let head = 0;
+    while (head < queue.length) {
+        const currentHex = queue[head++];
+        currentHex.neighbors.forEach(neighborIndex => {
+            if (!visited.has(neighborIndex)) {
+                visited.add(neighborIndex);
+                const neighborHex = allHexes[neighborIndex];
+                const p = neighborHex.properties;
+                if (!p.isWater && p.habitability > UNCLAIMED_HABITABILITY_THRESHOLD && !p.settlement) {
+                    neighborHex.properties.nationId = currentHex.properties.nationId;
+                    neighborHex.properties.territoryId = currentHex.properties.territoryId;
+                    queue.push(neighborHex);
+                }
+            }
+        });
+    }
 
+    await addLogMessage("領土の割り当てが完了しました。");
     return allHexes;
 }

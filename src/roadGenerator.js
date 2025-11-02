@@ -1,87 +1,161 @@
 // ================================================================
-// GeoForge System - 街道生成モジュール (v16 - 初期設計への完全回帰)
+// GeoForge System - 街道生成モジュール (v17.4 - 村グループ分割対応)
 // ================================================================
-import * as d3 from 'd3'; 
+import * as d3 from 'd3';
 import * as config from './config.js';
 import { getIndex, getDistance } from './utils.js';
 
 const ROAD_LEVELS = { NONE: 0, PATH: 1, VILLAGE: 2, TOWN: 3, MAIN: 4, TRADE: 5 };
+const MAX_COST_FOR_NATION = 15000;
+// ★★★ [新規追加] 村グループの最大サイズを定義 ★★★
+const MAX_VILLAGE_CLUSTER_SIZE = 7;
 
+// (findAStarPath, calculateCostField は変更なし)
+function findAStarPath(options) {
+    const { start, isEnd, neighbor, cost: costFunc, heuristic } = options;
+    const toVisit = [{ node: start, f: 0, g: 0, path: [start] }];
+    const visited = new Map();
+    visited.set(`${start.x}-${start.y}`, 0);
+    while (toVisit.length > 0) {
+        toVisit.sort((a, b) => a.f - b.f);
+        const current = toVisit.shift();
+        if (isEnd(current.node, start)) { return { path: current.path, cost: current.g }; }
+        neighbor(current.node).forEach(n => {
+            const gScore = current.g + costFunc(current.node, n);
+            const visitedNeighborCost = visited.get(`${n.x}-${n.y}`);
+            if (visitedNeighborCost === undefined || gScore < visitedNeighborCost) {
+                visited.set(`${n.x}-${n.y}`, gScore);
+                const hScore = heuristic(n);
+                const fScore = gScore + hScore;
+                const newPath = [...current.path, n];
+                toVisit.push({ node: n, f: fScore, g: gScore, path: newPath });
+            }
+        });
+    }
+    return null;
+}
+function calculateCostField(allHexes, sources, costFunc) {
+    const costMap = new Map();
+    const sourceMap = new Map();
+    const toVisit = [];
+    sources.forEach(sourceHex => {
+        const sourceNode = { x: sourceHex.col, y: sourceHex.row };
+        const sourceIndex = getIndex(sourceNode.x, sourceNode.y);
+        toVisit.push({ node: sourceNode, cost: 0 });
+        costMap.set(sourceIndex, 0);
+        sourceMap.set(sourceIndex, sourceHex);
+    });
+    while (toVisit.length > 0) {
+        toVisit.sort((a, b) => a.cost - b.cost);
+        const current = toVisit.shift();
+        const currentIndex = getIndex(current.node.x, current.node.y);
+        if (current.cost > costMap.get(currentIndex)) { continue; }
+        const currentHex = allHexes[currentIndex];
+        currentHex.neighbors.forEach(neighborIndex => {
+            const neighborHex = allHexes[neighborIndex];
+            if(neighborHex.properties.isWater) return;
+            const neighborNode = { x: neighborHex.col, y: neighborHex.row };
+            const newCost = current.cost + costFunc(current.node, neighborNode);
+            if (!costMap.has(neighborIndex) || newCost < costMap.get(neighborIndex)) {
+                costMap.set(neighborIndex, newCost);
+                sourceMap.set(neighborIndex, sourceMap.get(currentIndex));
+                toVisit.push({ node: neighborNode, cost: newCost });
+            }
+        });
+    }
+    return { costMap, sourceMap };
+}
+
+/**
+ * ★★★ [修正] 隣接する村を、最大サイズを考慮してクラスタリングする ★★★
+ * @param {Array<object>} settlementList - 村のリスト
+ * @returns {Array<Array<object>>} - 分割された村クラスタの配列
+ */
 function findSettlementClusters(settlementList) {
     const clusters = [];
-    const visited = new Set();
-    settlementList.forEach(startNode => {
-        if (!visited.has(startNode)) {
+    const visited = new Set(); // 訪問済みの村を管理
+
+    // 探索を始める村を人口の降順でソート（大きな村からグループを形成）
+    const sortedList = [...settlementList].sort((a, b) => b.properties.population - b.properties.population);
+
+    sortedList.forEach(startNode => {
+        const startIndex = getIndex(startNode.col, startNode.row);
+        if (!visited.has(startIndex)) {
             const currentCluster = [];
-            const queue = [startNode];
-            visited.add(startNode);
-            while (queue.length > 0) {
+            const queue = [startNode]; // これから探索する村のキュー
+            visited.add(startIndex);
+
+            // キューが空になるか、クラスタサイズが上限に達するまで探索
+            while (queue.length > 0 && currentCluster.length < MAX_VILLAGE_CLUSTER_SIZE) {
                 const currentNode = queue.shift();
                 currentCluster.push(currentNode);
+
+                // 隣接する未訪問の村を探してキューに追加
                 settlementList.forEach(nextNode => {
-                    if (!visited.has(nextNode) && getDistance(currentNode, nextNode) <= 1) {
-                        visited.add(nextNode);
+                    const nextIndex = getIndex(nextNode.col, nextNode.row);
+                    if (!visited.has(nextIndex) && getDistance(currentNode, nextNode) <= 1) {
+                        visited.add(nextIndex);
                         queue.push(nextNode);
                     }
                 });
             }
+            // 形成されたクラスタを結果に追加
             clusters.push(currentCluster);
         }
     });
     return clusters;
 }
 
-function findAStarPath(options) {
-    const start = options.start;
-    const isEnd = options.isEnd; 
-    const neighbor = options.neighbor;
-    const costFunc = options.cost;
-    const heuristic = options.heuristic;
 
-    const toVisit = [{ node: start, f: 0, g: 0 }];
-    const visited = new Map();
-    visited.set(`${start.x}-${start.y}`, { parent: null, g: 0 });
-
-    while (toVisit.length > 0) {
-        toVisit.sort((a, b) => a.f - b.f);
-        const current = toVisit.shift();
-
-        if (isEnd(current.node, start)) { 
-            const path = [];
-            let curr = current.node;
-            while (curr) {
-                path.unshift(curr);
-                const visitedNode = visited.get(`${curr.x}-${curr.y}`);
-                curr = visitedNode ? visitedNode.parent : null;
-            }
-            return path;
+// (determineAffiliation は変更なし)
+function determineAffiliation(targets, allSuperiors, params) {
+    const { allHexes, costFunc } = params;
+    const results = new Map();
+    const targetsByNation = new Map();
+    targets.forEach(t => {
+        const nationId = t.properties.nationId;
+        if (!targetsByNation.has(nationId)) {
+            targetsByNation.set(nationId, []);
         }
-
-        const parentNode = visited.get(`${current.node.x}-${current.node.y}`).parent;
-        neighbor(current.node).forEach(n => {
-            const gScore = current.g + costFunc(current.node, n, parentNode);
-            const visitedNeighbor = visited.get(`${n.x}-${n.y}`);
-
-            if (!visitedNeighbor || gScore < visitedNeighbor.g) {
-                visited.set(`${n.x}-${n.y}`, { parent: current.node, g: gScore });
-                const fScore = gScore + heuristic(n);
-                toVisit.push({ node: n, f: fScore, g: gScore });
-            }
+        targetsByNation.get(nationId).push(t);
+    });
+    for (const [nationId, nationTargets] of targetsByNation.entries()) {
+        if (nationId === 0) continue;
+        const domesticSuperiors = allSuperiors.filter(s => s.properties.nationId === nationId);
+        if (domesticSuperiors.length === 0) continue;
+        const { costMap, sourceMap } = calculateCostField(allHexes, domesticSuperiors, costFunc);
+        nationTargets.forEach(target => {
+            const targetIndex = getIndex(target.col, target.row);
+            results.set(target, {
+                superior: sourceMap.get(targetIndex),
+                cost: costMap.get(targetIndex)
+            });
         });
     }
-    return null;
+    const remainingTargets = targets.filter(t => !results.has(t) || !results.get(t).superior);
+    if (remainingTargets.length > 0) {
+        const { costMap, sourceMap } = calculateCostField(allHexes, allSuperiors, costFunc);
+        remainingTargets.forEach(target => {
+            const targetIndex = getIndex(target.col, target.row);
+             results.set(target, {
+                superior: sourceMap.get(targetIndex),
+                cost: costMap.get(targetIndex)
+            });
+        });
+    }
+    return results;
 }
 
 /**
- * 街道生成のメイン関数 (main.js から呼び出される)
+ * 街道生成のメイン関数
  */
 export async function generateRoads(allHexes, addLogMessage) {
     await addLogMessage("街道網の整備を開始しました...");
 
-    // 1. 初期化
+    // 1. 初期化とコスト計算
     allHexes.forEach(h => {
         h.properties.roadLevel = ROAD_LEVELS.NONE;
-        h.properties.roadTraffic = 0; 
+        h.properties.roadTraffic = 0;
         const p = h.properties;
         let cost = 1;
         if (p.isWater) cost = Infinity;
@@ -95,174 +169,149 @@ export async function generateRoads(allHexes, addLogMessage) {
         p.movementCost = cost;
     });
 
-    // 2. あなたの設計通りの、高速な経路探索ヘルパー
     const pathfindingCostFunc = (nodeA, nodeB) => {
-        const targetHex = allHexes[getIndex(nodeB.x, nodeB.y)];
-        let cost = targetHex.properties.movementCost;
-        const startHex = allHexes[getIndex(nodeA.x, nodeA.y)];
-        cost += Math.pow(Math.abs(startHex.properties.elevation - targetHex.properties.elevation) / 100, 2) * 10;
+        const hexA = allHexes[getIndex(nodeA.x, nodeA.y)];
+        const hexB = allHexes[getIndex(nodeB.x, nodeB.y)];
+        let cost = hexB.properties.movementCost;
+        cost += Math.pow(Math.abs(hexA.properties.elevation - hexB.properties.elevation) / 100, 2) * 10;
         return cost;
     };
     
-    const findPathForMajorNetwork = (startHex, endHex) => findAStarPath({
-        start: {x: startHex.col, y: startHex.row},
-        isEnd: (node) => (node.x === endHex.col && node.y === endHex.row),
-        neighbor: (node) => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).filter(h => !h.properties.isWater).map(h => ({x: h.col, y: h.row})),
-        cost: pathfindingCostFunc,
-        heuristic: (node) => getDistance(allHexes[getIndex(node.x, node.y)], endHex)
-    });
-
-    // ★★★ [復元] あなたの高速な「既存ネットワークへの接続」関数 ★★★
-    const findPathToExistingNetwork = (startHex, targetUpperLevel) => findAStarPath({
-        start: {x: startHex.col, y: startHex.row},
-        isEnd: (node, startNode) => {
-            if (node.x === startNode.x && node.y === startNode.y) return false;
-            return allHexes[getIndex(node.x, node.y)].properties.roadLevel > targetUpperLevel;
-        },
-        neighbor: (node) => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).filter(h => !h.properties.isWater).map(h => ({x: h.col, y: h.row})),
-        cost: pathfindingCostFunc,
-        heuristic: (node) => 0
-    });
-    
-    // 3. ★★★ [修正] 親子関係のみを正しく決定するデータ適用ヘルパー ★★★
-    const applyConnectingRoadPath = (path, level, traffic, sourceHex, allHigherSettlements) => {
-        if (!path || path.length <= 1) return;
-        
-        // 道が接続した地点のヘックスを取得
-        const lastNode = path[path.length - 1];
-        const connectionPointHex = allHexes[getIndex(lastNode.x, lastNode.y)];
-        
-        // 接続地点から「地理的に最も近い」上位集落を親とする (高速な処理)
-        let closestSuperior = null;
-        let minDistance = Infinity;
-        allHigherSettlements.forEach(superior => {
-            // ★★★ 国が同じという条件を追加 ★★★
-            if (sourceHex.properties.nationId === superior.properties.nationId) {
-                const d = getDistance(connectionPointHex, superior);
-                if (d < minDistance) {
-                    minDistance = d;
-                    closestSuperior = superior;
-                }
-            }
-        });
-
-        // もし自国内に親が見つからなければ、国境を越えて探す（辺境など）
-        if (!closestSuperior) {
-            allHigherSettlements.forEach(superior => {
-                const d = getDistance(connectionPointHex, superior);
-                if (d < minDistance) {
-                    minDistance = d;
-                    closestSuperior = superior;
-                }
-            });
-        }
-
-        if (closestSuperior) {
-            sourceHex.properties.parentHexId = getIndex(closestSuperior.col, closestSuperior.row);
-        }
-
-        // 道路を敷設
-        const pathToBuild = path.slice(0, -1);
-        pathToBuild.forEach(node => {
+    // (applyRoadPath, findPathToExistingNetwork は変更なし)
+     const applyRoadPath = (path, level, traffic) => {
+        if (!path || path.length === 0) return;
+        path.forEach(node => {
             const hex = allHexes[getIndex(node.x, node.y)];
             if (hex.properties.roadLevel < level) hex.properties.roadLevel = level;
             hex.properties.roadTraffic += traffic;
         });
     };
+     const findPathToExistingNetwork = (startHex, targetUpperLevel) => findAStarPath({
+        start: { x: startHex.col, y: startHex.row },
+        isEnd: (node, startNode) => {
+            if (node.x === startNode.x && node.y === startNode.y) return false;
+            const targetHex = allHexes[getIndex(node.x, node.y)];
+            return targetHex.properties.roadLevel > targetUpperLevel && targetHex.properties.nationId === startHex.properties.nationId;
+        },
+        neighbor: (node) => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).filter(h => !h.properties.isWater).map(h => ({ x: h.col, y: h.row })),
+        cost: pathfindingCostFunc,
+        heuristic: (node) => 0
+    });
 
-    // 4. 居住地を階層ごとに分類
+    // 2. 居住地を階層ごとに分類
     const villages = allHexes.filter(s => s.properties.settlement === '村');
     const towns = allHexes.filter(s => s.properties.settlement === '町');
     const streets = allHexes.filter(s => s.properties.settlement === '街');
-    const majorCities = allHexes.filter(s => ['領都', '都市', '首都'].includes(s.properties.settlement));
+    const allMajorCities = allHexes.filter(s => ['領都', '都市', '首都'].includes(s.properties.settlement));
+    const capitals = allHexes.filter(s => s.properties.settlement === '首都');
+    const allSettlements = allHexes.filter(h => h.properties.settlement);
 
-    // 5. あなたの設計通りのトップダウン式アプローチ
-    // ① 主要都市ネットワーク
+    // 3. トップダウン式アプローチ
+    // ① 仮の所属国家を割り当て
+    await addLogMessage("国家の勢力圏を仮決定しています...");
+    const { sourceMap: capitalSourceMap } = calculateCostField(allHexes, capitals, pathfindingCostFunc);
+    allSettlements.forEach(s => {
+        const sIndex = getIndex(s.col, s.row);
+        const capital = capitalSourceMap.get(sIndex);
+        if (capital) {
+            s.properties.nationId = capital.properties.nationId;
+        } else {
+            s.properties.nationId = 0;
+        }
+    });
+
+    // ② 主要都市ネットワーク（交易路）を生成
     await addLogMessage("交易路の幹線網を設計しています...");
-    if (majorCities.length >= 2) {
-        const points = majorCities.map(c => [c.col, c.row]);
+    if (allMajorCities.length >= 2) {
+        const points = allMajorCities.map(c => [c.col, c.row]);
         const delaunay = d3.Delaunay.from(points);
         const { halfedges, triangles } = delaunay;
         for (let i = 0; i < halfedges.length; i++) {
             const j = halfedges[i];
             if (j < i) continue;
-            const city1 = majorCities[triangles[i]];
-            const city2 = majorCities[triangles[j]];
+            const city1 = allMajorCities[triangles[i]];
+            const city2 = allMajorCities[triangles[j]];
             if (getDistance(city1, city2) > 40) continue;
-            const path = findPathForMajorNetwork(city1, city2);
-            if(path) {
-                path.forEach(node => {
-                    const hex = allHexes[getIndex(node.x, node.y)];
-                    if (hex.properties.roadLevel < ROAD_LEVELS.TRADE) hex.properties.roadLevel = ROAD_LEVELS.TRADE;
-                    hex.properties.roadTraffic += city1.properties.population + city2.properties.population;
-                });
+            
+            const result = findAStarPath({ 
+                start: {x: city1.col, y: city1.row},
+                isEnd: (node) => (node.x === city2.col && node.y === city2.row),
+                neighbor: (node) => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).filter(h => !h.properties.isWater).map(h => ({x: h.col, y: h.row})),
+                cost: pathfindingCostFunc,
+                heuristic: (node) => getDistance(allHexes[getIndex(node.x, node.y)], city2)
+            });
+            if (result && result.path) {
+                applyRoadPath(result.path.map(p=>({x:p.x, y:p.y})), ROAD_LEVELS.TRADE, city1.properties.population + city2.properties.population);
             }
         }
     }
 
-    // ② 街は、既存の主要道（交易路）へ接続
+    // ③ 街 (Street) の所属と街道を決定
     await addLogMessage("地方の主要道を幹線に接続しています...");
+    const streetAffiliations = determineAffiliation(streets, allMajorCities, { allHexes, costFunc: pathfindingCostFunc });
     streets.forEach(street => {
-        const path = findPathToExistingNetwork(street, ROAD_LEVELS.MAIN);
-        if (path) {
-            applyConnectingRoadPath(path, ROAD_LEVELS.MAIN, street.properties.population, street, majorCities);
+        if (street.properties.population <= 100) { street.properties.nationId = 0; return; }
+        const { superior, cost } = streetAffiliations.get(street) || {};
+
+        if (superior && cost < MAX_COST_FOR_NATION) {
+            street.properties.nationId = superior.properties.nationId;
+            street.properties.parentHexId = getIndex(superior.col, superior.row);
+            const pathToNetwork = findPathToExistingNetwork(street, ROAD_LEVELS.MAIN);
+            if(pathToNetwork && pathToNetwork.path) {
+                 applyRoadPath(pathToNetwork.path.map(p=>({x:p.x, y:p.y})), ROAD_LEVELS.MAIN, street.properties.population);
+            }
+        } else {
+            street.properties.nationId = 0;
         }
     });
-
-    // ③ 町は、既存の街以上の道へ接続
+    
+    // ④ 町 (Town) の所属と街道を決定
     await addLogMessage("町と街を町道で結んでいます...");
-    const streetAndHigher = [...streets, ...majorCities];
+    const streetAndHigher = [...streets.filter(s => s.properties.nationId > 0), ...allMajorCities];
+    const townAffiliations = determineAffiliation(towns, streetAndHigher, { allHexes, costFunc: pathfindingCostFunc });
     towns.forEach(town => {
-        const path = findPathToExistingNetwork(town, ROAD_LEVELS.TOWN);
-        if (path) {
-            applyConnectingRoadPath(path, ROAD_LEVELS.TOWN, town.properties.population, town, streetAndHigher);
+        if (town.properties.population <= 100) { town.properties.nationId = 0; return; }
+        const { superior, cost } = townAffiliations.get(town) || {};
+
+        if (superior && cost < MAX_COST_FOR_NATION) {
+            town.properties.nationId = superior.properties.nationId;
+            town.properties.parentHexId = getIndex(superior.col, superior.row);
+            const pathToNetwork = findPathToExistingNetwork(town, ROAD_LEVELS.TOWN);
+            if(pathToNetwork && pathToNetwork.path) {
+                applyRoadPath(pathToNetwork.path.map(p=>({x:p.x, y:p.y})), ROAD_LEVELS.TOWN, town.properties.population);
+            }
+        } else {
+            town.properties.nationId = 0;
         }
     });
 
-    // ④ 村グループは、既存の町以上の道へ接続
+    // ⑤ 村 (Village) の所属と街道を決定
     await addLogMessage("村と町を村道で接続しています...");
-    const townAndHigher = [...towns, ...streetAndHigher];
+    const townAndHigher = [...towns.filter(t => t.properties.nationId > 0), ...streetAndHigher];
+    // ★★★ [修正] サイズ制限を考慮したクラスタリング関数を呼び出す ★★★
     const villageClusters = findSettlementClusters(villages);
-    villageClusters.forEach(cluster => {
-        const representative = cluster.sort((a,b) => b.properties.population - a.properties.population)[0];
-        const path = findPathToExistingNetwork(representative, ROAD_LEVELS.VILLAGE);
-        if (path) {
-            const lastNode = path[path.length - 1];
-            const connectionPointHex = allHexes[getIndex(lastNode.x, lastNode.y)];
-            let closestSuperior = null;
-            let minDistance = Infinity;
-            
-            // まずは自国内で探す
-            townAndHigher.forEach(superior => {
-                if (representative.properties.nationId === superior.properties.nationId) {
-                    const d = getDistance(connectionPointHex, superior);
-                    if (d < minDistance) {
-                        minDistance = d;
-                        closestSuperior = superior;
-                    }
-                }
+    const representativeVillages = villageClusters.map(cluster => cluster.sort((a,b) => b.properties.population - a.properties.population)[0]);
+    const villageAffiliations = determineAffiliation(representativeVillages, townAndHigher, { allHexes, costFunc: pathfindingCostFunc });
+    
+    villageClusters.forEach((cluster, index) => {
+        const representative = representativeVillages[index];
+        if (!representative || representative.properties.population <= 100) { cluster.forEach(v => v.properties.nationId = 0); return; }
+        
+        const { superior, cost } = villageAffiliations.get(representative) || {};
+
+        if (superior && cost < MAX_COST_FOR_NATION) {
+            const parentId = getIndex(superior.col, superior.row);
+            const nationId = superior.properties.nationId;
+            cluster.forEach(village => { 
+                village.properties.nationId = nationId;
+                village.properties.parentHexId = parentId;
             });
-            // 見つからなければ他国も探す
-            if (!closestSuperior) {
-                 townAndHigher.forEach(superior => {
-                    const d = getDistance(connectionPointHex, superior);
-                    if (d < minDistance) {
-                        minDistance = d;
-                        closestSuperior = superior;
-                    }
-                });
+            const pathToNetwork = findPathToExistingNetwork(representative, ROAD_LEVELS.VILLAGE);
+            if(pathToNetwork && pathToNetwork.path) {
+                applyRoadPath(pathToNetwork.path.map(p=>({x:p.x, y:p.y})), ROAD_LEVELS.VILLAGE, representative.properties.population);
             }
-            
-            if (closestSuperior) {
-                const parentId = getIndex(closestSuperior.col, closestSuperior.row);
-                const pathToBuild = path.slice(0, -1);
-                pathToBuild.forEach(node => {
-                    const hex = allHexes[getIndex(node.x, node.y)];
-                    if (hex.properties.roadLevel < ROAD_LEVELS.VILLAGE) hex.properties.roadLevel = ROAD_LEVELS.VILLAGE;
-                    hex.properties.roadTraffic += representative.properties.population;
-                });
-                cluster.forEach(village => { village.properties.parentHexId = parentId; });
-            }
+        } else {
+             cluster.forEach(village => { village.properties.nationId = 0; });
         }
     });
 
