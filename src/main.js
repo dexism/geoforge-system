@@ -8,7 +8,7 @@ import * as d3 from 'd3';
 // 作成したモジュールをインポート
 import * as config from './config.js';
 import { generateContinent } from './continentGenerator.js';
-import { generateCivilization } from './civilizationGenerator.js';
+import { generateCivilization, determineTerritories } from './civilizationGenerator.js'; // ★ 変更
 import { simulateEconomy } from './economySimulator.js';
 import { generateRoads } from './roadGenerator.js';
 import { setupUI } from './ui.js';
@@ -59,12 +59,16 @@ async function runWorldGeneration() {
     // 居住地間を街道で接続
     allHexes = await generateRoads(allHexes, addLogMessage);
 
-    // --- 5. UIのセットアップと描画 ---
+    // --- ★★★ 5. 領地の決定 ★★★ --- (新規追加)
+    // 街道の接続情報に基づき、各居住地の所属と領土を確定
+    allHexes = await determineTerritories(allHexes, addLogMessage);
+
+    // --- 6. UIのセットアップと描画 ---
     // 計算結果を元にマップを描画し、UIイベントを設定
     await addLogMessage("世界を描画しています...");
     setupUI(allHexes);
 
-    // --- 6. ローディング画面の終了処理 ---
+    // --- 7. ローディング画面の終了処理 ---
     const totalPopulation = allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
     await sleep(500); // 最後のメッセージを読む時間を確保
     

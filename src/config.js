@@ -7,9 +7,9 @@ import * as d3 from 'd3';
 // ----------------------------------------------------------------
 // ■ 基本設定
 // ----------------------------------------------------------------
-export const COLS = 100;
-export const ROWS = 87;
-export const HEX_SIZE_KM = 20; // 1ヘックスの差し渡し距離 (km)
+export const COLS = 115;
+export const ROWS = 100; // 1000km四方に近づけるため調整
+export const HEX_SIZE_KM = 10; // 1ヘックスの差し渡し距離 (km)
 export const r = 20; // 描画用のヘックス半径 (pixel)
 
 // ----------------------------------------------------------------
@@ -35,7 +35,7 @@ export const VEGETATION_THRESHOLDS = {
     TUNDRA_TEMP:  -10, 
     DESERT_PRECIP: 0.04,
     JUNGLE_MIN_PRECIP: 0.10, 
-    FOREST_MIN_PRECIP: 0.10,
+    FOREST_MIN_PRECIP: 0.05,
     SPARSE_MIN_PRECIP: 0.10, 
     TAIGA_MIN_PRECIP: 0.00,
 };
@@ -47,7 +47,7 @@ export const SNOW_THRESHOLDS = {
 };
 
 export const TEMP_ZONES = { COLD: 0, TEMPERATE: 20 };
-export const PRECIP_ZONES = { DRY: 0.35, MODERATE: 0.65 };
+export const PRECIP_ZONES = { DRY: 0.40, MODERATE: 0.70 };
 
 // ----------------------------------------------------------------
 // ■ 配色設定
@@ -104,15 +104,44 @@ export const populationColor = d3.scaleLinear().domain([0, 150000]).range(["blac
 // ----------------------------------------------------------------
 // ■ 文明生成パラメータ
 // ----------------------------------------------------------------
-export const MIN_DISTANCES = { '都': 20, '街': 10, '町': 4 };
-export const NUM_CAPITALS = 3;
-export const NUM_CITIES = 8;
-export const HUB_SEARCH_RADIUS = 10;
+export const NUM_NATIONS = 5; // 国家の数
+export const NATION_NAMES = [
+    "アルファ国", 
+    "ブラボー国", 
+    "チャーリー国", 
+    "デルタ国",
+    "エコー国", 
+    "フォクストロット国", 
+    "ゴルフ国", 
+    "ホテル国"
+];
+export const CAPITAL_MIN_DISTANCE = 40; // 国家間の首都の最低距離
+export const CITY_MIN_DISTANCE = 15;    // 主要都市間の最低距離
+export const TOWN_MIN_DISTANCE = 5;     // 街や町との最低距離
+
+// 国家ごとの都市数に関する設定
+export const CITIES_PER_NATION = 3; // 「都市」の数
+export const REGIONAL_CAPITALS_PER_NATION = 6; // 「領都」の数
+export const TOWNS_PER_NATION = 15; // 「街」の数
+
+// 辺境設定
+export const FRONTIER_DISTANCE_THRESHOLD = 35; // 首都からこの距離以上離れると辺境の可能性
+
+// 居住地の階層定義 (数値が大きいほど上位)
+export const SETTLEMENT_HIERARCHY = {
+    '首都': 6,
+    '都市': 5,
+    '領都': 4,
+    '街':   3,
+    '町':   2,
+    '村':   1,
+    '散居': 0
+};
 
 // ----------------------------------------------------------------
 // ■ 経済シミュレーションパラメータ
 // ----------------------------------------------------------------
-export const HEX_AREA_HA = 34641; // 1ヘックスの面積 (ha)
+export const HEX_AREA_HA = 8660; // 1ヘックスの面積 (ha) - 10kmスケールに合わせて修正
 
 export const CROP_DATA = {
     '小麦': { yield: 0.60, type: '畑作', cultivation_ha_per_person: 1.5 },
@@ -122,9 +151,11 @@ export const CROP_DATA = {
 };
 
 export const SETTLEMENT_PARAMS = {
-    '都':     { labor_rate: 0.25, consumption_t_per_person: 0.30, infra_coeff: 1.1, head_cap_base: 0.40, head_cap_bonus: 0.10 },
-    '街':     { labor_rate: 0.40, consumption_t_per_person: 0.25, infra_coeff: 1.05, head_cap_base: 0.35, head_cap_bonus: 0.05 },
-    '町':     { labor_rate: 0.60, consumption_t_per_person: 0.22, infra_coeff: 1.0, head_cap_base: 0.30, head_cap_bonus: 0.0 },
-    '村':     { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.9, head_cap_base: 0.25, head_cap_bonus: 0.0 },
-    '散居':   { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.85, head_cap_base: 0.20, head_cap_bonus: 0.0 }
+    '首都': { labor_rate: 0.20, consumption_t_per_person: 0.32, infra_coeff: 1.2, head_cap_base: 0.30, head_cap_bonus: 0.15 },
+    '都市': { labor_rate: 0.30, consumption_t_per_person: 0.28, infra_coeff: 1.1, head_cap_base: 0.25, head_cap_bonus: 0.10 },
+    '領都': { labor_rate: 0.45, consumption_t_per_person: 0.24, infra_coeff: 1.05, head_cap_base: 0.30, head_cap_bonus: 0.05 },
+    '街':   { labor_rate: 0.55, consumption_t_per_person: 0.22, infra_coeff: 1.0, head_cap_base: 0.35, head_cap_bonus: 0.0 },
+    '町':   { labor_rate: 0.70, consumption_t_per_person: 0.21, infra_coeff: 0.95, head_cap_base: 0.40, head_cap_bonus: 0.0 },
+    '村':   { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.9, head_cap_base: 0.60, head_cap_bonus: 0.0 },
+    '散居': { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.85, head_cap_base: 0.50, head_cap_bonus: 0.0 }
 };

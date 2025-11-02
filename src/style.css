@@ -99,14 +99,13 @@ button {
   cursor: pointer;
 }
 
-/* ★★★ 以下を追記 ★★★ */
 /* 人口表示用のコンテナ */
 #population-display {
   position: absolute;
   top: 10px;
   right: 10px; /* 画面右上に配置 */
   z-index: 10; /* UIボタンと同じ階層に表示 */
-  background-color: #0008; /* 半透明の黒背景 */
+  background-color: #000a; /* 半透明の黒背景 */
   color: #fff; /* 白文字 */
   padding: 8px 15px; /* 内側の余白 */
   border-radius: 5px; /* 角を丸くする */
@@ -115,13 +114,16 @@ button {
   display: none; /* 起動時は非表示 */
 }
 
+/* ================================================================
+   ヘックス内情報 スタイル
+   ================================================================ */
 /* ラベル共通設定 */
 .hex-label, .settlement-label, .property-label {
   pointer-events: none;
   user-select: none;
   margin: 0;
   padding: 0;
-  font-size: 1.0em;
+  font-size: 5px;
   fill: #222;
   paint-order: stroke;
   stroke: #fff;
@@ -130,22 +132,21 @@ button {
   stroke-linejoin: miter;
 }
 
+/* 居住区ラベル (都, 街) */
+.settlement-label {
+  font-size: 11px;
+  font-weight: 900;
+  stroke-width: 0.6px;
+}
+
 /* 座標ラベル (E00-N00) */
 .hex-label {
   font-weight: 900;
-  fill: #222;
-}
-
-/* 居住区ラベル (都, 街) */
-.settlement-label {
-  font-weight: 900;
-  stroke-width: 0.6px;
 }
 
 /* 魔力・資源ラベル */
 .property-label {
   font-weight: bold;
-  fill: #222;
 }
 
 /* ================================================================
