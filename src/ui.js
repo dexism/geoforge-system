@@ -126,7 +126,7 @@ export function setupUI(allHexes) {
         return config.getElevationColor(d.properties.elevation);
     });
 
-    // ★★★ [新規] 3b. 国境線レイヤー ★★★
+    // 3b. 国境線レイヤー
     const borderSegments = [];
     hexes.forEach(h => {
         const hNation = h.properties.nationId;
@@ -276,8 +276,60 @@ export function setupUI(allHexes) {
         .style('fill-opacity', 0.5)
         .style('pointer-events', 'none');
         
+    // ★★★ [バグ修正版 v6] 支配下の全領土を正しく取得する最終修正版 ★★★
+    function getVassalTerritories(startHub, allHexes) {
+        const territories = new Map();
+        const allSettlements = allHexes.filter(h => h.properties.settlement);
+        const startHubId = getIndex(startHub.col, startHub.row);
+
+        // 探索キュー。 [集落ID, 階層の深さ] を格納
+        const queue = [[startHubId, 0]];
+        const visited = new Set([startHubId]);
+
+        // 1. まず、支配下の全集落を幅優先探索(BFS)でリストアップする
+        const vassalSettlements = [];
+        let head = 0;
+        while(head < queue.length) {
+            const [parentId, depth] = queue[head++];
+            
+            const parentSettlement = allHexes[parentId];
+            if(parentSettlement) {
+                vassalSettlements.push({settlement: parentSettlement, depth: depth});
+            }
+
+            allSettlements.forEach(s => {
+                if (s.properties.parentHexId === parentId) {
+                    const childId = getIndex(s.col, s.row);
+                    if (!visited.has(childId)) {
+                        visited.add(childId);
+                        queue.push([childId, depth + 1]);
+                    }
+                }
+            });
+        }
+        
+        // 2. リストアップした集落が所属する領土(territoryId)ごとにグループ化する
+        vassalSettlements.forEach(({settlement, depth}) => {
+            const terrId = settlement.properties.territoryId;
+            if (terrId != null) {
+                if (!territories.has(terrId)) {
+                    territories.set(terrId, { depth: depth, hexes: [] });
+                }
+            }
+        });
+
+        // 3. ★★★ [バグ修正] 描画用の `hexes` 配列からデータを構築する ★★★
+        hexes.forEach(h => { // allHexes -> hexes に修正
+            const terrId = h.properties.territoryId;
+            if (territories.has(terrId)) {
+                territories.get(terrId).hexes.push(h);
+            }
+        });
+
+        return territories;
+    }
+
     // --- 3f. 情報ウィンドウとインタラクション ---
-    
     // ★★★ [更新] 情報を整形する共有関数 ★★★
     function getInfoText(d) {
         const p = d.properties;
@@ -385,29 +437,35 @@ export function setupUI(allHexes) {
         .style('fill', 'transparent').style('cursor', 'pointer');
 
     interactiveHexes.append('title').text(d => getInfoText(d));
+    // ★★★ [バグ修正版 v5] クリック時の階層ハイライト処理 ★★★
     interactiveHexes.on('click', (event, d) => {
-        // 1. 既存のハイライトを全てクリア
         highlightOverlayLayer.selectAll('*').remove();
 
-        // 2. クリックされたのが主要都市の場合、領地をハイライト
         const p = d.properties;
         if (['首都', '都市', '領都'].includes(p.settlement)) {
-            const territoryId = p.territoryId;
-            if (territoryId != null) {
-                const territoryHexes = hexes.filter(h => h.properties.territoryId === territoryId);
-                
-                highlightOverlayLayer.selectAll('.highlight-hex')
-                    .data(territoryHexes)
-                    .enter().append('polygon')
-                    .attr('class', 'highlight-hex')
-                    .attr('points', h => h.points.map(pt => pt.join(',')).join(' '))
-                    .attr('fill', 'red')
-                    .style('fill-opacity', 0.4)
-                    .style('pointer-events', 'none');
+            const vassalTerritories = getVassalTerritories(allHexes[d.index], allHexes);
+            
+            if (vassalTerritories.size > 0) {
+                const maxDepth = Math.max(0, ...Array.from(vassalTerritories.values()).map(v => v.depth));
+                const colorScale = d3.scaleLinear()
+                    .domain([0, Math.max(1, maxDepth)])
+                    .range(['red', 'black'])
+                    .interpolate(d3.interpolateRgb);
+
+                vassalTerritories.forEach((data, territoryId) => {
+                    // ここで data と data.hexes が存在することは保証されている
+                    highlightOverlayLayer.selectAll(`.highlight-hex-${territoryId}`)
+                        .data(data.hexes)
+                        .enter().append('polygon')
+                        .attr('class', `highlight-hex-${territoryId}`)
+                        .attr('points', h => h.points.map(pt => pt.join(',')).join(' '))
+                        .attr('fill', colorScale(data.depth))
+                        .style('fill-opacity', 0.7)
+                        .style('pointer-events', 'none');
+                });
             }
         }
 
-        // 3. 情報ウィンドウを更新
         updateInfoWindow(d);
         event.stopPropagation();
     });

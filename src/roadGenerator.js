@@ -107,10 +107,25 @@ function findSettlementClusters(settlementList) {
 }
 
 
-// (determineAffiliation は変更なし)
+/**
+ * ★★★ [親子関係修正] 所属を決定するためのヘルパー関数 ★★★
+ */
 function determineAffiliation(targets, allSuperiors, params) {
-    const { allHexes, costFunc } = params;
+    const { allHexes, costFunc, targetType } = params; // targetType を追加
     const results = new Map();
+
+    // ★★★ [新規] 都市・領都は、必ず自国の首都に直轄させる ★★★
+    if (targetType === 'majorCity') {
+        const capitals = allSuperiors.filter(s => s.properties.settlement === '首都');
+        targets.forEach(target => {
+            const myCapital = capitals.find(c => c.properties.nationId === target.properties.nationId);
+            if (myCapital) {
+                // コストは計算しないが、親を首都に固定する
+                results.set(target, { superior: myCapital, cost: 0 });
+            }
+        });
+        return results;
+    }
     const targetsByNation = new Map();
     targets.forEach(t => {
         const nationId = t.properties.nationId;
@@ -202,6 +217,7 @@ export async function generateRoads(allHexes, addLogMessage) {
     const villages = allHexes.filter(s => s.properties.settlement === '村');
     const towns = allHexes.filter(s => s.properties.settlement === '町');
     const streets = allHexes.filter(s => s.properties.settlement === '街');
+    const majorsToProcess = allHexes.filter(s => ['都市', '領都'].includes(s.properties.settlement));
     const allMajorCities = allHexes.filter(s => ['領都', '都市', '首都'].includes(s.properties.settlement));
     const capitals = allHexes.filter(s => s.properties.settlement === '首都');
     const allSettlements = allHexes.filter(h => h.properties.settlement);
@@ -217,6 +233,16 @@ export async function generateRoads(allHexes, addLogMessage) {
             s.properties.nationId = capital.properties.nationId;
         } else {
             s.properties.nationId = 0;
+        }
+    });
+
+     // ★★★ [新規] 都市と領都の所属を首都直轄に決定 ★★★
+    await addLogMessage("主要都市の所属を確定しています...");
+    const majorCityAffiliations = determineAffiliation(majorsToProcess, capitals, { allHexes, costFunc: pathfindingCostFunc, targetType: 'majorCity' });
+    majorsToProcess.forEach(city => {
+        const { superior } = majorCityAffiliations.get(city) || {};
+        if (superior) {
+            city.properties.parentHexId = getIndex(superior.col, superior.row);
         }
     });
 
