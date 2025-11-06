@@ -1,10 +1,10 @@
 // ================================================================
-// GeoForge System - 大陸生成モジュール
+// GeoForge System - 大陸生成モジュール (v2.3 - 鉱業適正の鋭敏化)
 // ================================================================
 
 import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
 import * as config from './config.js';
-import { getIndex } from './utils.js'; // ★ 後で作成するヘルパー関数です
+import { getIndex } from './utils.js';
 
 // ----------------------------------------------------------------
 // ■ ノイズジェネレーターの初期化
@@ -166,53 +166,69 @@ function calculateFinalProperties(allHexes) {
 
         // 沖積平野フラグ
         properties.isAlluvial = properties.flow > 0 && !isWater && elevation < 4000;
+        
+        // 1. 新しいプロパティ landUse を初期化
+        properties.landUse = { river: 0, desert: 0, barren: 0, grassland: 0, forest: 0 };
 
-        // 最終的な植生
         if (isWater) {
+            // 水域ヘックスの場合、従来の植生タイプのみ設定
             if (config.elevationScale.invert(elevation) < -0.4) properties.vegetation = '深海';
             else if (config.elevationScale.invert(elevation) < 0.0) properties.vegetation = '海洋';
             else properties.vegetation = '湖沼';
-        } else if (elevation > config.VEGETATION_THRESHOLDS.ALPINE_ELEVATION) {
-            properties.vegetation = '高山';
-        } else if (temperature < config.VEGETATION_THRESHOLDS.TUNDRA_TEMP) {
-            properties.vegetation = '荒れ地';
-        } else if (precipitation < config.VEGETATION_THRESHOLDS.DESERT_PRECIP) {
-            properties.vegetation = '砂漠';
         } else {
-            const totalCoverage = (1 + vegetationCoverageNoise(nx, ny)) / 2;
+            // 2. 陸地ヘックスの場合、各土地利用タイプの「ポテンシャル」を計算
             const potentials = {
-                '密林': (1 + junglePotentialNoise(nx * 0.5, ny * 0.5)) / 2,
-                '森林': (1 + forestPotentialNoise(nx, ny)) / 2,
-                '疎林': (1 + forestPotentialNoise(nx, ny)) / 2,
-                '針葉樹林': (1 + taigaPotentialNoise(nx * 2, ny * 2)) / 2,
-                '草原': (1 + grasslandPotentialNoise(nx, ny)) / 2,
-                '荒れ地': 0.1,
+                river: 0,
+                desert: 0,
+                barren: 0,
+                grassland: 0,
+                forest: 0,
             };
-            const candidates = [];
-            if (climate > config.TEMP_ZONES.TEMPERATE) {
-                if (precipitation > config.VEGETATION_THRESHOLDS.JUNGLE_MIN_PRECIP) candidates.push('密林');
-                candidates.push('草原');
-            } else if (climate > config.TEMP_ZONES.COLD) {
-                if (precipitation > config.VEGETATION_THRESHOLDS.FOREST_MIN_PRECIP) candidates.push('森林');
-                if (precipitation > config.VEGETATION_THRESHOLDS.SPARSE_MIN_PRECIP) candidates.push('疎林');
-                candidates.push('草原');
-            } else {
-                if (precipitation > config.VEGETATION_THRESHOLDS.TAIGA_MIN_PRECIP) candidates.push('針葉樹林');
-                candidates.push('荒れ地');
-            }
-            let totalPotential = 0;
-            const proportions = [];
-            candidates.forEach(veg => { totalPotential += potentials[veg] || 0; });
+
+            potentials.river = Math.sqrt(properties.flow) * 2;
+            potentials.desert = Math.pow(Math.max(0, 1 - precipitation / 0.1), 2) * 10;
+            const alpineFactor = Math.pow(Math.max(0, elevation - 3500) / 3500, 2);
+            const tundraFactor = Math.pow(Math.max(0, -5 - temperature) / 20, 2);
+            potentials.barren = (alpineFactor + tundraFactor) * 10;
+            const forestTempFactor = Math.max(0, 1 - Math.abs(temperature - 15) / 20);
+            const forestPrecipFactor = Math.max(0, precipitation - 0.05);
+            potentials.forest = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 5;
+            const grasslandTempFactor = Math.max(0, 1 - Math.abs(temperature - 18) / 25);
+            const grasslandPrecipFactor = 1 - Math.abs(precipitation - 0.3) * 2;
+            potentials.grassland = ((1 + grasslandPotentialNoise(nx, ny)) / 2) * grasslandTempFactor * grasslandPrecipFactor * 3;
+
+            // 3. 全ポテンシャルの合計値を計算
+            const totalPotential = Object.values(potentials).reduce((sum, val) => sum + val, 0);
+
+            // 4. 合計値を使って各ポテンシャルを正規化し、割合（%）を算出
             if (totalPotential > 0) {
-                candidates.forEach(veg => {
-                    proportions.push({ type: veg, percentage: (potentials[veg] / totalPotential) * totalCoverage });
-                });
+                properties.landUse.river = potentials.river / totalPotential;
+                properties.landUse.desert = potentials.desert / totalPotential;
+                properties.landUse.barren = potentials.barren / totalPotential;
+                properties.landUse.grassland = potentials.grassland / totalPotential;
+                properties.landUse.forest = potentials.forest / totalPotential;
+            } else {
+                properties.landUse.barren = 1.0;
             }
-            const bareGroundPercentage = 1.0 - proportions.reduce((sum, p) => sum + p.percentage, 0);
-            proportions.push({ type: '裸地', percentage: bareGroundPercentage });
-            let dominantVeg = { type: '裸地', percentage: -1 };
-            proportions.forEach(p => { if (p.percentage > dominantVeg.percentage) { dominantVeg = p; } });
-            properties.vegetation = (dominantVeg.type === '裸地') ? '標高ベース' : dominantVeg.type;
+
+            // 5. 従来の vegetation プロパティ（最も優勢な地目）を決定
+            let dominantVeg = '荒れ地';
+            
+            if (properties.landUse.forest >= 0.5) {
+                if (climate > config.TEMP_ZONES.TEMPERATE && precipitation > config.VEGETATION_THRESHOLDS.JUNGLE_MIN_PRECIP) {
+                    dominantVeg = '密林';
+                } else if (climate < config.TEMP_ZONES.COLD) {
+                    dominantVeg = '針葉樹林';
+                } else {
+                    dominantVeg = '森林';
+                }
+            } else {
+                let maxRatio = 0;
+                if (properties.landUse.grassland > maxRatio){ maxRatio = properties.landUse.grassland; dominantVeg = '草原'; }
+                if (properties.landUse.desert > maxRatio)   { maxRatio = properties.landUse.desert;    dominantVeg = '砂漠'; }
+                if (properties.landUse.barren > maxRatio)   { maxRatio = properties.landUse.barren;    dominantVeg = '荒れ地'; }
+            }
+            properties.vegetation = dominantVeg;
         }
 
         // 産業ポテンシャル
@@ -220,7 +236,7 @@ function calculateFinalProperties(allHexes) {
         if (!isWater) {
             if (properties.isAlluvial) agriPotential += 0.5;
             if (h.neighbors.some(nIndex => allHexes[nIndex].properties.vegetation === '湖沼')) agriPotential += 0.3;
-            if (properties.vegetation === '草原') agriPotential += 0.2;
+            agriPotential += properties.landUse.grassland * 0.2;
             const idealTemp = 17.5;
             const tempFactor = Math.max(0, 1 - Math.abs(temperature - idealTemp) / 15);
             agriPotential += tempFactor * 0.3;
@@ -230,21 +246,34 @@ function calculateFinalProperties(allHexes) {
         }
         properties.agriPotential = Math.min(1.0, agriPotential);
 
-        let forestPotential = 0;
-        switch (properties.vegetation) {
-            case '密林': forestPotential = 1.0; break;
-            case '森林': forestPotential = 0.8; break;
-            case '針葉樹林': forestPotential = 0.6; break;
-            case '疎林': forestPotential = 0.3; break;
-        }
-        properties.forestPotential = forestPotential;
+        properties.forestPotential = properties.landUse.forest || 0;
 
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★★★ [修正] ここから鉱業適正の計算ロジックを全面的に刷新 ★★★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
         let miningPotential = 0;
         if (!isWater) {
-            miningPotential += (elevation / 7000) * 0.5;
-            miningPotential += ((1 + miningPotentialNoise(nx * 3, ny * 3)) / 2) * 0.5;
+            // 1. ノイズ関数から-1.0～1.0の範囲で「鉱脈の素」となる値を取得
+            //    龍脈より周波数を高く（nx*2）して、より細かい分布にする
+            const rawMiningValue = miningPotentialNoise(nx * 0.5, ny * 0.5);
+
+            // 2. 龍脈と同様の計算で、値のピークを鋭くする
+            //    powの指数を大きくするほど、ピークはより鋭く、希少になる (龍脈は8)
+            const peakFactor = 5;
+            let noisePotential = Math.pow(1.0 - Math.abs(rawMiningValue), peakFactor);
+            
+            // 3. 標高が高いほど鉱脈が存在しやすい、という補正を加える
+            //    標高4000m以上で最大1.5倍のボーナスがかかる
+            const elevationFactor = 1 + (Math.min(4000, elevation) / 4000) * 0.5;
+            
+            // 4. 最終的なポテンシャルを計算
+            miningPotential = noisePotential * elevationFactor;
         }
+        // 最終的な値を 0.0 ～ 1.0 の範囲に収める
         properties.miningPotential = Math.min(1.0, miningPotential);
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // ★★★ 修正はここまで ★★★
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
         
         let fishingPotential = 0;
         if (!isWater) {
@@ -257,14 +286,7 @@ function calculateFinalProperties(allHexes) {
                 }
             });
             fishingPotential += waterBonus;
-            if (properties.isAlluvial) {
-                fishingPotential += Math.min(Math.sqrt(properties.flow) * 0.15, 0.4);
-                const isEstuary = h.neighbors.some(nIndex => {
-                    const neighborVeg = allHexes[nIndex].properties.vegetation;
-                    return neighborVeg === '海洋' || neighborVeg === '深海';
-                });
-                if (isEstuary) fishingPotential += 0.2;
-            }
+            fishingPotential += properties.landUse.river * 0.5;
         }
         properties.fishingPotential = Math.min(1.0, fishingPotential);
     });

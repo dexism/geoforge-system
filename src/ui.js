@@ -212,23 +212,31 @@ export function setupUI(allHexes, roadPaths) {
     .attr('x2', d => d.target.cx).attr('y2', d => d.target.cy)
     .attr('stroke', d => {
         switch (d.level) {
-            case 5: return '#8a2be2'; 
-            case 4: return '#a0522d'; 
-            case 3: return '#a0522d'; 
-            case 2: return '#cd853f'; 
-            case 1: return '#deb887'; 
+            case 5: return '#a0f'; 
+            case 4: return '#f00'; 
+            case 3: return '#f00'; 
+            case 2: return '#f00'; 
+            case 1: return '#800'; 
             default: return '#000';
         }
     })
     .attr('stroke-width', d => {
         switch (d.level) {
-            case 5: return 3.5; 
-            case 4: return 2.0; 
-            case 3: return 1.5; 
-            case 2: return 1.0; 
-            case 1: return 0.7; 
+            case 5: return 6.0; // 交易路 
+            case 4: return 4.0; // 街道
+            case 3: return 2.0; // 町道
+            case 2: return 1.0; // 村道
+            case 1: return 1.0; 
             default: return 1;
         }
+    })
+    .attr('stroke-dasharray', d => {
+        if (d.level === 5) return '6, 6'; 
+        if (d.level === 4) return '4, 4'; 
+        if (d.level === 3) return '2, 2'; 
+        if (d.level === 2) return '1, 1'; 
+        if (d.level === 1) return '1, 2'; 
+        return '2, 2';
     })
     .style('pointer-events', 'none');
 

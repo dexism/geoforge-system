@@ -17,8 +17,8 @@ export const r = 20; // 描画用のヘックス半径 (pixel)
 // ----------------------------------------------------------------
 export const NOISE_SCALE =               0.05; 
 export const LAND_BIAS =                 0.7; 
-export const ELEVATION_PEAK_FACTOR =     2.0; 
-export const CONTINENT_FALLOFF_FACTOR =  4.0;
+export const ELEVATION_PEAK_FACTOR =     3.0; 
+export const CONTINENT_FALLOFF_FACTOR =  5.0;
 export const LAKE_THRESHOLD_PLAINS =    -0.90;
 export const LAKE_THRESHOLD_MOUNTAINS = -0.85;
 export const elevationScale = d3.scaleLinear().domain([0.0, 1.6]).range([0, 7000]).clamp(true);
@@ -120,9 +120,9 @@ export const CITY_MIN_DISTANCE = 15;    // 主要都市間の最低距離
 export const TOWN_MIN_DISTANCE = 5;     // 街や町との最低距離
 
 // 国家ごとの都市数に関する設定
-export const CITIES_PER_NATION = 3; // 「都市」の数
-export const REGIONAL_CAPITALS_PER_NATION = 6; // 「領都」の数
-export const TOWNS_PER_NATION = 15; // 「街」の数
+export const CITIES_PER_NATION = 2; // 「都市」の数
+export const REGIONAL_CAPITALS_PER_NATION = 5; // 「領都」の数
+export const TOWNS_PER_NATION = 10; // 「街」の数
 
 // 辺境設定
 export const FRONTIER_DISTANCE_THRESHOLD = 35; // 首都からこの距離以上離れると辺境の可能性
