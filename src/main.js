@@ -1,12 +1,11 @@
 // ================================================================
-// GeoForge System - メインスクリプト (v1.1)
+// GeoForge System - メインスクリプト (v1.2 - 描画連携修正)
 // ================================================================
 
 import * as d3 from 'd3'; 
 import * as config from './config.js';
 import { generateContinent } from './continentGenerator.js';
 import { generateCivilization, determineTerritories } from './civilizationGenerator.js';
-// ★★★ [修正] 新しい集計関数をインポート ★★★
 import { simulateEconomy, calculateTerritoryAggregates } from './economySimulator.js';
 import { generateRoads } from './roadGenerator.js';
 import { setupUI } from './ui.js';
@@ -35,16 +34,22 @@ async function runWorldGeneration() {
     allHexes = await generateCivilization(allHexes, addLogMessage);
     // --- 3. 経済シミュレーション ---
     allHexes = await simulateEconomy(allHexes, addLogMessage);
+    
     // --- 4. 街道生成と国家所属の決定 ---
-    allHexes = await generateRoads(allHexes, addLogMessage);
+    const roadGenResult = await generateRoads(allHexes, addLogMessage);
+    allHexes = roadGenResult.allHexes;
+    const roadPaths = roadGenResult.roadPaths;
+    
     // --- 5. 最終的な領土の確定 (空白地の割り当て) ---
     allHexes = await determineTerritories(allHexes, addLogMessage);
-    // ★★★ [新規] 主要都市の支配領域データを集計 ★★★
+    // --- 6. 主要都市の支配領域データを集計 ---
     allHexes = await calculateTerritoryAggregates(allHexes, addLogMessage);
-    // --- 6. UIのセットアップと描画 ---
+    
+    // --- 7. UIのセットアップと描画 ---
     await addLogMessage("世界を描画しています...");
-    setupUI(allHexes);
-    // --- 7. ローディング画面の終了処理 ---
+    setupUI(allHexes, roadPaths);
+
+    // --- 8. ローディング画面の終了処理 ---
     const totalPopulation = allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
     await sleep(500); 
     loadingOverlay.style.opacity = '0';

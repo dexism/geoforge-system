@@ -1,5 +1,5 @@
 // ================================================================
-// GeoForge System - UIモジュール
+// GeoForge System - UIモジュール (v1.2 - 街道描画座標ズレ修正)
 // ================================================================
 
 import * as d3 from 'd3';
@@ -26,8 +26,9 @@ function toggleLayerVisibility(layerName, buttonElement, showText, hideText) {
 /**
  * UIのセットアップメイン関数 (main.js から呼び出される)
  * @param {Array<object>} allHexes - 生成された全ヘックスのデータ
+ * @param {Array<object>} roadPaths - 生成された全道路の経路データ
  */
-export function setupUI(allHexes) {
+export function setupUI(allHexes, roadPaths) {
     const svg = d3.select('#hexmap');
     const g = svg.append('g');
 
@@ -92,7 +93,6 @@ export function setupUI(allHexes) {
     const snowLayer = createLayer('snow');
     const elevationOverlayLayer = createLayer('elevation-overlay', false);
     const riverLayer = createLayer('river');
-    const roadLayer = createLayer('road');
     const precipOverlayLayer = createLayer('precip-overlay', false);
     const tempOverlayLayer = createLayer('temp-overlay', false);
     const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false);
@@ -102,9 +102,10 @@ export function setupUI(allHexes) {
     const miningOverlayLayer = createLayer('mining-overlay', false);
     const fishingOverlayLayer = createLayer('fishing-overlay', false);
     const populationOverlayLayer = createLayer('population-overlay', false);
-    const territoryOverlayLayer = createLayer('territory-overlay', false); // ★★★ 新規追加 ★★★
+    const territoryOverlayLayer = createLayer('territory-overlay', false);
     const highlightOverlayLayer = createLayer('highlight-overlay');
     const borderLayer = createLayer('border');
+    const roadLayer = createLayer('road');
     const labelLayer = createLayer('labels');
     const interactionLayer = createLayer('interaction');
 
@@ -130,15 +131,12 @@ export function setupUI(allHexes) {
     const borderSegments = [];
     hexes.forEach(h => {
         const hNation = h.properties.nationId;
-        if (hNation === 0) return; // 辺境は国境線の起点にならない
+        if (hNation === 0) return;
 
         h.neighbors.map(i => hexes[i]).forEach(n => {
-            // 重複描画を避けるため、インデックスが小さい方から大きい方へのみ線を描画
             if (h.index < n.index) {
                 const nNation = n.properties.nationId;
-                // 隣接ヘックスが異なる国の場合、国境とみなす
                 if (nNation > 0 && hNation !== nNation) {
-                    // 2つのヘックスに共通する頂点を探す
                     const commonPoints = [];
                     h.points.forEach(p1 => {
                         n.points.forEach(p2 => {
@@ -167,12 +165,12 @@ export function setupUI(allHexes) {
         .attr('y1', d => d.p1[1])
         .attr('x2', d => d.p2[0])
         .attr('y2', d => d.p2[1])
-        .attr('stroke', '#a00') // 赤色
+        .attr('stroke', '#a00')
         .attr('stroke-width', 4)
         .attr('stroke-linecap', 'round')
         .style('pointer-events', 'none');
 
-    // 3b. 川レイヤー (変更なし)
+    // 3c. 川レイヤー
     riverLayer.selectAll('.river-path').data(hexes.filter(d => d.properties.flow > 0 && d.downstream)).enter().append('line')
         .attr('class', 'river-path')
         .attr('x1', d => d.cx).attr('y1', d => d.cy)
@@ -181,62 +179,60 @@ export function setupUI(allHexes) {
         .attr('stroke-width', d => Math.min(Math.sqrt(d.properties.flow) * 2, config.r))
         .attr('stroke-linecap', 'round').style('pointer-events', 'none');
 
-    // 3c. 積雪レイヤー (変更なし)
+    // 3d. 積雪レイヤー
     snowLayer.selectAll('.snow-hex').data(hexes.filter(d => d.properties.hasSnow)).enter().append('polygon')
         .attr('class', 'snow-hex')
         .attr('points', d => d.points.map(p => p.join(',')).join(' '))
         .attr('fill', '#fff').style('fill-opacity', 0.8).style('pointer-events', 'none');
 
-    // 3d. 街道レイヤー (変更なし)
+    // 3e. 街道レイヤー (正確な描画ロジック)
     const roadSegments = [];
-    hexes.forEach(h => {
-        if (h.properties.roadLevel > 0) {
-            h.neighbors.map(i => hexes[i]).forEach(n => {
-                if (n && n.properties.roadLevel > 0) {
-                    if (getIndex(h.x, (config.ROWS - 1) - h.y) < getIndex(n.x, (config.ROWS - 1) - n.y)) {
-                        const level = Math.min(h.properties.roadLevel, n.properties.roadLevel);
-                        roadSegments.push({
-                            source: { cx: h.cx, cy: h.cy },
-                            target: { cx: n.cx, cy: n.cy },
-                            level: level
-                        });
-                    }
-                }
-            });
+    roadPaths.forEach(road => {
+        const path = road.path;
+        for (let i = 0; i < path.length - 1; i++) {
+            const startNode = path[i];
+            const endNode = path[i+1];
+            
+            // ★★★ [修正] 座標系の反転を行わず、論理座標をそのまま使ってインデックスを検索する ★★★
+            const startHex = hexes[getIndex(startNode.x, startNode.y)];
+            const endHex = hexes[getIndex(endNode.x, endNode.y)];
+
+            if (startHex && endHex) {
+                roadSegments.push({
+                    source: { cx: startHex.cx, cy: startHex.cy },
+                    target: { cx: endHex.cx, cy: endHex.cy },
+                    level: road.level
+                });
+            }
         }
     });
+
     roadLayer.selectAll('.road-segment').data(roadSegments).enter().append('line')
     .attr('x1', d => d.source.cx).attr('y1', d => d.source.cy)
     .attr('x2', d => d.target.cx).attr('y2', d => d.target.cy)
     .attr('stroke', d => {
         switch (d.level) {
-            case 5: return '#a0f'; 
-            case 4: return '#f00'; 
-            case 3: return '#f00'; 
-            case 2: return '#f00'; 
-            case 1: return '#800'; 
+            case 5: return '#8a2be2'; 
+            case 4: return '#a0522d'; 
+            case 3: return '#a0522d'; 
+            case 2: return '#cd853f'; 
+            case 1: return '#deb887'; 
             default: return '#000';
         }
     })
     .attr('stroke-width', d => {
         switch (d.level) {
-            case 5: return 4.0; 
-            case 4: return 4.0; 
-            case 3: return 1.0; 
-            case 2: return 0.5; 
-            case 1: return 0.5; 
+            case 5: return 3.5; 
+            case 4: return 2.0; 
+            case 3: return 1.5; 
+            case 2: return 1.0; 
+            case 1: return 0.7; 
             default: return 1;
         }
     })
-    .attr('stroke-dasharray', d => {
-        if (d.level === 5) return '8, 4'; 
-        if (d.level === 2) return '2, 1'; 
-        if (d.level === 1) return '1, 2'; 
-        return '4, 2';
-    })
     .style('pointer-events', 'none');
 
-    // 3e. 各種オーバーレイヤー (変更なし)
+    // 3f. 各種オーバーレイヤー
     elevationOverlayLayer.selectAll('.elevation-hex').data(hexes.filter(d => !d.properties.isWater)).enter().append('polygon')
         .attr('points', d => d.points.map(p => p.join(',')).join(' ')).attr('fill', d => config.getElevationColor(d.properties.elevation))
         .style('fill-opacity', 0.9).style('pointer-events', 'none');
@@ -268,25 +264,21 @@ export function setupUI(allHexes) {
         .attr('points', d => d.points.map(p => p.join(',')).join(' ')).attr('fill', d => config.populationColor(d.properties.population))
         .style('fill-opacity', 0.7).style('pointer-events', 'none');
 
-    // ★★★ [更新] 領地オーバーレイヤーの描画ロジック ★★★
-    const nationColor = d3.scaleOrdinal(d3.schemeTableau10); // 色覚多様性対応のカラースケール
+    const nationColor = d3.scaleOrdinal(d3.schemeTableau10);
     territoryOverlayLayer.selectAll('.territory-hex').data(hexes).enter().append('polygon')
         .attr('points', d => d.points.map(p => p.join(',')).join(' '))
         .attr('fill', d => d.properties.nationId === 0 ? '#555' : nationColor(d.properties.nationId))
         .style('fill-opacity', 0.5)
         .style('pointer-events', 'none');
         
-    // ★★★ [バグ修正版 v6] 支配下の全領土を正しく取得する最終修正版 ★★★
     function getVassalTerritories(startHub, allHexes) {
         const territories = new Map();
         const allSettlements = allHexes.filter(h => h.properties.settlement);
         const startHubId = getIndex(startHub.col, startHub.row);
 
-        // 探索キュー。 [集落ID, 階層の深さ] を格納
         const queue = [[startHubId, 0]];
         const visited = new Set([startHubId]);
 
-        // 1. まず、支配下の全集落を幅優先探索(BFS)でリストアップする
         const vassalSettlements = [];
         let head = 0;
         while(head < queue.length) {
@@ -308,7 +300,6 @@ export function setupUI(allHexes) {
             });
         }
         
-        // 2. リストアップした集落が所属する領土(territoryId)ごとにグループ化する
         vassalSettlements.forEach(({settlement, depth}) => {
             const terrId = settlement.properties.territoryId;
             if (terrId != null) {
@@ -318,8 +309,7 @@ export function setupUI(allHexes) {
             }
         });
 
-        // 3. ★★★ [バグ修正] 描画用の `hexes` 配列からデータを構築する ★★★
-        hexes.forEach(h => { // allHexes -> hexes に修正
+        hexes.forEach(h => {
             const terrId = h.properties.territoryId;
             if (territories.has(terrId)) {
                 territories.get(terrId).hexes.push(h);
@@ -329,8 +319,7 @@ export function setupUI(allHexes) {
         return territories;
     }
 
-    // --- 3f. 情報ウィンドウとインタラクション ---
-    // ★★★ [更新] 情報を整形する共有関数 ★★★
+    // --- 3g. 情報ウィンドウとインタラクション ---
     function getInfoText(d) {
         const p = d.properties;
         let superiorText = 'なし';
@@ -350,7 +339,6 @@ export function setupUI(allHexes) {
             ? config.NATION_NAMES[p.nationId - 1] 
             : '辺境';
 
-        // ★★★ [復元] あなたの元の詳細な情報表示を完全に復元 ★★★
         let text = `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
                    `所属国家：${nationName}\n` +
                    `直轄上位：${superiorText}\n`+
@@ -373,7 +361,6 @@ export function setupUI(allHexes) {
 
         const surplusKeys = Object.keys(p.surplus || {});
         const shortageKeys = Object.keys(p.shortage || {});
-        // ★★★ [修正] 食料需給セクションを、生産量->余剰/不足の順で表示するように整形 ★★★
         if (Object.keys(p.production || {}).length > 0 || surplusKeys.length > 0 || shortageKeys.length > 0) {
             text += `\n--- 食料需給 (t/年) ---`;
             const productionText = Object.entries(p.production || {})
@@ -384,16 +371,13 @@ export function setupUI(allHexes) {
             if (shortageKeys.length > 0) text += `\n不足：${shortageKeys.map(key => `${key} ${p.shortage[key]}`).join('t\n　　　')}t`;
         }
         
-        // ★★★ [新規] 主要都市の場合、庇護下の集計情報を表示 ★★★
         if (['首都', '都市', '領都'].includes(p.settlement) && p.territoryData) {
             const data = p.territoryData;
             text += `\n--- 庇護下領域 集計 ---`;
 
-            // ★★★ [新規] 庇護下集落の数を指定フォーマットで表示 ★★★
             const settlementCountText = Object.entries(data.settlementCounts)
-                .filter(([, count]) => count > 0) // 数が0のものは表示しない
+                .filter(([, count]) => count > 0)
                 .map(([type, count]) => {
-                    // あなたの指定フォーマットに合わせてタイプ名を短縮
                     const shortName = { '都市': '都', '領都': '領', '街': '街', '町': '町', '村': '村' }[type];
                     return `${shortName}${count}`;
                 })
@@ -423,7 +407,6 @@ export function setupUI(allHexes) {
         return text;
     }
     
-    // 情報ウィンドウを更新する関数
     function updateInfoWindow(d) {
         infoCoord.textContent = `E${String(d.x).padStart(2, '0')} - N${String(d.y).padStart(2, '0')}`;
         infoContent.textContent = getInfoText(d);
@@ -437,7 +420,6 @@ export function setupUI(allHexes) {
         .style('fill', 'transparent').style('cursor', 'pointer');
 
     interactiveHexes.append('title').text(d => getInfoText(d));
-    // ★★★ [バグ修正版 v5] クリック時の階層ハイライト処理 ★★★
     interactiveHexes.on('click', (event, d) => {
         highlightOverlayLayer.selectAll('*').remove();
 
@@ -453,7 +435,6 @@ export function setupUI(allHexes) {
                     .interpolate(d3.interpolateRgb);
 
                 vassalTerritories.forEach((data, territoryId) => {
-                    // ここで data と data.hexes が存在することは保証されている
                     highlightOverlayLayer.selectAll(`.highlight-hex-${territoryId}`)
                         .data(data.hexes)
                         .enter().append('polygon')
@@ -470,7 +451,7 @@ export function setupUI(allHexes) {
         event.stopPropagation();
     });
         
-    // 3g. ラベルレイヤーの描画 (変更なし)
+    // 3h. ラベルレイヤーの描画
     const hexLabelGroups = labelLayer.selectAll('.hex-label-group').data(hexes).enter().append('g');
     hexLabelGroups.append('text').attr('class', 'hex-label')
         .attr('x', d => d.cx).attr('y', d => d.cy + hexHeight * 0.4)
@@ -501,10 +482,9 @@ export function setupUI(allHexes) {
     });
     svg.call(zoom);
 
-    // ★★★ [更新] ウィンドウを閉じる際にハイライトもクリアする ★★★
     function closeInfoWindow(event) {
         infoWindow.classList.add('hidden');
-        highlightOverlayLayer.selectAll('*').remove(); // ハイライトをクリア
+        highlightOverlayLayer.selectAll('*').remove();
         if (event) event.preventDefault();
     }
     infoCloseBtn.addEventListener('click', closeInfoWindow);
@@ -524,7 +504,6 @@ export function setupUI(allHexes) {
     d3.select('#toggleMiningOverlay').on('click', function() { toggleLayerVisibility('mining-overlay', this, '鉱業', '鉱業'); });
     d3.select('#toggleFishingOverlay').on('click', function() { toggleLayerVisibility('fishing-overlay', this, '漁業', '漁業'); });
     d3.select('#togglePopulationOverlay').on('click', function() { toggleLayerVisibility('population-overlay', this, '人口', '人口'); });
-    // ★★★ 新規：領地表示ボタンのイベントハンドラ ★★★
     d3.select('#toggleTerritoryOverlay').on('click', function() { toggleLayerVisibility('territory-overlay', this, '領地表示', '領地非表示'); });
 
     // --- 5. 初期表示位置の設定 ---
