@@ -1,4 +1,6 @@
-/* 基本設定とカラーパレット */
+/* ==========================================================================
+   基本設定とカラーパレット
+   ========================================================================== */
 :root {
     /* ライトモード */
     --primary-color: #0d47a1; /* 深い青 */
@@ -10,7 +12,12 @@
     --quote-bg-color: #e3f2fd; /* 薄い青 */
     --code-bg-color: #eeeeee;
     --link-color: #1976d2;
-    --teller-info-bg: #fffde7; /* テラー情報用の背景色 */
+    --teller-info-bg: #fffde7; /* テラー向け情報 */
+    --success-color: #4caf50; /* 成功 */
+    --failure-color: #f44336; /* 失敗 */
+    --critical-failure-color: #9c27b0; /* 大失敗 */
+    --animal-color: #8d6e63; /* 動物データ */
+    --monster-color: #b71c1c; /* 魔物データ */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -18,10 +25,10 @@
         /* ダークモード */
         --primary-color: #42a5f5; /* 明るい青 */
         --secondary-color: #1e88e5;
-        --background-color: #121212; /* 真っ黒ではない黒 */
-        --surface-color: #1e1e1e; /* やや明るい黒 */
-        --text-color: #e0e0e0; /* 明るいグレー */
-        --border-color: #424242; /* 暗いグレー */
+        --background-color: #121212;
+        --surface-color: #1e1e1e;
+        --text-color: #e0e0e0;
+        --border-color: #424242;
         --quote-bg-color: #1a2a3a;
         --code-bg-color: #2c2c2c;
         --link-color: #64b5f6;
@@ -29,7 +36,9 @@
     }
 }
 
-/* 全体スタイル */
+/* ==========================================================================
+   基本スタイル
+   ========================================================================== */
 html {
     scroll-behavior: smooth;
     scroll-padding-top: 2rem;
@@ -43,11 +52,14 @@ body {
     margin: 0;
 }
 
+h1, h2, h3, h4, h5, h6 {
+    line-height: 1.4;
+}
+
 h1, h2, h3, h4 {
     color: var(--primary-color);
     border-left: 5px solid var(--primary-color);
     padding-left: 1rem;
-    line-height: 1.4;
 }
 
 h1 { font-size: 2.2em; margin-top: 2em; }
@@ -63,85 +75,6 @@ a:hover {
     text-decoration: underline;
 }
 
-/* ヘッダー */
-header {
-    background: var(--primary-color);
-    color: white;
-    text-align: center;
-    padding: 2rem 1rem;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-header h1 {
-    margin: 0;
-    border: none;
-    color: white;
-    padding: 0;
-    font-size: 2.5rem;
-}
-header h2 {
-    margin: 0.2rem 0;
-    font-weight: normal;
-    border: none;
-    padding: 0;
-    color: white;
-    font-size: 1.5rem;
-}
-header .sub-title {
-    font-style: italic;
-    opacity: 0.9;
-}
-
-/* メインレイアウト */
-.container {
-    display: flex;
-    max-width: 1200px;
-    margin: 2rem auto;
-    padding: 0 1rem;
-}
-
-main {
-    flex-grow: 1;
-    background-color: var(--surface-color);
-    padding: 2rem;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-/* サイドバー（目次） */
-.sidebar {
-    flex: 0 0 250px;
-    margin-right: 2rem;
-    position: sticky;
-    top: 2rem;
-    align-self: flex-start;
-    max-height: calc(100vh - 4rem);
-    overflow-y: auto;
-}
-.sidebar h3 {
-    margin-top: 0;
-}
-.sidebar ul {
-    list-style: none;
-    padding: 0;
-}
-.sidebar ul ul {
-    padding-left: 1.5rem;
-    font-size: 0.9em;
-}
-.sidebar summary {
-    cursor: pointer;
-    font-weight: bold;
-}
-.sidebar details[open] summary {
-    color: var(--primary-color);
-}
-.sidebar a {
-    display: block;
-    padding: 0.4rem 0;
-    transition: color 0.2s;
-}
-
-/* 各種コンポーネント */
 blockquote {
     border-left: 3px solid var(--secondary-color);
     padding: 1rem 1.5rem;
@@ -165,204 +98,101 @@ th {
     background-color: var(--background-color);
 }
 
-.comment-box, .gm-name-box {
-    background-color: var(--code-bg-color);
-    border: 1px solid var(--border-color);
-    padding: 1rem 1.5rem;
-    margin: 1.5rem 0;
-    border-radius: 4px;
-}
-.comment-box h4, .gm-name-box h3 {
-    margin-top: 0;
-}
-
-.replay-dialogue .teller {
-    color: var(--primary-color);
-    font-weight: bold;
-}
-.replay-dialogue .player {
-    color: var(--secondary-color);
+dl dt {
     font-weight: bold;
 }
 
-/* モバイル対応 */
-@media (max-width: 768px) {
-    .container {
-        flex-direction: column;
-    }
-
-    .sidebar {
-        /* 画面上部に固定するための設定 */
-        position: sticky;
-        top: 0;
-        z-index: 1000; /* 他の要素より手前に表示 */
-        
-        /* 見た目の調整 */
-        background-color: var(--surface-color);
-        box-shadow: 0 2px 5px rgba(0,0,0,0.15);
-        border-bottom: 1px solid var(--border-color);
-        margin-right: 0;
-        margin-bottom: 2rem; /* mainとの間に余白を確保 */
-
-        /* 高さの調整 */
-        max-height: 50vh; /* メニューが開いたときに画面を覆いすぎないよう高さを制限 */
-        overflow-y: auto; /* 高さを超えた場合はメニュー内をスクロール可能に */
-
-        /* 既存のスタイル（変更なし） */
-        flex: 1 1 auto;
-    }
-
-    main {
-        padding: 1.5rem;
-    }
-    
-    h1 { font-size: 1.8em; }
-    h2 { font-size: 1.5em; }
-    
-    /* ↓テンプレートキャラクターのレイアウトもスマホ表示に最適化 */
-    .char-card {
-        grid-template-columns: 1fr; /* 縦並びにする */
-        gap: 1.5rem;
-    }
-    .char-image {
-        width: 100%;
-        height: auto;
-    }
-}
-
-/* テンプレートキャラクターセクション */
-.char-card {
-    display: grid;
-    grid-template-columns: 200px 1fr; /* PC表示: 画像エリア(200px)と説明エリアの分割 */
-    gap: 2rem;
-    margin: 3rem 0;
-    padding: 1.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background-color: var(--background-color);
-}
-
-.char-image {
-    width: 200px;
-    background-color: var(--code-bg-color);
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-color);
-    opacity: 0.7;
-    aspect-ratio: 1 / 1; /* 画像のアスペクト比を1:1(正方形)に保つ */
-}
-
-/* 実際にimgタグが挿入された場合のスタイル */
-.char-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover; /* コンテナをはみ出さずに画像を埋める */
-    border-radius: 4px;
-}
-
-.char-description h3 {
-    margin-top: 0;
-    font-size: 1.6em;
-}
-
-.char-description h4 {
-    margin-top: 1.5rem;
-    border-bottom: 2px solid var(--border-color);
-    padding-bottom: 0.5rem;
-    border-left: none; /* h4の左線を消す */
-    padding-left: 0;
-}
-
-.char-lifepath {
-    list-style: none;
-    padding: 0;
-    margin-bottom: 1.5rem;
-    display: flex;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-}
-.char-lifepath li {
-    background-color: var(--code-bg-color);
-    padding: 0.2rem 0.8rem;
-    border-radius: 15px;
-    font-size: 0.9em;
-}
-
-/* ▼▼▼ モバイル表示用の設定 ▼▼▼ */
-@media (max-width: 768px) {
-    .char-card {
-        grid-template-columns: 1fr; /* レイアウトを縦一列に変更 */
-        gap: 1.5rem;
-    }
-    
-    .char-image {
-        width: 100%; /* ★★★ 画像コンテナの幅を100%に設定 ★★★ */
-        height: auto; /* 高さはアスペクト比に合わせて自動調整 */
-    }
-}
-
-/* 2.2 キャラクターの創造セクション */
-
-/* ステップ表示 */
-.creation-steps {
-    margin: 2rem 0;
-}
-.step-box {
-    background: var(--background-color);
-    border: 1px solid var(--border-color);
-    border-left: 4px solid var(--secondary-color);
-    padding: 1rem 1.5rem;
-    border-radius: 4px;
-}
-.step-box h4 {
-    margin: 0 0 0.5rem 0;
-    padding: 0;
-    border: none;
-}
-.step-arrow {
+/* ==========================================================================
+   レイアウト
+   ========================================================================== */
+header {
+    background: var(--primary-color);
+    color: white;
     text-align: center;
-    font-size: 1.5rem;
-    color: var(--secondary-color);
-    margin: 0.5rem 0;
+    padding: 2rem 1rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+header h1, header h2 {
+    margin: 0.2rem 0;
+    border: none;
+    padding: 0;
+    color: white;
+}
+header h1 { font-size: 2.5rem; }
+header h2 { font-size: 1.5rem; font-weight: normal; }
+header .sub-title { font-style: italic; opacity: 0.9; }
+
+.container {
+    display: flex;
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
 }
 
-/* プライムクラスのカード表示 */
-.class-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin: 2rem 0;
-}
-.class-card {
-    background: var(--background-color);
-    padding: 1.5rem;
+main {
+    flex-grow: 1;
+    background-color: var(--surface-color);
+    padding: 2rem;
     border-radius: 8px;
-    border: 1px solid var(--border-color);
-}
-.class-card h5 {
-    margin-top: 0;
-    font-size: 1.3em;
-    color: var(--primary-color);
-}
-.class-card p {
-    font-size: 0.95em;
-    line-height: 1.7;
-}
-.class-card p:last-child {
-    margin-bottom: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-/* 計算例・数式ボックス */
-.example-box, .formula-box {
+footer {
+    text-align: center;
+    padding: 2rem;
+    font-size: 0.9em;
+    opacity: 0.7;
+}
+
+/* ==========================================================================
+   ナビゲーション & ハンバーガーメニュー
+   ========================================================================== */
+
+/* --- PC用サイドバー --- */
+.sidebar {
+    flex: 0 0 250px;
+    margin-right: 2rem;
+    position: sticky;
+    top: 2rem;
+    align-self: flex-start;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+}
+.sidebar h3 { margin-top: 0; }
+.sidebar ul { list-style: none; padding: 0; }
+.sidebar ul ul { padding-left: 1.5rem; font-size: 0.9em; }
+.sidebar summary { cursor: pointer; font-weight: bold; }
+.sidebar details[open] summary { color: var(--primary-color); }
+.sidebar a { display: block; padding: 0.4rem 0; transition: color 0.2s; }
+
+/* --- ハンバーガーメニュー用要素 --- */
+.menu-toggle-checkbox {
+    display: none;
+}
+.menu-toggle-label {
+    display: none; /* PCでは非表示 */
+}
+
+/* --- メニュー開閉時の動作 --- */
+.menu-toggle-checkbox:checked + .menu-toggle-label span { transform: rotate(45deg); }
+.menu-toggle-checkbox:checked + .menu-toggle-label span::before { top: 0; transform: rotate(0); }
+.menu-toggle-checkbox:checked + .menu-toggle-label span::after { top: 0; transform: rotate(90deg); }
+.menu-toggle-checkbox:checked ~ .container .sidebar { transform: translateX(0); }
+.menu-toggle-checkbox:checked ~ .overlay { display: block; }
+
+/* ==========================================================================
+   汎用コンポーネント (カード、ボックス等)
+   ========================================================================== */
+
+/* --- 特殊なボックス --- */
+.comment-box, .gm-name-box, .example-box, .formula-box {
     background-color: var(--code-bg-color);
     border: 1px solid var(--border-color);
     padding: 1rem 1.5rem;
     margin: 1.5rem 0;
     border-radius: 4px;
 }
-.example-box h5 {
+.comment-box h4, .gm-name-box h3, .example-box h5 {
     margin-top: 0;
 }
 .example-box pre {
@@ -370,16 +200,7 @@ th {
     word-wrap: break-word;
 }
 
-/* テーブルコンテナ（横スクロール対応） */
-.table-container {
-    overflow-x: auto;
-    margin: 1.5rem 0;
-}
-.table-container table {
-    min-width: 600px; /* テーブルが縮みすぎないように最小幅を指定 */
-}
-
-/* アコーディオン */
+/* --- アコーディオン --- */
 .accordion {
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -401,7 +222,97 @@ th {
     padding: 1rem;
 }
 
-/* お祝いボックス */
+/* --- テーブルの横スクロール対応 --- */
+.table-container {
+    overflow-x: auto;
+    margin: 1.5rem 0;
+}
+.table-container table {
+    min-width: 600px;
+}
+
+/* ==========================================================================
+   各セクションごとの専用スタイル
+   ========================================================================== */
+
+/* --- 1.3 イメージリプレイ --- */
+.replay-dialogue .teller { color: var(--primary-color); font-weight: bold; }
+.replay-dialogue .player { color: var(--secondary-color); font-weight: bold; }
+
+/* --- 2.1 テンプレートキャラクター --- */
+.char-card {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 2rem;
+    margin: 3rem 0;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--background-color);
+}
+.char-image {
+    width: 200px;
+    background-color: var(--code-bg-color);
+    border-radius: 4px;
+    aspect-ratio: 1 / 1;
+}
+.char-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+}
+.char-description h3 { margin-top: 0; font-size: 1.6em; }
+.char-description h4 {
+    margin-top: 1.5rem;
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 0.5rem;
+    border-left: none;
+    padding-left: 0;
+}
+.char-lifepath {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 1.5rem;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+.char-lifepath li {
+    background-color: var(--code-bg-color);
+    padding: 0.2rem 0.8rem;
+    border-radius: 15px;
+    font-size: 0.9em;
+}
+
+/* --- 2.2 キャラクター創造 --- */
+.creation-steps { margin: 2rem 0; }
+.step-box {
+    background: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--secondary-color);
+    padding: 1rem 1.5rem;
+    border-radius: 4px;
+}
+.step-box h4 { margin: 0 0 0.5rem 0; padding: 0; border: none; }
+.step-arrow { text-align: center; font-size: 1.5rem; color: var(--secondary-color); margin: 0.5rem 0; }
+
+.class-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+.class-card {
+    background: var(--background-color);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+.class-card h5 { margin-top: 0; font-size: 1.3em; color: var(--primary-color); }
+.class-card p { font-size: 0.95em; line-height: 1.7; }
+.class-card p:last-child { margin-bottom: 0; }
+
 .congrats-box {
     border: 2px solid var(--primary-color);
     background-color: var(--quote-bg-color);
@@ -409,15 +320,9 @@ th {
     margin: 2rem 0;
     border-radius: 8px;
 }
-.congrats-box h4 {
-    border: none;
-    padding: 0;
-    margin-top: 0;
-}
+.congrats-box h4 { border: none; padding: 0; margin-top: 0; }
 
-/* 3 テラーセクション */
-
-/* 地域・国家・情報カード */
+/* --- 3. テラーセクション --- */
 .region-card, .nation-card, .info-card {
     border: 1px solid var(--border-color);
     background-color: var(--background-color);
@@ -427,11 +332,9 @@ th {
 }
 .region-card h3, .nation-card h4, .info-card h4 {
     margin-top: 0;
-    border-left: 4px solid var(--secondary-color);
-    padding-left: 1rem;
+    border-left-width: 4px;
+    border-left-color: var(--secondary-color);
 }
-
-/* テラー向けヒントボックス */
 .teller-hint-box {
     background-color: var(--teller-info-bg);
     border: 1px solid var(--primary-color);
@@ -440,58 +343,21 @@ th {
     margin: 1.5rem 0;
     border-radius: 4px;
 }
-
-/* データブロック（魔物など） */
 .data-block {
     border: 1px solid var(--border-color);
     padding: 1rem 1.5rem;
     margin-bottom: 1.5rem;
     border-radius: 4px;
 }
-.data-block h4 {
-    margin-top: 0;
-    border-left: none;
-    padding-left: 0;
-}
-.data-block h5 {
-    font-size: 1.2em;
-    color: var(--text-color);
-    margin-top: 0;
-    margin-bottom: 1rem;
-}
-.data-block.animal {
-    border-left: 4px solid #8d6e63; /* 茶色系 */
-}
-.data-block.monster {
-    border-left: 4px solid #b71c1c; /* 赤色系 */
-}
-.data-block dl {
-    margin: 0;
-}
-.data-block dt {
-    font-weight: bold;
-    color: var(--primary-color);
-    float: left;
-    clear: left;
-    width: 80px; /* ラベルの幅を固定 */
-    margin-bottom: 0.5rem;
-}
-.data-block dd {
-    margin-left: 90px; /* ラベルの幅 + 余白 */
-    margin-bottom: 0.5rem;
-}
+.data-block h4, .data-block h5 { margin-top: 0; border-left: none; padding-left: 0; }
+.data-block h5 { font-size: 1.2em; color: var(--text-color); margin-bottom: 1rem; }
+.data-block.animal { border-left: 4px solid var(--animal-color); }
+.data-block.monster { border-left: 4px solid var(--monster-color); }
+.data-block dl { margin: 0; overflow: hidden; }
+.data-block dt { float: left; clear: left; width: 80px; margin-bottom: 0.5rem; color: var(--primary-color); }
+.data-block dd { margin-left: 90px; margin-bottom: 0.5rem; }
 
-/* dlタグの共通スタイル調整 */
-dl dt {
-    font-weight: bold;
-}
-
-/* 4 シナリオセクション */
-
-/* シナリオ概要ボックス */
-/* 4 シナリオセクション */
-
-/* シナリオ概要ボックス */
+/* --- 4. シナリオセクション --- */
 .scenario-outline-box {
     background-color: var(--background-color);
     border: 1px solid var(--border-color);
@@ -500,141 +366,92 @@ dl dt {
     padding: 1.5rem;
     margin: 1.5rem 0;
 }
-.scenario-outline-box dl dt {
-    font-weight: bold;
-    color: var(--primary-color);
-    float: left;
-    clear: left;
-    width: 120px;
-    margin-bottom: 0.5rem;
-}
-.scenario-outline-box dl dd {
-    margin-left: 130px;
-    margin-bottom: 0.5rem;
-}
+.scenario-outline-box dl { overflow: hidden; }
+.scenario-outline-box dt { float: left; clear: left; width: 120px; margin-bottom: 0.5rem; color: var(--primary-color); }
+.scenario-outline-box dd { margin-left: 130px; margin-bottom: 0.5rem; }
 
-/* トレーラーボックス */
-.trailer-box {
-    border: 2px dashed var(--border-color);
-    padding: 1.5rem;
-    margin: 2rem 0;
-    text-align: center;
-}
-.trailer-box h4 {
-    margin-top: 0;
-    border: none;
-    padding: 0;
-}
-.trailer-box hr {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    margin: 1rem 0;
-}
+.trailer-box { border: 2px dashed var(--border-color); padding: 1.5rem; margin: 2rem 0; text-align: center; }
+.trailer-box h4 { margin-top: 0; border: none; padding: 0; }
+.trailer-box hr { border: none; border-top: 1px solid var(--border-color); margin: 1rem 0; }
 
-/* ナレーションボックス */
-.narration-box {
-    background-color: var(--quote-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 1.5rem;
-    margin: 1.5rem 0;
-    font-style: italic;
-}
-.narration-box h4 {
-    font-style: normal;
-    margin-top: 0;
-    border: none;
-    padding: 0;
-}
-.narration-box hr {
-    border: none;
-    border-top: 1px solid var(--border-color);
-    opacity: 0.5;
-    margin: 1rem 0;
-}
+.narration-box { background-color: var(--quote-bg-color); border-radius: 4px; padding: 1.5rem; margin: 1.5rem 0; font-style: italic; }
+.narration-box h4 { font-style: normal; margin-top: 0; border: none; padding: 0; }
+.narration-box hr { border: none; border-top: 1px solid var(--border-color); opacity: 0.5; margin: 1rem 0; }
 
-/* ハンドアウトボックス */
-.handout-box {
-    background-color: var(--surface-color);
-    border: 2px solid var(--primary-color);
-    padding: 1.5rem;
-    margin: 1.5rem 0;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.handout-box h4 {
-    margin-top: 0;
-    border-bottom: 2px solid var(--primary-color);
-    padding-bottom: 0.5rem;
-}
-.handout-box dl dt {
-    font-weight: bold;
-}
+.handout-box { border: 2px solid var(--primary-color); padding: 1.5rem; margin: 1.5rem 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.handout-box h4 { margin-top: 0; border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem; }
 
-/* NPCリスト */
-.npc-list {
-    list-style: none;
-    padding: 0;
-}
-.npc-list li {
-    background: var(--background-color);
-    padding: 1rem 1.5rem;
-    margin-bottom: 1rem;
-    border-radius: 4px;
-    border-left: 4px solid var(--secondary-color);
-}
-.npc-list li:last-child {
-    margin-bottom: 0;
-}
+.npc-list { list-style: none; padding: 0; }
+.npc-list li { background: var(--background-color); padding: 1rem 1.5rem; margin-bottom: 1rem; border-radius: 4px; border-left: 4px solid var(--secondary-color); }
+.npc-list li:last-child { margin-bottom: 0; }
 
-/* シーンごとのボックス */
-.scene-box {
-    border: 1px solid var(--border-color);
-    padding: 1.5rem;
-    margin: 2rem 0;
-    border-radius: 8px;
-}
-.scene-box h4 {
-    margin-top: 0;
-}
+.scene-box { border: 1px solid var(--border-color); padding: 1.5rem; margin: 2rem 0; border-radius: 8px; }
+.scene-box h4 { margin-top: 0; }
 
-/* アクション・選択肢カード */
-.action-card, .choice-card {
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 1rem 1.5rem;
-    margin: 1rem 0;
-    background: var(--background-color);
-}
-.action-card h5, .choice-card h6 {
-    margin-top: 0;
-    font-size: 1.2em;
-}
-.action-card dl dt, .choice-card dl dt {
-    font-weight: bold;
-    color: var(--primary-color);
-}
+.action-card, .choice-card { border: 1px solid var(--border-color); border-radius: 4px; padding: 1rem 1.5rem; margin: 1rem 0; background: var(--background-color); }
+.action-card h5, .choice-card h6 { margin-top: 0; font-size: 1.2em; }
+.action-card dt, .choice-card dt { color: var(--primary-color); }
 
-/* 判定結果カード */
-.result-card {
-    border-left-width: 4px;
-    border-left-style: solid;
-    padding: 1rem 1.5rem;
-    margin: 1rem 0;
-    background: var(--background-color);
-}
-.result-card.success { border-color: #4caf50; } /* 成功: 緑 */
-.result-card.failure { border-color: #f44336; } /* 失敗: 赤 */
-.result-card.critical-failure { border-color: #9c27b0; } /* 大失敗: 紫 */
+.result-card { border-left-width: 4px; border-left-style: solid; padding: 1rem 1.5rem; margin: 1rem 0; background: var(--background-color); }
+.result-card.success { border-color: var(--success-color); }
+.result-card.failure { border-color: var(--failure-color); }
+.result-card.critical-failure { border-color: var(--critical-failure-color); }
 
-/* セリフボックス */
-.dialogue-box {
-    padding: 1.5rem;
-    margin: 1.5rem 0;
-    border-radius: 4px;
-    background: var(--background-color);
-    border: 1px solid var(--border-color);
-}
-.dialogue-box p:first-child {
-    margin-top: 0;
+.dialogue-box { padding: 1.5rem; margin: 1.5rem 0; border-radius: 4px; background: var(--background-color); border: 1px solid var(--border-color); }
+.dialogue-box p:first-child { margin-top: 0; }
+
+
+/* ==========================================================================
+   モバイル表示用のスタイル (@media)
+   ========================================================================== */
+@media (max-width: 768px) {
+    /* --- 基本スタイルの調整 --- */
+    h1 { font-size: 1.8em; }
+    h2 { font-size: 1.5em; }
+    main { padding: 1.5rem; }
+    .container { flex-direction: column; padding: 0; }
+
+    /* --- ハンバーガーメニューの有効化 --- */
+    .menu-toggle-label {
+        display: block;
+        position: fixed;
+        top: 15px;
+        left: 15px;
+        width: 40px;
+        height: 40px;
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        border-radius: 5px;
+        cursor: pointer;
+        z-index: 2000;
+    }
+    .menu-toggle-label span,
+    .menu-toggle-label span::before,
+    .menu-toggle-label span::after {
+        content: ''; display: block; position: absolute; width: 24px; height: 3px;
+        background-color: var(--text-color); border-radius: 2px; left: 50%; margin-left: -12px;
+        transition: transform 0.3s, top 0.3s;
+    }
+    .menu-toggle-label span { top: 50%; margin-top: -1.5px; }
+    .menu-toggle-label span::before { top: -8px; }
+    .menu-toggle-label span::after { top: 8px; }
+
+    header { padding-left: 60px; text-align: left; }
+
+    /* --- サイドバーのメニュー化 --- */
+    .sidebar {
+        position: fixed; top: 0; left: 0; z-index: 1500;
+        width: 280px; height: 100%;
+        background-color: var(--surface-color);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out;
+        padding: 2rem;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+        margin-right: 0; 
+        max-height: 100vh;
+    }
+
+    /* --- 各コンポーネントのモバイル調整 --- */
+    .char-card { grid-template-columns: 1fr; gap: 1.5rem; }
+    .char-image { width: 100%; height: auto; }
 }
