@@ -203,3 +203,368 @@ th {
     h1 { font-size: 1.8em; }
     h2 { font-size: 1.5em; }
 }
+
+/* テンプレートキャラクターセクション */
+.char-card {
+    display: grid;
+    grid-template-columns: 200px 1fr; /* PC表示: 画像エリア(200px)と説明エリアの分割 */
+    gap: 2rem;
+    margin: 3rem 0;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--background-color);
+}
+
+.char-image {
+    width: 200px;
+    background-color: var(--code-bg-color);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-color);
+    opacity: 0.7;
+    aspect-ratio: 1 / 1; /* 画像のアスペクト比を1:1(正方形)に保つ */
+}
+
+/* 実際にimgタグが挿入された場合のスタイル */
+.char-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* コンテナをはみ出さずに画像を埋める */
+    border-radius: 4px;
+}
+
+.char-description h3 {
+    margin-top: 0;
+    font-size: 1.6em;
+}
+
+.char-description h4 {
+    margin-top: 1.5rem;
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 0.5rem;
+    border-left: none; /* h4の左線を消す */
+    padding-left: 0;
+}
+
+.char-lifepath {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 1.5rem;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+.char-lifepath li {
+    background-color: var(--code-bg-color);
+    padding: 0.2rem 0.8rem;
+    border-radius: 15px;
+    font-size: 0.9em;
+}
+
+/* ▼▼▼ モバイル表示用の設定 ▼▼▼ */
+@media (max-width: 768px) {
+    .char-card {
+        grid-template-columns: 1fr; /* レイアウトを縦一列に変更 */
+        gap: 1.5rem;
+    }
+    
+    .char-image {
+        width: 100%; /* ★★★ 画像コンテナの幅を100%に設定 ★★★ */
+        height: auto; /* 高さはアスペクト比に合わせて自動調整 */
+    }
+}
+
+/* 2.2 キャラクターの創造セクション */
+
+/* ステップ表示 */
+.creation-steps {
+    margin: 2rem 0;
+}
+.step-box {
+    background: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--secondary-color);
+    padding: 1rem 1.5rem;
+    border-radius: 4px;
+}
+.step-box h4 {
+    margin: 0 0 0.5rem 0;
+    padding: 0;
+    border: none;
+}
+.step-arrow {
+    text-align: center;
+    font-size: 1.5rem;
+    color: var(--secondary-color);
+    margin: 0.5rem 0;
+}
+
+/* プライムクラスのカード表示 */
+.class-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+.class-card {
+    background: var(--background-color);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+.class-card h5 {
+    margin-top: 0;
+    font-size: 1.3em;
+    color: var(--primary-color);
+}
+.class-card p {
+    font-size: 0.95em;
+    line-height: 1.7;
+}
+.class-card p:last-child {
+    margin-bottom: 0;
+}
+
+/* 計算例・数式ボックス */
+.example-box, .formula-box {
+    background-color: var(--code-bg-color);
+    border: 1px solid var(--border-color);
+    padding: 1rem 1.5rem;
+    margin: 1.5rem 0;
+    border-radius: 4px;
+}
+.example-box h5 {
+    margin-top: 0;
+}
+.example-box pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* テーブルコンテナ（横スクロール対応） */
+.table-container {
+    overflow-x: auto;
+    margin: 1.5rem 0;
+}
+.table-container table {
+    min-width: 600px; /* テーブルが縮みすぎないように最小幅を指定 */
+}
+
+/* アコーディオン */
+.accordion {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+.accordion summary {
+    cursor: pointer;
+    padding: 1rem;
+    font-weight: bold;
+    font-size: 1.1em;
+    background-color: var(--background-color);
+}
+.accordion[open] summary {
+    background-color: var(--code-bg-color);
+    border-bottom: 1px solid var(--border-color);
+}
+.accordion .table-container {
+    margin: 0;
+    padding: 1rem;
+}
+
+/* お祝いボックス */
+.congrats-box {
+    border: 2px solid var(--primary-color);
+    background-color: var(--quote-bg-color);
+    padding: 1rem 2rem;
+    margin: 2rem 0;
+    border-radius: 8px;
+}
+.congrats-box h4 {
+    border: none;
+    padding: 0;
+    margin-top: 0;
+}
+
+/* 3 テラーセクション */
+
+/* 地域・国家・情報カード */
+.region-card, .nation-card, .info-card {
+    border: 1px solid var(--border-color);
+    background-color: var(--background-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 2rem 0;
+}
+.region-card h3, .nation-card h4, .info-card h4 {
+    margin-top: 0;
+    border-left: 4px solid var(--secondary-color);
+    padding-left: 1rem;
+}
+
+/* テラー向けヒントボックス */
+.teller-hint-box {
+    background-color: var(--teller-info-bg);
+    border: 1px solid var(--primary-color);
+    border-left-width: 4px;
+    padding: 1rem 1.5rem;
+    margin: 1.5rem 0;
+    border-radius: 4px;
+}
+
+/* データブロック（魔物など） */
+.data-block {
+    border: 1px solid var(--border-color);
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: 4px;
+}
+.data-block h4 {
+    margin-top: 0;
+    border-left: none;
+    padding-left: 0;
+}
+.data-block h5 {
+    font-size: 1.2em;
+    color: var(--text-color);
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+.data-block.animal {
+    border-left: 4px solid #8d6e63; /* 茶色系 */
+}
+.data-block.monster {
+    border-left: 4px solid #b71c1c; /* 赤色系 */
+}
+.data-block dl {
+    margin: 0;
+}
+.data-block dt {
+    font-weight: bold;
+    color: var(--primary-color);
+    float: left;
+    clear: left;
+    width: 80px; /* ラベルの幅を固定 */
+    margin-bottom: 0.5rem;
+}
+.data-block dd {
+    margin-left: 90px; /* ラベルの幅 + 余白 */
+    margin-bottom: 0.5rem;
+}
+
+/* dlタグの共通スタイル調整 */
+dl dt {
+    font-weight: bold;
+}
+
+/* 4 シナリオセクション */
+
+/* シナリオ概要ボックス */
+.scenario-outline-box {
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--secondary-color);
+    border-radius: 4px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+}
+.scenario-outline-box dl dt {
+    font-weight: bold;
+    color: var(--primary-color);
+    float: left;
+    clear: left;
+    width: 120px;
+    margin-bottom: 0.5rem;
+}
+.scenario-outline-box dl dd {
+    margin-left: 130px;
+    margin-bottom: 0.5rem;
+}
+
+/* トレーラーボックス */
+.trailer-box {
+    border: 2px dashed var(--border-color);
+    padding: 1.5rem;
+    margin: 2rem 0;
+    text-align: center;
+}
+.trailer-box h4 {
+    margin-top: 0;
+    border: none;
+    padding: 0;
+}
+.trailer-box hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 1rem 0;
+}
+
+/* ナレーションボックス */
+.narration-box {
+    background-color: var(--quote-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    font-style: italic;
+}
+.narration-box h4 {
+    font-style: normal;
+    margin-top: 0;
+    border: none;
+    padding: 0;
+}
+.narration-box hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    opacity: 0.5;
+    margin: 1rem 0;
+}
+
+/* ハンドアウトボックス */
+.handout-box {
+    background-color: var(--surface-color);
+    border: 2px solid var(--primary-color);
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.handout-box h4 {
+    margin-top: 0;
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 0.5rem;
+}
+.handout-box dl dt {
+    font-weight: bold;
+}
+
+/* NPCリスト */
+.npc-list {
+    list-style: none;
+    padding: 0;
+}
+.npc-list li {
+    background: var(--background-color);
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    border-left: 4px solid var(--secondary-color);
+}
+.npc-list li:last-child {
+    margin-bottom: 0;
+}
+
+/* シーンごとのボックス */
+.scene-box {
+    border: 1px solid var(--border-color);
+    padding: 1.5rem;
+    margin: 2rem 0;
+    border-radius: 8px;
+}
+.scene-box h4 {
+    margin-top: 0;
+}
