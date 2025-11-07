@@ -64,13 +64,16 @@ const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
     return cost;
 };
 
-// generateTradeRoutes (変更なし)
+/**
+ * ★★★ [改修] 交易路を生成し、プログレスバーを表示する ★★★
+ */
 export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
     const roadPaths = [];
     const routeData = [];
     if (cities.length < 2) return { roadPaths, routeData };
 
-    await addLogMessage(`全${cities.length}都市間の経路を探索しています...`);
+    const progressId = 'trade-route-progress';
+    await addLogMessage(`全${cities.length}都市間の経路を探索しています...`, progressId);
     
     const costFunc = createCostFunction(allHexes, null);
     const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors
@@ -79,6 +82,10 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
     const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
 
     const allEdges = [];
+    const totalPairs = (cities.length * (cities.length - 1)) / 2;
+    let processedPairs = 0;
+    let lastReportedPercent = -1;
+
     for (let i = 0; i < cities.length; i++) {
         for (let j = i + 1; j < cities.length; j++) {
             const city1 = cities[i];
@@ -91,8 +98,23 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
             if (result) {
                 allEdges.push({ from: city1, to: city2, path: result.path, cost: result.cost });
             }
+
+            // プログレスバーの更新
+            processedPairs++;
+            const percent = Math.floor((processedPairs / totalPairs) * 100);
+            if (percent > lastReportedPercent) {
+                 const barWidth = 15;
+                 const filledLength = Math.round((barWidth * percent) / 100);
+                 const bar = '█'.repeat(filledLength) + ' '.repeat(barWidth - filledLength);
+                 // const message = `経路探索中... [${bar}] ${percent}% (${processedPairs}/${totalPairs})`;
+                 const message = `${bar} ${percent}% (${processedPairs}/${totalPairs})`;
+                 await addLogMessage(message, progressId);
+                 lastReportedPercent = percent;
+            }
         }
     }
+
+    await addLogMessage(`経路探索完了。全 ${allEdges.length} 経路を発見しました。`, progressId);
 
     allEdges.sort((a, b) => a.cost - b.cost);
     

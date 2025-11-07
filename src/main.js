@@ -18,15 +18,38 @@ const populationDisplay = document.getElementById('population-display');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function addLogMessage(message) {
+/**
+ * ★★★ [改修] ログメッセージを出力する (IDを指定するとその要素を更新) ★★★
+ * @param {string} message - 表示するメッセージ
+ * @param {string|null} id - メッセージ要素のDOM ID (nullなら新規作成)
+ */
+async function addLogMessage(message, id = null) {
     console.log(message);
-    const entry = document.createElement('p');
-    entry.className = 'log-entry';
-    entry.textContent = `・ ${message}`;
-    logContainer.appendChild(entry);
+    let entry;
+    // IDが指定されていれば、既存の要素を探す
+    if (id) {
+        entry = document.getElementById(id);
+    }
+
+    if (entry) {
+        // 既存の要素があれば、内容を更新する
+        entry.textContent = `・ ${message}`;
+    } else {
+        // なければ新しい要素を作成する
+        entry = document.createElement('p');
+        entry.className = 'log-entry';
+        if (id) {
+            entry.id = id;
+        }
+        entry.textContent = `・ ${message}`;
+        logContainer.appendChild(entry);
+    }
+    
     logContainer.scrollTop = logContainer.scrollHeight;
-    await sleep(20);
+    // プログレスバーの高速な更新のため、ID付きの場合はsleepを短くする
+    await sleep(id ? 1 : 20);
 }
+
 
 async function runWorldGeneration() {
     // --- 1. 大陸生成 (変更なし) ---

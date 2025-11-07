@@ -228,7 +228,7 @@ export function setupUI(allHexes, roadPaths) {
     .attr('x2', d => d.target.cx).attr('y2', d => d.target.cy)
     .attr('stroke', d => {
         switch (d.level) {
-            case 5: return '#a0f'; 
+            case 5: return '#f0f'; 
             case 4: return '#f00'; 
             case 3: return '#f00'; 
             case 2: return '#f00'; 
