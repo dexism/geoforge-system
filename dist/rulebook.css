@@ -67,6 +67,10 @@ h2 { font-size: 1.8em; margin-top: 1.8em; border-left-width: 4px; }
 h3 { font-size: 1.4em; margin-top: 1.5em; border-left-width: 3px; }
 h4 { font-size: 1.2em; }
 
+p {
+  text-indent: 1em; /* 1文字分下げる */
+}
+
 a {
     color: var(--link-color);
     text-decoration: none;
@@ -446,7 +450,6 @@ footer {
         transform: translateX(-100%);
         transition: transform 0.3s ease-in-out;
         padding: 2rem;
-        padding-top: 20px;
         box-shadow: 2px 0 5px rgba(0,0,0,0.2);
         margin-right: 0; 
         max-height: 100vh;
