@@ -1,5 +1,5 @@
 // ================================================================
-// GeoForge System - 経済シミュレーションモジュール (v1.1 - 集計機能追加)
+// GeoForge System - 経済シミュレーションモジュール (v1.2 - 新集計ロジック)
 // ================================================================
 
 import * as config from './config.js';
@@ -16,7 +16,6 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         p.surplus = {};
         p.shortage = {};
         p.cultivatedArea = 0;
-        // ★★★ [新規] 作物ごとの生産量オブジェクトを初期化 ★★★
         p.production = {};
         
         if (p.population <= 0 || p.isWater) {
@@ -25,8 +24,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 
         const settlementType = p.settlement ? p.settlement : '散居';
         const settlementInfo = config.SETTLEMENT_PARAMS[settlementType];
-        const annualConsumptionPerPerson = settlementInfo.consumption_t_per_person;
-        const totalDemand = p.population * annualConsumptionPerPerson;
+        const totalDemand = p.population * settlementInfo.consumption_t_per_person;
 
         let mainCrops = {};
         const climate = p.climateZone;
@@ -60,7 +58,6 @@ export async function simulateEconomy(allHexes, addLogMessage) {
             const crop = config.CROP_DATA[cropName];
             const cropArea = finalCultivationArea * mainCrops[cropName];
             const cropYield = cropArea * crop.yield * yieldFluctuation;
-            // ★★★ [新規] 作物ごとの生産量を記録 ★★★
             p.production[cropName] = cropYield;
             totalSupply += cropYield;
         });
@@ -87,7 +84,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 }
 
 /**
- * ★★★ [新規] 主要都市の庇護下にある領土の各種データを集計する関数 ★★★
+ * ★★★ [改訂] 主要都市の庇護下にある領土の各種データを集計する関数 ★★★
  * @param {Array<object>} allHexes - 経済シミュレーション後の全ヘックスデータ
  * @param {Function} addLogMessage - ログ出力用の関数
  * @returns {Array<object>} - 集計データが追加された全ヘックスデータ
@@ -98,21 +95,23 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
     const territoryHubs = allHexes.filter(h => ['首都', '都市', '領都'].includes(h.properties.settlement));
     const territoryDataMap = new Map();
 
+    // 1. 各ハブのデータオブジェクトを初期化
     territoryHubs.forEach(hub => {
         const hubIndex = getIndex(hub.col, hub.row);
         territoryDataMap.set(hubIndex, {
             population: 0,
             cultivatedArea: 0,
             production: {},
-            // ★★★ [新規] 配下の集落数をカウントするためのオブジェクトを初期化 ★★★
-            settlementCounts: {
-                '都市': 0, '領都': 0, '街': 0, '町': 0, '村': 0
-            }
+            settlementCounts: { '都市': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
         });
     });
 
+    // 2. 全ヘックスをスキャンして、2種類の集計を同時に行う
     allHexes.forEach(h => {
         const p = h.properties;
+
+        // --- 集計A: 領域全体の合計値（人口、生産量など）---
+        // territoryId（最終的な支配者）を基に、孫以降もすべて含めて集計
         const terrId = p.territoryId;
         if (terrId != null && territoryDataMap.has(terrId)) {
             const data = territoryDataMap.get(terrId);
@@ -121,15 +120,21 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
             for (const crop in p.production) {
                 data.production[crop] = (data.production[crop] || 0) + p.production[crop];
             }
-            // ★★★ [新規] 中枢自身以外の集落をカウントアップ ★★★
-            if (p.settlement && terrId !== getIndex(h.col, h.row)) {
-                if (data.settlementCounts[p.settlement] !== undefined) {
-                    data.settlementCounts[p.settlement]++;
-                }
+        }
+
+        // --- 集計B: 直轄の集落数 ---
+        // parentHexId（直接の親）を基に、子集落のみをカウント
+        const parentId = p.parentHexId;
+        if (parentId != null && territoryDataMap.has(parentId)) {
+            const parentData = territoryDataMap.get(parentId);
+            const settlementType = p.settlement;
+            if (settlementType && parentData.settlementCounts[settlementType] !== undefined) {
+                parentData.settlementCounts[settlementType]++;
             }
         }
     });
 
+    // 3. 集計結果を各ハブのプロパティに格納
     territoryHubs.forEach(hub => {
         const hubIndex = getIndex(hub.col, hub.row);
         hub.properties.territoryData = territoryDataMap.get(hubIndex);
