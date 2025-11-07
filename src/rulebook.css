@@ -463,6 +463,9 @@ dl dt {
 /* 4 シナリオセクション */
 
 /* シナリオ概要ボックス */
+/* 4 シナリオセクション */
+
+/* シナリオ概要ボックス */
 .scenario-outline-box {
     background-color: var(--background-color);
     border: 1px solid var(--border-color);
@@ -566,5 +569,46 @@ dl dt {
     border-radius: 8px;
 }
 .scene-box h4 {
+    margin-top: 0;
+}
+
+/* アクション・選択肢カード */
+.action-card, .choice-card {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    background: var(--background-color);
+}
+.action-card h5, .choice-card h6 {
+    margin-top: 0;
+    font-size: 1.2em;
+}
+.action-card dl dt, .choice-card dl dt {
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+/* 判定結果カード */
+.result-card {
+    border-left-width: 4px;
+    border-left-style: solid;
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    background: var(--background-color);
+}
+.result-card.success { border-color: #4caf50; } /* 成功: 緑 */
+.result-card.failure { border-color: #f44336; } /* 失敗: 赤 */
+.result-card.critical-failure { border-color: #9c27b0; } /* 大失敗: 紫 */
+
+/* セリフボックス */
+.dialogue-box {
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    border-radius: 4px;
+    background: var(--background-color);
+    border: 1px solid var(--border-color);
+}
+.dialogue-box p:first-child {
     margin-top: 0;
 }
