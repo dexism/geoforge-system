@@ -235,7 +235,8 @@ export async function generateRoads(allHexes, addLogMessage) {
     
     const applyFeederRoadPath = (path, level, traffic) => {
         if (!path || path.length <= 1) return;
-        const actualPath = path.slice(0, -1);
+        // const actualPath = path.slice(0, -1);
+        const actualPath = path;
         actualPath.forEach(node => {
             const hex = allHexes[getIndex(node.x, node.y)];
             if (hex.properties.roadLevel < level) hex.properties.roadLevel = level;
