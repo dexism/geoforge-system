@@ -71,7 +71,7 @@ p {
   text-indent: 1em; /* 1文字分下げる */
 }
 
-strong {
+strong, b {
     font-weight: bold;
     color: var(--primary-color);
 }
