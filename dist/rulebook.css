@@ -190,18 +190,44 @@ th {
     .container {
         flex-direction: column;
     }
+
     .sidebar {
-        position: static;
-        flex: 1 1 auto;
+        /* 画面上部に固定するための設定 */
+        position: sticky;
+        top: 0;
+        z-index: 1000; /* 他の要素より手前に表示 */
+        
+        /* 見た目の調整 */
+        background-color: var(--surface-color);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+        border-bottom: 1px solid var(--border-color);
         margin-right: 0;
-        margin-bottom: 2rem;
-        max-height: none;
+        margin-bottom: 2rem; /* mainとの間に余白を確保 */
+
+        /* 高さの調整 */
+        max-height: 50vh; /* メニューが開いたときに画面を覆いすぎないよう高さを制限 */
+        overflow-y: auto; /* 高さを超えた場合はメニュー内をスクロール可能に */
+
+        /* 既存のスタイル（変更なし） */
+        flex: 1 1 auto;
     }
+
     main {
-        padding: 1rem;
+        padding: 1.5rem;
     }
+    
     h1 { font-size: 1.8em; }
     h2 { font-size: 1.5em; }
+    
+    /* ↓テンプレートキャラクターのレイアウトもスマホ表示に最適化 */
+    .char-card {
+        grid-template-columns: 1fr; /* 縦並びにする */
+        gap: 1.5rem;
+    }
+    .char-image {
+        width: 100%;
+        height: auto;
+    }
 }
 
 /* テンプレートキャラクターセクション */
