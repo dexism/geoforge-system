@@ -128,8 +128,8 @@ function generateWaterSystems(allHexes) {
         const isRainyMountain = h.properties.elevation > 1500 && h.properties.precipitation > 0.5;
         const isHighPeak = h.properties.elevation > 2000;
         let probability = 0;
-        if (isRainyMountain) probability = 0.20;
-        else if (isHighPeak) probability = 0.20;
+        if (isRainyMountain) probability = 0.25;
+        else if (isHighPeak) probability = 0.10;
         return Math.random() < probability;
     });
 
@@ -167,6 +167,58 @@ function generateWaterSystems(allHexes) {
     });
 }
 
+/**
+ * ★★★ [新規] 第2.5パス：稜線を生成する ★★★
+ * @param {Array<object>} allHexes - 全ヘックスのデータ
+ */
+function generateRidgeLines(allHexes) {
+    // 1. 稜線の起点となるヘックスを選定
+    const ridgeSources = allHexes.filter(h => {
+        const p = h.properties;
+        // 水域と、川が流れているヘックス（水系）は除外
+        if (p.isWater || p.flow > 0) return false;
+        
+        const elevation = p.elevation;
+        // 標高1000m～6000mの陸地ヘックスを候補とする
+        const isCandidate = elevation >= 1000 && elevation < 6000;
+        if (!isCandidate) return false;
+
+        // その中から30%をランダムで選ぶ
+        return Math.random() < 0.3;
+    });
+
+    // 2. 全ヘックスのridgeFlowプロパティを初期化
+    allHexes.forEach(h => h.properties.ridgeFlow = 0);
+
+    // 3. 各起点から、標高が最も高い隣人に向かって探索
+    ridgeSources.forEach(source => {
+        let currentHex = source;
+        for (let i = 0; i < 50; i++) { // 無限ループ防止
+            // 現在地のridgeFlowをインクリメント
+            currentHex.properties.ridgeFlow += 1;
+            
+            // 隣接ヘックスの中で、最も標高が高いものを探す
+            let highestNeighbor = null;
+            let maxElevation = currentHex.properties.elevation;
+            
+            currentHex.neighbors.map(i => allHexes[i]).forEach(n => {
+                // 自分より標高が高い隣人のみ対象
+                if (n.properties.elevation > maxElevation) {
+                    maxElevation = n.properties.elevation;
+                    highestNeighbor = n;
+                }
+            });
+
+            // より高い隣人が見つかれば、そちらへ移動
+            if (highestNeighbor) {
+                currentHex = highestNeighbor;
+            } else {
+                // 見つからなければ（＝尾根の頂上）、探索終了
+                break;
+            }
+        }
+    });
+}
 
 /**
  * 第3パス：最終的なプロパティ（植生、産業ポテンシャル）を計算する
@@ -356,6 +408,10 @@ export async function generateContinent(addLogMessage) {
     // パス2：水系を生成
     await addLogMessage("水系と河川を配置しています...");
     generateWaterSystems(allHexes);
+
+    // ★★★ [新規] パス2.5：稜線を生成 ★★★
+    await addLogMessage("山系の稜線を計算しています...");
+    generateRidgeLines(allHexes);
 
     // パス3：最終的なプロパティを計算
     await addLogMessage("気候と植生を計算しています...");

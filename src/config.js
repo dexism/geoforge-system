@@ -16,7 +16,7 @@ export const r = 20; // 描画用のヘックス半径 (pixel)
 // ■ 地形生成パラメータ
 // ----------------------------------------------------------------
 export const NOISE_SCALE =               0.05; 
-export const LAND_BIAS =                 0.7; 
+export const LAND_BIAS =                 0.8; 
 export const ELEVATION_PEAK_FACTOR =     4.0; 
 export const CONTINENT_FALLOFF_FACTOR =  5.0;
 export const LAKE_THRESHOLD_PLAINS =    -0.90;

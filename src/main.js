@@ -13,7 +13,9 @@ import { setupUI } from './ui.js';
 
 const loadingOverlay = document.getElementById('loading-overlay');
 const logContainer = document.getElementById('loading-log');
-const uiContainer = document.querySelector('.ui-container');
+const sidebar = document.querySelector('.sidebar');
+const menuToggle = document.querySelector('.menu-toggle-label');
+// const uiContainer = document.querySelector('.ui-container');
 const populationDisplay = document.getElementById('population-display');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -79,7 +81,12 @@ async function runWorldGeneration() {
     loadingOverlay.style.opacity = '0';
     populationDisplay.textContent = `総人口: ${totalPopulation.toLocaleString()}人`;
     populationDisplay.style.display = 'block';
-    uiContainer.style.display = 'block';
+    // uiContainer.style.display = 'block';
+
+    // ★★★ [変更] サイドバーとメニューボタンを表示する ★★★
+    sidebar.style.display = 'block';
+    menuToggle.style.display = 'flex'; // SP用のハンバーガーメニューボタン
+
     setTimeout(() => {
         loadingOverlay.style.display = 'none';
     }, 500);

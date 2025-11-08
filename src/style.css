@@ -1,3 +1,10 @@
+:root {
+    --primary-color: #3498db;
+    --sidebar-width: 150px;
+    --sidebar-bg: rgba(10, 20, 40, 0.9);
+    --text-color: #e0e0e0;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -5,32 +12,142 @@ html, body {
   background-color: #235;
   font-family: sans-serif;
   font-size: 1.0rem;
-}
-/* ================================
-   SP対応 (画面幅768px以下)
-================================ */
-@media screen and (max-width: 768px) {
-  html, body {
-    font-size: 1.0rem;
-  }
+  color: var(--text-color);
 }
 
 svg {
-  width: 100vw;
-  height: 100vh;
-}
-
-.hex {
-  stroke: #0008;
-  stroke-width: 1;
+  display: block; /* For main-content to fill height */
+  width: 100%;
+  height: 100%;
 }
 
 button {
   font-weight: bold;
   cursor: pointer;
+  width: 100%;
+  padding: 8px 12px;
+  background-color: #445;
+  color: var(--text-color);
+  border: 1px solid #667;
+  border-radius: 4px;
+  text-align: left;
+  margin-bottom: 5px;
+}
+button:hover {
+    background-color: #556;
 }
 
-/* ローディング画面の全体設定 */
+/* --- 全体レイアウト --- */
+.container {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+}
+.main-content {
+    flex-grow: 1;
+    height: 100vh;
+}
+
+/* --- サイドバー --- */
+.sidebar {
+    flex: 0 0 var(--sidebar-width);
+    padding: 1rem;
+    background-color: var(--sidebar-bg);
+    border-right: 1px solid #999;
+    max-height: 100vh;
+    overflow-y: auto;
+    display: none; /* JSで表示を切り替える */
+}
+.sidebar h3 { 
+  margin-top: 0; 
+  margin-left: 50px;
+}
+.sidebar ul { list-style: none; padding: 0; margin: 0.5rem 0; }
+.sidebar ul li { margin-bottom: 0.2rem; }
+.sidebar details { margin-bottom: 1rem; }
+.sidebar summary { cursor: pointer; font-weight: bold; padding: 0.2rem 0; }
+.sidebar details[open] summary { color: var(--primary-color); }
+
+
+/* --- ハンバーガーメニュー --- */
+.menu-toggle-label {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 30; /* サイドバーより手前 */
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    background-color: var(--sidebar-bg);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.menu-toggle-label span,
+.menu-toggle-label span::before,
+.menu-toggle-label span::after {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 3px;
+    background-color: #fff;
+    border-radius: 2px;
+    transition: all 0.3s;
+}
+.menu-toggle-label span::before { top: -8px; }
+.menu-toggle-label span::after { top: 8px; }
+.menu-toggle-checkbox {
+    display: none;
+}
+.overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #0008;
+    z-index: 15;
+}
+
+/* メニュー開閉時の動作 */
+.menu-toggle-checkbox:checked + .menu-toggle-label {
+    /* left: calc(var(--sidebar-width) + 10px); */
+}
+.menu-toggle-checkbox:checked + .menu-toggle-label span { transform: rotate(45deg); }
+.menu-toggle-checkbox:checked + .menu-toggle-label span::before { top: 0; transform: rotate(0); }
+.menu-toggle-checkbox:checked + .menu-toggle-label span::after { top: 0; transform: rotate(90deg); }
+.menu-toggle-checkbox:checked ~ .container .sidebar {
+    transform: translateX(0);
+}
+.menu-toggle-checkbox:checked ~ .overlay { display: block; }
+
+/* PC (幅769px以上) では常にサイドバーを表示 */
+@media screen and (min-width: 769px) {
+    .menu-toggle-label, .overlay {
+        display: none; /* PCではハンバーガーメニュー不要 */
+    }
+    .sidebar {
+        display: block; /* 常に表示 */
+    }
+}
+
+/* SP (幅768px以下) のスタイル */
+@media screen and (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        z-index: 20;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-out;
+    }
+}
+
+
+/* --- ローディング画面 (変更なし) --- */
 #loading-overlay {
   position: absolute;
   top: 0;
@@ -160,7 +277,7 @@ button {
   max-width: 90vw; /* スマホ画面では幅を可変に */
   max-height: 90vh; /* 高くなりすぎないように制限 */
   background-color: rgba(10, 20, 40, 0.95);
-  color: #e0e0e0;
+  color: #eee;
   border: 1px solid #999;
   border-radius: 8px;
   z-index: 20; /* UIボタンより手前に表示 */
@@ -198,6 +315,7 @@ button {
   padding: 0 5px;
   cursor: pointer;
   opacity: 0.7;
+text-align: right;
 }
 #info-close-btn:hover {
   opacity: 1;

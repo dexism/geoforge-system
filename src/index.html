@@ -2,43 +2,72 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>GeoForge System - World Map v1.6.14</title>
+  <title>GeoForge System - World Map v1.7.2</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <script src="//accaii.com/geoforge/script.js" async></script><noscript><img src="//accaii.com/geoforge/script?guid=on"></noscript>
   <div id="loading-overlay">
     <div class="loading-content">
-      <h1 id="loading-title">GeoForge SYSTEM v1.6.14<br>世界を創造しています！</h1>
+      <h1 id="loading-title">GeoForge SYSTEM v1.7.2<br>世界を創造しています！</h1>
       <div id="loading-log"></div>
     </div>
   </div>
 
-  <div class="ui-container">
-    <button id="toggleManaOverlay">龍脈表示</button>
-    <button id="toggleClimateZoneOverlay">気候帯表示</button>
-    <button id="togglePrecipOverlay">降水量表示</button>
-    <button id="toggleTempOverlay">気温表示</button>
-    <button id="toggleElevationOverlay">土地利用非表示</button>
-    <!-- ★★★ 以下を追記 ★★★ -->
-    <hr> <!-- 区切り線 -->
-    <button id="toggleAgriOverlay">農業</button>
-    <button id="toggleForestOverlay">林業</button>
-    <button id="toggleMiningOverlay">鉱業</button>
-    <button id="toggleFishingOverlay">漁業</button>
-    <hr>
-    <button id="togglePopulationOverlay">人口分布</button>
-    <button id="toggleTerritoryOverlay">領地表示</button>
-    <button id="toggleWhiteMapOverlay">白地図表示</button>
+  <!-- ★★★ ここから全面的に新しいUI構造に変更 ★★★ -->
+  <input type="checkbox" id="menu-toggle" class="menu-toggle-checkbox">
+  <label for="menu-toggle" class="menu-toggle-label">
+      <span></span>
+  </label>
+  <div class="overlay"></div>
+
+  <div class="container">
+      <aside class="sidebar">
+          <h3>表示切替</h3>
+          
+          <details open>
+              <summary>オーバーレイ</summary>
+              <ul>
+                  <li><button id="toggleWhiteMapOverlay">白地図表示</button></li>
+                  <li><button id="toggleRidgeWaterSystemOverlay">稜線水系図</button></li>
+                  <li><button id="toggleElevationOverlay">土地利用消去</button></li>
+                  <li><button id="toggleTerritoryOverlay">領地表示</button></li>
+              </ul>
+          </details>
+
+          <details>
+              <summary>地理情報</summary>
+              <ul>
+                  <li><button id="toggleClimateZoneOverlay">気候帯表示</button></li>
+                  <li><button id="toggleTempOverlay">気温表示</button></li>
+                  <li><button id="togglePrecipOverlay">降水量表示</button></li>
+              </ul>
+          </details>
+          
+          <details>
+              <summary>産業・資源</summary>
+              <ul>
+                  <li><button id="toggleManaOverlay">龍脈表示</button></li>
+                  <li><button id="togglePopulationOverlay">人口</button></li>
+                  <li><button id="toggleAgriOverlay">農業</button></li>
+                  <li><button id="toggleForestOverlay">林業</button></li>
+                  <li><button id="toggleMiningOverlay">鉱業</button></li>
+                  <li><button id="toggleFishingOverlay">漁業</button></li>
+              </ul>
+          </details>
+      </aside>
+
+      <main class="main-content">
+          <svg id="hexmap"></svg>
+      </main>
   </div>
+  <!-- ★★★ UI構造の変更ここまで ★★★ -->
   
   <div id="population-display"></div>
 
-  <svg id="hexmap"></svg>
-  
   <div id="info-window" class="hidden">
     <div class="info-window-header">
-      <span id="info-coord"></span>
+      <span id="info-coord">Information</span>
       <button id="info-close-btn" title="閉じる">×</button>
     </div>
     <div id="info-window-content">

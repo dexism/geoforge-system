@@ -99,6 +99,36 @@ export function setupUI(allHexes, roadPaths) {
         }
     });
 
+    // ★★★ [新規] 稜線描画のためのデータ前処理 ★★★
+    hexes.forEach(h => {
+        // 稜線がどこに向かうか（最も標高が高い隣人）のインデックスを計算
+        let highestNeighborIndex = -1;
+        if (h.properties.ridgeFlow > 0 && !h.properties.isWater) {
+            let highestNeighbor = null;
+            let maxElevation = h.properties.elevation;
+            h.neighbors.map(i => hexes[i]).forEach(n => {
+                if (n.properties.elevation > maxElevation) {
+                    maxElevation = n.properties.elevation;
+                    highestNeighbor = n;
+                }
+            });
+            if (highestNeighbor) {
+                highestNeighborIndex = highestNeighbor.index;
+            }
+        }
+        h.ridgeUpstreamIndex = highestNeighborIndex;
+    });
+    // 逆引きマップを作成
+    hexes.forEach(h => h.downstreamRidgeNeighbors = []);
+    hexes.forEach(sourceHex => {
+        if (sourceHex.ridgeUpstreamIndex !== -1) {
+            const targetHex = hexes[sourceHex.ridgeUpstreamIndex];
+            if (targetHex) {
+                targetHex.downstreamRidgeNeighbors.push(sourceHex);
+            }
+        }
+    });
+
     function getSharedEdgeMidpoint(hex1, hex2) {
         if (!hex1 || !hex2) return null;
         const commonPoints = [];
@@ -143,6 +173,7 @@ export function setupUI(allHexes, roadPaths) {
     const fishingOverlayLayer = createLayer('fishing-overlay', false);          // 漁業
     const populationOverlayLayer = createLayer('population-overlay', false);    // 人口
     const territoryOverlayLayer = createLayer('territory-overlay', false);      // 領土
+    const ridgeWaterSystemLayer = createLayer('ridge-water-system', false);     // 稜線水系
     const highlightOverlayLayer = createLayer('highlight-overlay');             // ハイライト
     const borderLayer = createLayer('border');                                  // 国境
     const roadLayer = createLayer('road');                                      // 道路
@@ -239,6 +270,29 @@ export function setupUI(allHexes, roadPaths) {
         }
     });
     
+    // 3c-2. 稜線部分 (茶色)
+    const ridgeSegmentsData = [];
+    hexes.filter(d => d.properties.ridgeFlow > 0 && !d.properties.isWater).forEach(d => {
+        const upstreamHex = d.ridgeUpstreamIndex !== -1 ? hexes[d.ridgeUpstreamIndex] : null;
+        let endPoint = upstreamHex ? getSharedEdgeMidpoint(d, upstreamHex) : [d.cx, d.cy];
+        if (!endPoint) endPoint = [d.cx, d.cy];
+
+        const downstreamRidgeNeighbors = d.downstreamRidgeNeighbors.filter(n => !n.properties.isWater);
+
+        if (downstreamRidgeNeighbors.length === 0) {
+            const startPoint = [d.cx, d.cy];
+            ridgeSegmentsData.push({ start: startPoint, end: endPoint, flow: d.properties.ridgeFlow });
+        } else {
+            downstreamRidgeNeighbors.forEach(downstreamHex => {
+                const startPoint = getSharedEdgeMidpoint(d, downstreamHex);
+                if (startPoint) {
+                    ridgeSegmentsData.push({ start: startPoint, end: endPoint, flow: downstreamHex.properties.ridgeFlow });
+                }
+            });
+        }
+    });
+
+    // 通常の河川レイヤー描画
     riverLayer.selectAll('.river-segment')
         .data(riverSegmentsData)
         .enter().append('line')
@@ -252,6 +306,31 @@ export function setupUI(allHexes, roadPaths) {
         .attr('stroke-linecap', 'round')
         .style('pointer-events', 'none');
 
+    // ★★★ [新規] 稜線水系図レイヤーの描画 ★★★
+    // 3c-1. 水系部分 (青)
+    ridgeWaterSystemLayer.selectAll('.rws-water-hex')
+        .data(hexes.filter(d => d.properties.isWater))
+        .enter().append('polygon')
+        .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+        .attr('fill', '#0077be'); // 鮮やかな青
+    
+    ridgeWaterSystemLayer.selectAll('.rws-river-segment')
+        .data(riverSegmentsData) // 既存の重複排除済み河川データを利用
+        .enter().append('line')
+        .attr('x1', d => d.start[0]).attr('y1', d => d.start[1])
+        .attr('x2', d => d.end[0]).attr('y2', d => d.end[1])
+        .attr('stroke', '#07c')
+        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
+        .attr('stroke-linecap', 'round');
+
+    ridgeWaterSystemLayer.selectAll('.rws-ridge-segment')
+        .data(ridgeSegmentsData)
+        .enter().append('line')
+        .attr('x1', d => d.start[0]).attr('y1', d => d.start[1])
+        .attr('x2', d => d.end[0]).attr('y2', d => d.end[1])
+        .attr('stroke', '#a00') // 茶色 (SaddleBrown)
+        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 1.5, config.r * 0.8)) // 川より少し細めに
+        .attr('stroke-linecap', 'round');
 
     // 3d. 積雪レイヤー (変更なし)
     snowLayer.selectAll('.snow-hex').data(hexes.filter(d => d.properties.hasSnow)).enter().append('polygon')
@@ -549,7 +628,7 @@ export function setupUI(allHexes, roadPaths) {
     }
     
     function updateInfoWindow(d) {
-        infoCoord.textContent = `E${String(d.x).padStart(2, '0')} - N${String(d.y).padStart(2, '0')}`;
+        // infoCoord.textContent = `E${String(d.x).padStart(2, '0')} - N${String(d.y).padStart(2, '0')}`;
         infoContent.textContent = getInfoText(d);
         infoWindow.classList.remove('hidden');
     }
@@ -677,6 +756,11 @@ export function setupUI(allHexes, roadPaths) {
         
         // ★★★ [変更] 集落レイヤーは常に表示されるので、操作は不要 ★★★
         // これにより、白地図の上にも集落が表示される
+    });
+
+    // ★★★ [新規] 稜線水系図の切り替えイベントハンドラ ★★★
+    d3.select('#toggleRidgeWaterSystemOverlay').on('click', function() {
+        toggleLayerVisibility('ridge-water-system', this, '稜線水系図', '通常表示');
     });
 
     const targetHex = hexes.find(h => h.x === 50 && h.y === 43);
