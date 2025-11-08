@@ -229,18 +229,17 @@ export async function generateCivilization(allHexes, addLogMessage) {
     const villages = allHexes.filter(h => h.properties.settlement === '村');
     
     await addLogMessage("街から主要都市へ街道を敷設しています...");
-    const streetRoads = await generateFeederRoads(streets, hubs, allHexes, '街');
+    const streetRoads = await generateFeederRoads(streets, hubs, allHexes, '街', addLogMessage);
     allRoadPaths.push(...streetRoads);
 
     await addLogMessage("町から街や都市へ町道を敷設しています...");
-    const townRoads = await generateFeederRoads(towns, [...hubs, ...streets], allHexes, '町');
+    const townRoads = await generateFeederRoads(towns, [...hubs, ...streets], allHexes, '町', addLogMessage);
     allRoadPaths.push(...townRoads);
 
     await addLogMessage("村から上位の集落へ村道を敷設しています...");
-    const villageRoads = await generateFeederRoads(villages, [...hubs, ...streets, ...towns], allHexes, '村');
+    const villageRoads = await generateFeederRoads(villages, [...hubs, ...streets, ...towns], allHexes, '村', addLogMessage);
     allRoadPaths.push(...villageRoads);
 
-    // nationIdの伝播
     await addLogMessage("各集落の所属を確定させています...");
     propagateNationId(allHexes, hubs);
 
@@ -250,8 +249,6 @@ export async function generateCivilization(allHexes, addLogMessage) {
     return { allHexes, roadPaths: allRoadPaths };
 }
 
-
-// determineTerritories は変更ありません
 export async function determineTerritories(allHexes, addLogMessage) {
     await addLogMessage("国家の最終的な領土を確定させています...");
 

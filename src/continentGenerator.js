@@ -164,6 +164,19 @@ function calculateFinalProperties(allHexes) {
         const nx = col * config.NOISE_SCALE;
         const ny = row * config.NOISE_SCALE;
 
+        // ★★★ [新規] 標高から地形タイプを決定 ★★★
+        if (isWater) {
+            properties.terrainType = '水域';
+        } else if (elevation >= config.TERRAIN_ELEVATION.MOUNTAIN_PEAK) {
+            properties.terrainType = '山岳';
+        } else if (elevation >= config.TERRAIN_ELEVATION.MOUNTAIN) {
+            properties.terrainType = '山地';
+        } else if (elevation >= config.TERRAIN_ELEVATION.HILLS) {
+            properties.terrainType = '丘陵';
+        } else {
+            properties.terrainType = '平地';
+        }
+
         // 沖積平野フラグ
         properties.isAlluvial = properties.flow > 0 && !isWater && elevation < 4000;
         

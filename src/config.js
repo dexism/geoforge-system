@@ -27,6 +27,13 @@ export const lakeThresholdScale = d3.scaleLinear()
     .range([LAKE_THRESHOLD_PLAINS, LAKE_THRESHOLD_MOUNTAINS])
     .clamp(true);
 
+// ★★★ [新規] 地形分類のための標高しきい値 ★★★
+export const TERRAIN_ELEVATION = {
+    MOUNTAIN_PEAK: 3000, // これ以上は「山岳」
+    MOUNTAIN: 1500,      // これ以上は「山地」
+    HILLS: 500           // これ以上は「丘陵」
+};
+
 // ----------------------------------------------------------------
 // ■ 気候・植生関連の定義
 // ----------------------------------------------------------------
@@ -99,8 +106,15 @@ export const agriColor = d3.scaleSequential(d3.interpolateGreens).domain([0, 1])
 export const forestColor = d3.scaleSequential(d3.interpolateYlGn).domain([0, 1]);
 export const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 1]);
 export const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]);
-// ★★★ [変更] d3.scaleLinear から d3.scaleLog に変更し、ドメインの最小値を 1 にする ★★★
 export const populationColor = d3.scaleLog().domain([1, 150000]).range(["black", "red"]).clamp(true);
+
+// ★★★ [新規] 白地図モード用の配色 ★★★
+export const WHITE_MAP_COLORS = {
+    LAND:         '#fff', // 平地・丘陵
+    MOUNTAIN:     '#fee', // 山地
+    MOUNTAIN_PEAK:'#edd', // 山岳
+    WATER:        '#bbb', // 海・湖・川
+};
 
 // ----------------------------------------------------------------
 // ■ 文明生成パラメータ
@@ -159,4 +173,53 @@ export const SETTLEMENT_PARAMS = {
     '町':   { labor_rate: 0.70, consumption_t_per_person: 0.21, infra_coeff: 0.95, head_cap_base: 0.40, head_cap_bonus: 0.0 },
     '村':   { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.9, head_cap_base: 0.60, head_cap_bonus: 0.0 },
     '散居': { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.85, head_cap_base: 0.50, head_cap_bonus: 0.0 }
+};
+
+// ■ 道のり計算用の地形乗数
+export const TERRAIN_MULTIPLIERS = {
+    '平地': 1.4,
+    '森林': 1.6,
+    '密林': 1.8,
+    '丘陵': 1.8,
+    '山地': 2.0,
+    '山岳': 2.5,
+    RIVER_BONUS: 0.3 // 河川がある場合の追加乗数
+};
+
+// ■ 道のり計算用の道路整備乗数
+export const ROAD_MULTIPLIERS = {
+    5: 0.8,  // 交易路
+    4: 0.9,  // 街道
+    3: 0.95, // 町道
+    2: 1.0,  // 村道
+    1: 1.0   // 村道以下
+};
+
+// ★★★ [新規] 輸送・移動パラメータ ★★★
+export const WAGON_PARAMS = {
+    BASE_SPEED_KMH: 3.5,            // 荷馬車の基準速度 (km/h)
+    OPERATING_HOURS_PER_DAY: 7.0,   // 1日の基準運行時間 (h)
+
+    // 道路レベルごとの速度乗数
+    ROAD_SPEED_MULTIPLIERS: {
+        5: 1.25, // 交易路
+        4: 1.15, // 街道
+        3: 1.05, // 町道
+        2: 1.0,  // 村道
+        1: 1.0,  // 整備度の低い道
+        0: 0.3,  // 未整備（道がない場所を無理に進む場合など）
+    },
+
+    // 地形ごとの速度係数（減速率）
+    TERRAIN_SPEED_MULTIPLIERS: {
+        '山岳': 0.6,
+        '山地': 0.7,
+        '森林': 0.75, // 「森林」
+        '密林': 0.8,
+        '丘陵': 0.8,
+        '平地': 1.0, // 「平地」「疎林」
+    },
+
+    // ★★★ [新規] 積雪時の追加速度係数 ★★★
+    SNOW_SPEED_MULTIPLIER: 0.7
 };

@@ -129,6 +129,7 @@ export function setupUI(allHexes, roadPaths) {
 
     const terrainLayer = createLayer('terrain');
     const snowLayer = createLayer('snow');
+    const whiteMapOverlayLayer = createLayer('white-map-overlay', false);
     const elevationOverlayLayer = createLayer('elevation-overlay', false);
     const riverLayer = createLayer('river');
     const precipOverlayLayer = createLayer('precip-overlay', false);
@@ -143,6 +144,7 @@ export function setupUI(allHexes, roadPaths) {
     const territoryOverlayLayer = createLayer('territory-overlay', false);
     const highlightOverlayLayer = createLayer('highlight-overlay');
     const borderLayer = createLayer('border');
+    const settlementLayer = createLayer('settlement');
     const roadLayer = createLayer('road');
     const labelLayer = createLayer('labels');
     const interactionLayer = createLayer('interaction');
@@ -153,13 +155,6 @@ export function setupUI(allHexes, roadPaths) {
     .attr('class', 'hex')
     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
     .attr('fill', d => {
-        switch (d.properties.settlement) {
-            case '首都': return '#f0f';
-            case '都市': return '#f00';
-            case '領都': return '#f60';
-            case '街':   return '#fa0';
-            case '町':   return '#ff0';
-        }
         const veg = d.properties.vegetation;
         if (config.TERRAIN_COLORS[veg]) return config.TERRAIN_COLORS[veg];
         return config.getElevationColor(d.properties.elevation);
@@ -208,6 +203,19 @@ export function setupUI(allHexes, roadPaths) {
         .attr('stroke-linecap', 'round')
         .style('pointer-events', 'none');
 
+    // ★★★ [新規] 白地図オーバーレイの描画 ★★★
+    whiteMapOverlayLayer.selectAll('.white-map-hex')
+        .data(hexes)
+        .enter().append('polygon')
+        .attr('class', 'white-map-hex')
+        .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+        .attr('fill', d => {
+            if (d.properties.isWater) return config.WHITE_MAP_COLORS.WATER;
+            if (d.properties.terrainType === '山岳') return config.WHITE_MAP_COLORS.MOUNTAIN_PEAK;
+            if (d.properties.terrainType === '山地') return config.WHITE_MAP_COLORS.MOUNTAIN;
+            return config.WHITE_MAP_COLORS.LAND;
+        })
+        .style('pointer-events', 'none');
 
     // 3c. 河川レイヤー (変更なし)
     const riverSegmentsData = [];
@@ -334,6 +342,24 @@ export function setupUI(allHexes, roadPaths) {
         })
         .style('pointer-events', 'none');
 
+    // ★★★ [新規] 集落専用レイヤーの描画 ★★★
+    settlementLayer.selectAll('.settlement-hex')
+        // 町以上の集落のみをデータとして選択
+        .data(hexes.filter(d => ['町', '街', '領都', '首都'].includes(d.properties.settlement)))
+        .enter().append('polygon')
+        .attr('class', 'settlement-hex')
+        .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+        .attr('fill', d => {
+            // 元の地形レイヤーにあった色分けロジックをここに移動
+            switch (d.properties.settlement) {
+                case '首都': return '#f0f';
+                case '都市': return '#f00'; // 都市は現在このリストに含まれていないが、念のため残す
+                case '領都': return '#f60';
+                case '街':   return '#fa0';
+                case '町':   return '#ff0';
+            }
+        })
+        .style('pointer-events', 'none');
 
     // 3f. 各種オーバーレイヤー (変更なし)
     elevationOverlayLayer.selectAll('.elevation-hex').data(hexes.filter(d => !d.properties.isWater)).enter().append('polygon')
@@ -404,13 +430,45 @@ export function setupUI(allHexes, roadPaths) {
         if (p.parentHexId != null) {
             const superiorHex = allHexes[p.parentHexId];
             if (superiorHex) {
-                superiorText = `${superiorHex.properties.settlement} (E${superiorHex.col}-N${(config.ROWS-1)-superiorHex.row})`;
+                // ★★★ [変更] 道のりと移動日数を併記するロジック ★★★
+                let detailsText = '';
+                if (p.distanceToParent) {
+                    const distanceStr = `\n　道のり：${p.distanceToParent.toFixed(1)}km`;
+                    let travelDaysStr = '';
+                    if (p.travelDaysToParent) {
+                        travelDaysStr = `\n　荷馬車：${p.travelDaysToParent.toFixed(1)}日`;
+                    }
+                    detailsText = `${distanceStr}${travelDaysStr}`;
+                }
+                superiorText = `${superiorHex.properties.settlement} (E${superiorHex.col}-N${(config.ROWS-1)-superiorHex.row})${detailsText}`;
             }
         } else if (p.territoryId != null && getIndex(d.x, (config.ROWS - 1) - d.y) !== p.territoryId) {
             const territoryHub = allHexes[p.territoryId];
              if (territoryHub) {
                 superiorText = `[中枢] ${territoryHub.properties.settlement} (E${territoryHub.col}-N${(config.ROWS-1)-territoryHub.row})`;
             }
+        }
+
+        let landUseText;
+        if (p.isWater) {
+            // 水域の場合は、従来通り '海洋', '湖沼' などを表示
+            landUseText = p.vegetation;
+        } else {
+            // 陸地の場合は、各要素を配列に格納してから連結する
+            const landUseParts = [];
+            if (p.terrainType) {
+                landUseParts.push(p.terrainType); // "平地", "丘陵" など
+            }
+            if (p.vegetation) {
+                landUseParts.push(p.vegetation); // "森林", "草原" など
+            }
+            if (p.isAlluvial) {
+                landUseParts.push('河川');
+            }
+            if (p.hasSnow) {
+                landUseParts.push('積雪');
+            }
+            landUseText = landUseParts.join(', '); // "丘陵, 荒れ地" のように連結
         }
 
         const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] 
@@ -420,7 +478,7 @@ export function setupUI(allHexes, roadPaths) {
         let text = `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
                    `所属国家：${nationName}\n` +
                    `直轄上位：${superiorText}\n`+
-                   `土地利用： ${p.vegetation}${p.isAlluvial ? ' (河川)' : ''}${p.hasSnow ? ' (積雪)' : ''}\n` +
+                   `土地利用： ${landUseText}\n` +
                    `人口　　： ${p.population.toLocaleString()}人\n` +
                    `農地面積： ${Math.round(p.cultivatedArea).toLocaleString()} ha\n` +
                    `居住適性： ${p.habitability.toFixed(1)}\n` +
@@ -597,6 +655,24 @@ export function setupUI(allHexes, roadPaths) {
     d3.select('#toggleFishingOverlay').on('click', function() { toggleLayerVisibility('fishing-overlay', this, '漁業', '漁業'); });
     d3.select('#togglePopulationOverlay').on('click', function() { toggleLayerVisibility('population-overlay', this, '人口分布', '人口分布'); });
     d3.select('#toggleTerritoryOverlay').on('click', function() { toggleLayerVisibility('territory-overlay', this, '領地表示', '領地非表示'); });
+
+    // 4. 白地図モードの切り替えイベントハンドラ
+    d3.select('#toggleWhiteMapOverlay').on('click', function() {
+        const turnOn = !layers['white-map-overlay'].visible;
+        toggleLayerVisibility('white-map-overlay', this, '白地図表示', '通常表示');
+        
+        // ★★★ [変更] 地形レイヤーに加えて、集落レイヤーも考慮 ★★★
+        // 白地図ON -> 通常地形OFF
+        terrainLayer.style('display', turnOn ? 'none' : 'inline');
+        snowLayer.style('display', turnOn ? 'none' : 'inline');
+        
+        // 川の色を白地図モードに合わせて変更
+        riverLayer.selectAll('.river-segment')
+            .attr('stroke', turnOn ? config.WHITE_MAP_COLORS.WATER : '#058');
+        
+        // ★★★ [変更] 集落レイヤーは常に表示されるので、操作は不要 ★★★
+        // これにより、白地図の上にも集落が表示される
+    });
 
     const targetHex = hexes.find(h => h.x === 50 && h.y === 43);
     if (targetHex) {

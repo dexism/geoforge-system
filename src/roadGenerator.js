@@ -99,15 +99,12 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
             if (result) {
                 allEdges.push({ from: city1, to: city2, path: result.path, cost: result.cost });
             }
-
-            // プログレスバーの更新
             processedPairs++;
             const percent = Math.floor((processedPairs / totalPairs) * 100);
             if (percent > lastReportedPercent) {
                  const barWidth = 20;
                  const filledLength = Math.round((barWidth * percent) / 100);
                  const bar = '>'.repeat(filledLength) + ' '.repeat(barWidth - filledLength);
-                 // const message = `経路探索中... [${bar}] ${percent}% (${processedPairs}/${totalPairs})`;
                  const message = `${bar} ${percent}% (${processedPairs}/${totalPairs})`;
                  await addLogMessage(message, progressId);
                  lastReportedPercent = percent;
@@ -115,13 +112,10 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
         }
     }
 
-    await addLogMessage(`経路探索完了。全 ${allEdges.length} 経路を発見しました。`, progressId);
-
+    await addLogMessage(`交易路探索完了。全 ${allEdges.length} 経路を発見しました。`, progressId);
     allEdges.sort((a, b) => a.cost - b.cost);
-    
     const cityIndices = cities.map(c => getIndex(c.col, c.row));
     const unionFind = new UnionFind(cityIndices);
-    
     allEdges.forEach(edge => {
         const fromId = getIndex(edge.from.col, edge.from.row);
         const toId = getIndex(edge.to.col, edge.to.row);
@@ -136,36 +130,119 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
 }
 
 /**
- * ⑪～⑬ 下位の道路網を生成する
+ * ★★★ [新規] パスに沿った道のりを計算する関数 ★★★
+ * @param {Array<object>} path - ヘックスの座標リスト ({x, y})
+ * @param {number} roadLevel - 道路のレベル (5:交易路, 4:街道, etc.)
+ * @param {Array<object>} allHexes - 全ヘックスのデータ
+ * @returns {number} 計算された道のり (km)
  */
-export async function generateFeederRoads(lowerSettlements, upperSettlements, allHexes, type) {
+function calculateRoadDistance(path, roadLevel, allHexes) {
+    if (path.length < 2) return 0;
+    const directDistancePerHex = config.HEX_SIZE_KM * Math.sqrt(3) / 2;
+    const totalDirectDistance = directDistancePerHex * (path.length - 1);
+    const terrainMultipliers = path.map(pos => {
+        const hex = allHexes[getIndex(pos.x, pos.y)];
+        const p = hex.properties;
+        let multiplier = 1.0;
+        switch (p.terrainType) {
+            case '山岳': multiplier = config.TERRAIN_MULTIPLIERS.山岳; break;
+            case '山地': multiplier = config.TERRAIN_MULTIPLIERS.山地; break;
+            case '丘陵': multiplier = config.TERRAIN_MULTIPLIERS.丘陵; break;
+            case '平地':
+                if (p.vegetation === '密林') multiplier = config.TERRAIN_MULTIPLIERS.密林;
+                else if (p.vegetation === '森林' || p.vegetation === '針葉樹林') multiplier = config.TERRAIN_MULTIPLIERS.森林;
+                else multiplier = config.TERRAIN_MULTIPLIERS.平地;
+                break;
+        }
+        if (p.flow > 1) multiplier += config.TERRAIN_MULTIPLIERS.RIVER_BONUS;
+        return multiplier;
+    });
+    const productOfMultipliers = terrainMultipliers.reduce((acc, val) => acc * val, 1);
+    const geometricMeanMultiplier = Math.pow(productOfMultipliers, 1 / terrainMultipliers.length);
+    const roadMultiplier = config.ROAD_MULTIPLIERS[roadLevel] || 1.0;
+    const finalDistance = totalDirectDistance * geometricMeanMultiplier * roadMultiplier;
+    return finalDistance;
+}
+
+/**
+ * ★★★ [新規] パスに沿った荷馬車の移動日数を計算する関数 ★★★
+ * @param {Array<object>} path - ヘックスの座標リスト ({x, y})
+ * @param {number} roadLevel - 道路のレベル
+ * @param {Array<object>} allHexes - 全ヘックスのデータ
+ * @returns {number} 計算された平均移動日数
+ */
+function calculateTravelDays(path, roadLevel, allHexes) {
+    if (path.length < 2) return 0;
+
+    const segmentDistance = config.HEX_SIZE_KM * Math.sqrt(3) / 2; // 1ヘックス進むごとの直線距離
+    let totalTravelHours = 0;
+
+    // 道路整備による速度乗数を取得
+    const roadSpeedMultiplier = config.WAGON_PARAMS.ROAD_SPEED_MULTIPLIERS[roadLevel] || 0.3;
+
+    // パスの各区間（ヘックスから次のヘックスへ）の移動時間を計算して合計する
+    for (let i = 0; i < path.length - 1; i++) {
+        const currentHex = allHexes[getIndex(path[i].x, path[i].y)];
+        const p = currentHex.properties;
+
+        // 地形による速度係数を取得
+        let terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS[p.terrainType] || 1.0;
+        // 平地の場合、植生による係数をさらに考慮
+        if (p.terrainType === '平地') {
+             if (p.vegetation === '密林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.密林;
+             else if (p.vegetation === '森林' || p.vegetation === '針葉樹林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.森林;
+        }
+
+        if (p.hasSnow) {
+            terrainSpeedMultiplier *= config.WAGON_PARAMS.SNOW_SPEED_MULTIPLIER;
+        }
+
+        // この区間での実効速度を計算
+        const effectiveSpeed = config.WAGON_PARAMS.BASE_SPEED_KMH * roadSpeedMultiplier * terrainSpeedMultiplier;
+
+        // この区間を移動するのにかかる時間を加算
+        if (effectiveSpeed > 0) {
+            totalTravelHours += segmentDistance / effectiveSpeed;
+        } else {
+            totalTravelHours += Infinity; // 速度0なら時間は無限大
+        }
+    }
+
+    // 合計時間から日数を計算
+    const totalDays = totalTravelHours / config.WAGON_PARAMS.OPERATING_HOURS_PER_DAY;
+    return totalDays;
+}
+
+/**
+ * ★★★ [改修] ⑪～⑬ 下位の道路網を生成し、プログレスバーを表示する ★★★
+ * @param {Array<object>} lowerSettlements - 下位の集落リスト
+ * @param {Array<object>} upperSettlements - 上位の集落リスト
+ * @param {Array<object>} allHexes - 全ヘックスのデータ
+ * @param {string} type - 集落の種類 ('街', '町', '村')
+ * @param {Function} addLogMessage - ログ出力用の関数
+ */
+export async function generateFeederRoads(lowerSettlements, upperSettlements, allHexes, type, addLogMessage) {
     const roadPaths = [];
-    if (lowerSettlements.length === 0 || upperSettlements.length === 0) return roadPaths;
+    const totalCount = lowerSettlements.length;
+    if (totalCount === 0 || upperSettlements.length === 0) return roadPaths;
 
     const roadLevelMap = { '街': 4, '町': 3, '村': 2 };
     const roadLevel = roadLevelMap[type];
 
-    for (const lower of lowerSettlements) {
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★★★ [修正] 時期尚早な nationId チェックを削除 ★★★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // const ownerNationId = lower.properties.nationId;
-        // if (ownerNationId === 0) continue; 
-        // この時点では lower.properties.nationId は 0 のため、このチェックは不要
+    const progressId = `feeder-road-${type}`;
+    let processedCount = 0;
+    let lastReportedPercent = -1;
+    if (addLogMessage) await addLogMessage("...", progressId);
 
+    for (const lower of lowerSettlements) {
         let bestTarget = null;
         let minCost = Infinity;
 
-        // 接続先候補は、まず自国内、なければ全域から探す
-        // この時点では ownerNationId が未定なので、単純に全上位集落を候補とする
         const targetCandidates = upperSettlements;
-
-        // 最寄りの接続先を見つける (直線距離で候補を絞る)
         targetCandidates.sort((a,b) => getDistance(lower, a) - getDistance(lower, b));
         const searchCandidates = targetCandidates.slice(0, 5);
 
-        // ★★★ [修正] コスト計算時に渡す ownerNationId は、まだ未定なので null とする ★★★
-        const costFunc = createCostFunction(allHexes, null); // どの国にも属していない前提で探索
+        const costFunc = createCostFunction(allHexes, null);
         const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors
             .map(i => allHexes[i])
             .map(h => ({ x: h.col, y: h.row }));
@@ -185,10 +262,33 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         
         if (bestTarget) {
             lower.properties.parentHexId = getIndex(bestTarget.superior.col, bestTarget.superior.row);
-            // 道に国家IDを設定。この時点ではまだ親のIDが不明なため、暫定的に 0 としておく
-            // 正しい nationId は civilizationGenerator の propagateNationId で設定される
+            
+            // ★★★ [変更] 道のりと移動日数を両方計算してプロパティに保存 ★★★
+            const distance = calculateRoadDistance(bestTarget.path, roadLevel, allHexes);
+            const travelDays = calculateTravelDays(bestTarget.path, roadLevel, allHexes);
+            lower.properties.distanceToParent = distance;
+            lower.properties.travelDaysToParent = travelDays;
+
             roadPaths.push({ path: bestTarget.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: 0 });
         }
+        
+        processedCount++;
+        if (addLogMessage) {
+            const percent = Math.floor((processedCount / totalCount) * 100);
+            if (percent > lastReportedPercent) {
+                const barWidth = 20;
+                const filledLength = Math.round((barWidth * percent) / 100);
+                const bar = '>'.repeat(filledLength) + ' '.repeat(barWidth - filledLength);
+                const message = `${bar} ${percent}% (${processedCount}/${totalCount})`;
+                await addLogMessage(message, progressId);
+                lastReportedPercent = percent;
+            }
+        }
     }
+
+    if (addLogMessage) {
+        await addLogMessage(`敷設完了 (${roadPaths.length}本の道を建設)`, progressId);
+    }
+    
     return roadPaths;
 }
