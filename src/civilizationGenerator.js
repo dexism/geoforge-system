@@ -95,9 +95,9 @@ function generatePopulation(allHexes) {
         p.habitability = score;
         
         if (p.habitability > 0) {
-            const normalizedHabitability = p.habitability / 90.0;
+            const normalizedHabitability = p.habitability / 50.0;
             const populationFactor = Math.pow(normalizedHabitability, 8);
-            p.population = Math.floor(populationFactor * 120000);
+            p.population = Math.floor(populationFactor * 1000);
         } else {
             p.population = 0;
         }

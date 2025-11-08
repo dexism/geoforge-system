@@ -72,8 +72,9 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
     const routeData = [];
     if (cities.length < 2) return { roadPaths, routeData };
 
+    await addLogMessage(`全${cities.length}都市間の経路を探索しています...`);
     const progressId = 'trade-route-progress';
-    await addLogMessage(`全${cities.length}都市間の経路を探索しています...`, progressId);
+    await addLogMessage(`経路探索の初期化`, progressId);
     
     const costFunc = createCostFunction(allHexes, null);
     const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors
@@ -103,9 +104,9 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
             processedPairs++;
             const percent = Math.floor((processedPairs / totalPairs) * 100);
             if (percent > lastReportedPercent) {
-                 const barWidth = 15;
+                 const barWidth = 20;
                  const filledLength = Math.round((barWidth * percent) / 100);
-                 const bar = '█'.repeat(filledLength) + ' '.repeat(barWidth - filledLength);
+                 const bar = '>'.repeat(filledLength) + ' '.repeat(barWidth - filledLength);
                  // const message = `経路探索中... [${bar}] ${percent}% (${processedPairs}/${totalPairs})`;
                  const message = `${bar} ${percent}% (${processedPairs}/${totalPairs})`;
                  await addLogMessage(message, progressId);

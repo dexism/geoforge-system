@@ -99,7 +99,8 @@ export const agriColor = d3.scaleSequential(d3.interpolateGreens).domain([0, 1])
 export const forestColor = d3.scaleSequential(d3.interpolateYlGn).domain([0, 1]);
 export const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 1]);
 export const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]);
-export const populationColor = d3.scaleLinear().domain([0, 150000]).range(["black", "red"]);
+// ★★★ [変更] d3.scaleLinear から d3.scaleLog に変更し、ドメインの最小値を 1 にする ★★★
+export const populationColor = d3.scaleLog().domain([1, 150000]).range(["black", "red"]).clamp(true);
 
 // ----------------------------------------------------------------
 // ■ 文明生成パラメータ
