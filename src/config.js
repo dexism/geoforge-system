@@ -16,8 +16,8 @@ export const r = 20; // 描画用のヘックス半径 (pixel)
 // ■ 地形生成パラメータ
 // ----------------------------------------------------------------
 export const NOISE_SCALE =               0.05; 
-export const LAND_BIAS =                 0.6; 
-export const ELEVATION_PEAK_FACTOR =     5.0; 
+export const LAND_BIAS =                 0.7; 
+export const ELEVATION_PEAK_FACTOR =     4.0; 
 export const CONTINENT_FALLOFF_FACTOR =  5.0;
 export const LAKE_THRESHOLD_PLAINS =    -0.90;
 export const LAKE_THRESHOLD_MOUNTAINS = -0.85;
@@ -28,14 +28,14 @@ export const lakeThresholdScale = d3.scaleLinear()
     .clamp(true);
 
 // ★★★ [新規] 中央平野生成用のパラメータ ★★★
-export const CENTRAL_PLAIN_RADIUS =   0.8; // 平野を生成する範囲（マップ半径の0-1）
-export const CENTRAL_PLAIN_FLATNESS = 1.0; // 中心の標高を抑制する強さ（0-1抑制）
+export const CENTRAL_PLAIN_RADIUS =   0.5; // 平野を生成する範囲（マップ半径の0-1）
+export const CENTRAL_PLAIN_FLATNESS = 3.0; // 中心の標高を抑制する強さ（0-1抑制）
 
 // ★★★ [新規] 地形分類のための標高しきい値 ★★★
 export const TERRAIN_ELEVATION = {
     MOUNTAIN_PEAK: 3000, // これ以上は「山岳」
-    MOUNTAIN: 2000,      // これ以上は「山地」
-    HILLS: 1000           // これ以上は「丘陵」
+    MOUNTAIN:      2000, // これ以上は「山地」
+    HILLS:         1000  // これ以上は「丘陵」
 };
 
 // ----------------------------------------------------------------
