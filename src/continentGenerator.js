@@ -32,19 +32,34 @@ function generateBaseProperties(col, row) {
     
     // 大陸形状と標高の計算
     let baseElevation = terrainNoise(nx, ny);
-    if (baseElevation > 0) {
-        baseElevation = Math.pow(baseElevation, config.ELEVATION_PEAK_FACTOR);
-    }
+
+    // ★★★ [変更/新規] ここから中央平野を生成するロジック ★★★
     const centerX = config.COLS / 2;
     const centerY = config.ROWS / 2;
     const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
     const distFromCenter = Math.sqrt(Math.pow(col - centerX, 2) + Math.pow(row - centerY, 2));
+
+    // 1. 中央平野を適用する半径を計算
+    const plainRadius = maxDist * config.CENTRAL_PLAIN_RADIUS;
+
+    // 2. もしヘックスがこの半径内なら、標高を抑制する
+    if (distFromCenter < plainRadius) {
+        // 中​​心に近いほど1.0に、半径の端に近づくほど0.0になる係数を計算
+        const suppressionFactor = Math.pow(1.0 - (distFromCenter / plainRadius), 2);
+        // 係数と設定値を使って、元の標高を抑制（平坦化）する
+        baseElevation -= baseElevation * suppressionFactor * config.CENTRAL_PLAIN_FLATNESS;
+    }
+
+    if (baseElevation > 0) {
+        baseElevation = Math.pow(baseElevation, config.ELEVATION_PEAK_FACTOR);
+    }
+    
     const falloff = Math.pow(distFromCenter / maxDist, config.CONTINENT_FALLOFF_FACTOR);
     const internalElevation = baseElevation + config.LAND_BIAS - falloff;
 
     const properties = {};
     
-    // 水域判定 (大陸外縁 or 内陸湖)
+    // ... (以降のプロパティ計算は変更なし) ...
     const inlandWaterNoise = terrainNoise(nx + 100, ny + 100);
     const dynamicLakeThreshold = config.lakeThresholdScale(internalElevation);
     const isWater = internalElevation < 0.0 || (inlandWaterNoise < dynamicLakeThreshold && internalElevation < 1.3);

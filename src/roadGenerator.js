@@ -2,7 +2,7 @@
 // GeoForge System - 街道生成モジュール (v18.1 - 階層生成バグ修正)
 // ================================================================
 import * as config from './config.js';
-import { getIndex, getDistance } from './utils.js';
+import { getIndex, getDistance, formatProgressBar } from './utils.js';
 
 // Union-Find (変更なし)
 class UnionFind {
@@ -72,14 +72,11 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
     const routeData = [];
     if (cities.length < 2) return { roadPaths, routeData };
 
-    await addLogMessage(`全${cities.length}都市間の経路を探索しています...`);
     const progressId = 'trade-route-progress';
-    await addLogMessage(`経路探索の初期化`, progressId);
+    await addLogMessage(`交易路の経路探索...`, progressId);
     
     const costFunc = createCostFunction(allHexes, null);
-    const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors
-        .map(i => allHexes[i])
-        .map(h => ({ x: h.col, y: h.row }));
+    const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
     const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
 
     const allEdges = [];
@@ -91,28 +88,24 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
         for (let j = i + 1; j < cities.length; j++) {
             const city1 = cities[i];
             const city2 = cities[j];
-            const result = findAStarPath({
-                start: { x: city1.col, y: city1.row },
-                goal: { x: city2.col, y: city2.row },
-                getNeighbors, heuristic, cost: costFunc
-            });
+            const result = findAStarPath({ start: { x: city1.col, y: city1.row }, goal: { x: city2.col, y: city2.row }, getNeighbors, heuristic, cost: costFunc });
             if (result) {
                 allEdges.push({ from: city1, to: city2, path: result.path, cost: result.cost });
             }
+
             processedPairs++;
             const percent = Math.floor((processedPairs / totalPairs) * 100);
             if (percent > lastReportedPercent) {
-                 const barWidth = 20;
-                 const filledLength = Math.round((barWidth * percent) / 100);
-                 const bar = '>'.repeat(filledLength) + ' '.repeat(barWidth - filledLength);
-                 const message = `${bar} ${percent}% (${processedPairs}/${totalPairs})`;
+                 // ★★★ [変更] 汎用関数を呼び出す ★★★
+                 const message = formatProgressBar({ current: processedPairs, total: totalPairs, prefix: "交易路:" });
                  await addLogMessage(message, progressId);
                  lastReportedPercent = percent;
             }
         }
     }
 
-    await addLogMessage(`交易路探索完了。全 ${allEdges.length} 経路を発見しました。`, progressId);
+    await addLogMessage(`交易路: 探索完了。全 ${allEdges.length} 経路を発見しました。`, progressId);
+
     allEdges.sort((a, b) => a.cost - b.cost);
     const cityIndices = cities.map(c => getIndex(c.col, c.row));
     const unionFind = new UnionFind(cityIndices);
@@ -228,11 +221,13 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
 
     const roadLevelMap = { '街': 4, '町': 3, '村': 2 };
     const roadLevel = roadLevelMap[type];
+    const prefixMap = { '街': '街道:', '町': '町道:', '村': '村道:' };
+    const prefix = prefixMap[type] || `${type}道:`;
 
     const progressId = `feeder-road-${type}`;
     let processedCount = 0;
     let lastReportedPercent = -1;
-    if (addLogMessage) await addLogMessage("...", progressId);
+    if (addLogMessage) await addLogMessage(`${prefix} 敷設準備...`, progressId);
 
     for (const lower of lowerSettlements) {
         let bestTarget = null;
@@ -243,17 +238,11 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         const searchCandidates = targetCandidates.slice(0, 5);
 
         const costFunc = createCostFunction(allHexes, null);
-        const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors
-            .map(i => allHexes[i])
-            .map(h => ({ x: h.col, y: h.row }));
+        const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
         const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
         
         for (const upper of searchCandidates) {
-             const result = findAStarPath({
-                start: { x: lower.col, y: lower.row },
-                goal: { x: upper.col, y: upper.row },
-                getNeighbors, heuristic, cost: costFunc
-             });
+             const result = findAStarPath({ start: { x: lower.col, y: lower.row }, goal: { x: upper.col, y: upper.row }, getNeighbors, heuristic, cost: costFunc });
              if (result && result.cost < minCost) {
                  minCost = result.cost;
                  bestTarget = { path: result.path, superior: upper };
@@ -262,13 +251,10 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         
         if (bestTarget) {
             lower.properties.parentHexId = getIndex(bestTarget.superior.col, bestTarget.superior.row);
-            
-            // ★★★ [変更] 道のりと移動日数を両方計算してプロパティに保存 ★★★
             const distance = calculateRoadDistance(bestTarget.path, roadLevel, allHexes);
             const travelDays = calculateTravelDays(bestTarget.path, roadLevel, allHexes);
             lower.properties.distanceToParent = distance;
             lower.properties.travelDaysToParent = travelDays;
-
             roadPaths.push({ path: bestTarget.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: 0 });
         }
         
@@ -276,10 +262,8 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         if (addLogMessage) {
             const percent = Math.floor((processedCount / totalCount) * 100);
             if (percent > lastReportedPercent) {
-                const barWidth = 20;
-                const filledLength = Math.round((barWidth * percent) / 100);
-                const bar = '>'.repeat(filledLength) + ' '.repeat(barWidth - filledLength);
-                const message = `${bar} ${percent}% (${processedCount}/${totalCount})`;
+                // ★★★ [変更] 汎用関数を呼び出す ★★★
+                const message = formatProgressBar({ current: processedCount, total: totalCount, prefix: prefix });
                 await addLogMessage(message, progressId);
                 lastReportedPercent = percent;
             }
@@ -287,7 +271,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
     }
 
     if (addLogMessage) {
-        await addLogMessage(`敷設完了 (${roadPaths.length}本の道を建設)`, progressId);
+        await addLogMessage(`${prefix} 敷設完了。全 ${roadPaths.length} 経路を建設しました。`, progressId);
     }
     
     return roadPaths;

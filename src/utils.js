@@ -29,3 +29,24 @@ export function getDistance(h1, h2) {
     // このグリッド系ではこれで十分な近似となる
     return Math.max(dx, dy);
 }
+
+/**
+ * ★★★ [新規] プログレスバーの表示用文字列を生成する汎用関数 ★★★
+ * @param {object} params - パラメータオブジェクト
+ * @param {number} params.current - 現在の処理数
+ * @param {number} params.total - 全体の処理数
+ * @param {string} [params.prefix=""] - バーの前に表示する接頭辞
+ * @param {number} [params.barWidth=20] - バーの文字数
+ * @returns {string} フォーマットされたプログレスバー文字列
+ */
+export function formatProgressBar({ current, total, prefix = "", barWidth = 40 }) {
+    if (total === 0) return `${prefix} [${'-'.repeat(barWidth)}] 0% (0/0)`;
+
+    const percent = Math.floor((current / total) * 100);
+    const filledLength = Math.round((barWidth * percent) / 100);
+    const emptyLength = barWidth - filledLength;
+
+    const bar = '|'.repeat(filledLength) + '.'.repeat(emptyLength);
+
+    return `${prefix} [${bar}] ${percent}% (${current}/${total})`;
+}

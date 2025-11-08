@@ -127,27 +127,27 @@ export function setupUI(allHexes, roadPaths) {
         return layerGroup;
     }
 
-    const terrainLayer = createLayer('terrain');
-    const snowLayer = createLayer('snow');
-    const whiteMapOverlayLayer = createLayer('white-map-overlay', false);
-    const elevationOverlayLayer = createLayer('elevation-overlay', false);
-    const riverLayer = createLayer('river');
-    const precipOverlayLayer = createLayer('precip-overlay', false);
-    const tempOverlayLayer = createLayer('temp-overlay', false);
-    const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false);
-    const manaOverlayLayer = createLayer('mana-overlay', false);
-    const agriOverlayLayer = createLayer('agri-overlay', false);
-    const forestOverlayLayer = createLayer('forest-overlay', false);
-    const miningOverlayLayer = createLayer('mining-overlay', false);
-    const fishingOverlayLayer = createLayer('fishing-overlay', false);
-    const populationOverlayLayer = createLayer('population-overlay', false);
-    const territoryOverlayLayer = createLayer('territory-overlay', false);
-    const highlightOverlayLayer = createLayer('highlight-overlay');
-    const borderLayer = createLayer('border');
-    const settlementLayer = createLayer('settlement');
-    const roadLayer = createLayer('road');
-    const labelLayer = createLayer('labels');
-    const interactionLayer = createLayer('interaction');
+    const terrainLayer = createLayer('terrain');                                // 地形
+    const snowLayer = createLayer('snow');                                      // 積雪
+    const whiteMapOverlayLayer = createLayer('white-map-overlay', false);       // 白地図
+    const elevationOverlayLayer = createLayer('elevation-overlay', false);      // 土地利用
+    const riverLayer = createLayer('river');                                    // 河川
+    const precipOverlayLayer = createLayer('precip-overlay', false);            // 降水量
+    const tempOverlayLayer = createLayer('temp-overlay', false);                // 気温
+    const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false); // 気候帯
+    const settlementLayer = createLayer('settlement');                          // 集落
+    const manaOverlayLayer = createLayer('mana-overlay', false);                // 龍脈
+    const agriOverlayLayer = createLayer('agri-overlay', false);                // 農業
+    const forestOverlayLayer = createLayer('forest-overlay', false);            // 林業
+    const miningOverlayLayer = createLayer('mining-overlay', false);            // 鉱業
+    const fishingOverlayLayer = createLayer('fishing-overlay', false);          // 漁業
+    const populationOverlayLayer = createLayer('population-overlay', false);    // 人口
+    const territoryOverlayLayer = createLayer('territory-overlay', false);      // 領土
+    const highlightOverlayLayer = createLayer('highlight-overlay');             // ハイライト
+    const borderLayer = createLayer('border');                                  // 国境
+    const roadLayer = createLayer('road');                                      // 道路
+    const labelLayer = createLayer('labels');                                   // ラベル
+    const interactionLayer = createLayer('interaction');                        // インタラクション
 
     // --- 3. 各レイヤーの描画 ---
     // 3a. 地形レイヤー (変更なし)
@@ -260,45 +260,50 @@ export function setupUI(allHexes, roadPaths) {
         .attr('fill', '#fff').style('fill-opacity', 0.8).style('pointer-events', 'none');
 
     // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    // ★★★ [改修] 河川と同様に辺で結ぶ新しい街道描画ロジック ★★★
+    // ★★★ [改修] 重複を排除する新しい街道描画ロジック ★★★
     // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    const roadSegments = [];
-    // 1. 描画すべき全街道セグメントの情報を計算して配列に格納
-    roadPaths.forEach(road => {
-        // パスが2ヘックス未満の場合は描画できないのでスキップ
-        if (road.path.length < 2) return;
+    const finalRoadSegments = [];
+    const roadSegmentGrid = new Map(); // 描画済みセグメントを記録する (key: "minIdx-maxIdx")
 
-        // パスの座標リストを、対応するヘックスオブジェクトのリストに変換
+    // 1. 道路をレベルが高い順にソートする (交易路が先に来るように)
+    const sortedRoadPaths = [...roadPaths].sort((a, b) => b.level - a.level);
+
+    // 2. ソートされたパスをループして、重複しないセグメントだけを finalRoadSegments に追加
+    sortedRoadPaths.forEach(road => {
+        if (road.path.length < 2) return;
         const pathHexes = road.path.map(p => hexes[getIndex(p.x, p.y)]);
 
-        // パスを構成する各ヘックス内での線分を計算
         for (let i = 0; i < pathHexes.length; i++) {
             const currentHex = pathHexes[i];
-            let startPoint, endPoint;
+            if (!currentHex) continue; // 念のため
 
-            // [始点の決定]
+            let startPoint, endPoint;
+            
+            // 2a. 線分の始点と終点を計算 (既存の辺から辺へのロジック)
             if (i === 0) {
-                // パスの最初のヘックス：中心から開始
                 startPoint = [currentHex.cx, currentHex.cy];
             } else {
-                // 2番目以降のヘックス：前のヘックスとの境界線から開始
-                const prevHex = pathHexes[i - 1];
-                startPoint = getSharedEdgeMidpoint(currentHex, prevHex);
+                startPoint = getSharedEdgeMidpoint(currentHex, pathHexes[i - 1]);
             }
-
-            // [終点の決定]
             if (i === pathHexes.length - 1) {
-                // パスの最後のヘックス：中心で終了
                 endPoint = [currentHex.cx, currentHex.cy];
             } else {
-                // 最後から2番目以前のヘックス：次のヘックスとの境界線で終了
-                const nextHex = pathHexes[i + 1];
-                endPoint = getSharedEdgeMidpoint(currentHex, nextHex);
+                endPoint = getSharedEdgeMidpoint(currentHex, pathHexes[i + 1]);
             }
+
+            // 2b. 始点と終点から、そのセグメントがどのヘックス間を結ぶかを特定
+            const prevHex = i > 0 ? pathHexes[i - 1] : currentHex;
+            const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : currentHex;
             
-            // 始点と終点が正しく計算できた場合のみ、描画リストに追加
-            if (startPoint && endPoint) {
-                roadSegments.push({
+            // 2c. 始点・終点に対応するヘックス間のユニークなIDを作成
+            const fromIndex = (i === 0) ? currentHex.index : prevHex.index;
+            const toIndex = (i === pathHexes.length - 1) ? currentHex.index : nextHex.index;
+            const segmentKey = Math.min(fromIndex, toIndex) + '-' + Math.max(fromIndex, toIndex);
+
+            // 2d. 重複チェック
+            if (startPoint && endPoint && !roadSegmentGrid.has(segmentKey)) {
+                roadSegmentGrid.set(segmentKey, true); // このセグメントは描画済みとして記録
+                finalRoadSegments.push({
                     start: startPoint,
                     end: endPoint,
                     level: road.level
@@ -307,8 +312,8 @@ export function setupUI(allHexes, roadPaths) {
         }
     });
 
-    // 2. 計算されたセグメント情報を元に、一括でline要素を描画
-    roadLayer.selectAll('.road-segment').data(roadSegments).enter().append('line')
+    // 3. 最終的に重複排除されたセグメントリストを使って描画
+    roadLayer.selectAll('.road-segment').data(finalRoadSegments).enter().append('line')
         .attr('class', 'road-segment')
         .attr('x1', d => d.start[0]).attr('y1', d => d.start[1])
         .attr('x2', d => d.end[0]).attr('y2', d => d.end[1])

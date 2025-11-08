@@ -214,7 +214,8 @@ export async function generateCivilization(allHexes, addLogMessage) {
     const { capitals, regionalCapitals } = defineNations(cityClusters);
 
     // ③ 都市間の交易路を生成 (親子関係には影響しない)
-    await addLogMessage("主要都市を結ぶ交易路を建設しています...");
+    await addLogMessage("集落を結ぶ道路網を建設しています...");
+    // await addLogMessage("主要都市を結ぶ交易路を建設しています...");
     const { roadPaths: tradeRoutePaths, routeData: tradeRoutes } = await generateTradeRoutes(cities, allHexes, addLogMessage);
     let allRoadPaths = tradeRoutePaths;
 
@@ -228,15 +229,15 @@ export async function generateCivilization(allHexes, addLogMessage) {
     const towns = allHexes.filter(h => h.properties.settlement === '町');
     const villages = allHexes.filter(h => h.properties.settlement === '村');
     
-    await addLogMessage("街から主要都市へ街道を敷設しています...");
+    // await addLogMessage("街から主要都市へ街道を敷設しています...");
     const streetRoads = await generateFeederRoads(streets, hubs, allHexes, '街', addLogMessage);
     allRoadPaths.push(...streetRoads);
 
-    await addLogMessage("町から街や都市へ町道を敷設しています...");
+    // await addLogMessage("町から街や都市へ町道を敷設しています...");
     const townRoads = await generateFeederRoads(towns, [...hubs, ...streets], allHexes, '町', addLogMessage);
     allRoadPaths.push(...townRoads);
 
-    await addLogMessage("村から上位の集落へ村道を敷設しています...");
+    // await addLogMessage("村から上位の集落へ村道を敷設しています...");
     const villageRoads = await generateFeederRoads(villages, [...hubs, ...streets, ...towns], allHexes, '村', addLogMessage);
     allRoadPaths.push(...villageRoads);
 
