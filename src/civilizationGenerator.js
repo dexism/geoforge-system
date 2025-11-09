@@ -122,29 +122,60 @@ function classifySettlements(allHexes) {
 /**
  * ★★★ [改訂] K-Meansの結果から国家と首都を定義し、領都を首都に直轄させる ★★★
  */
-function defineNations(cityClusters) {
+function defineNations(allCities, numNations) {
     const capitals = [];
     const regionalCapitals = [];
+    
+    // 1. マップを3x3の9地域に分割し、各地域の代表都市（最も人口が多い都市）を選出
+    const regionBests = new Array(9).fill(null);
+    const regionWidth = config.COLS / 3;
+    const regionHeight = config.ROWS / 3;
 
-    cityClusters.forEach((cluster, index) => {
-        if (cluster.length === 0) return; 
+    allCities.forEach(city => {
+        const regionX = Math.floor(city.col / regionWidth);
+        const regionY = Math.floor(city.row / regionHeight);
+        const regionIndex = regionY * 3 + regionX;
 
+        if (!regionBests[regionIndex] || city.properties.population > regionBests[regionIndex].properties.population) {
+            regionBests[regionIndex] = city;
+        }
+    });
+
+    // 2. 代表都市の中から、人口が多い順に指定された国家数だけ「首都」として選抜
+    const capitalCandidates = regionBests.filter(c => c !== null);
+    capitalCandidates.sort((a, b) => b.properties.population - a.properties.population);
+    
+    const finalCapitals = capitalCandidates.slice(0, numNations);
+
+    // 3. 首都を正式に定義
+    finalCapitals.forEach((capital, index) => {
         const nationId = index + 1;
-        
-        const capital = cluster.sort((a, b) => b.properties.population - a.properties.population)[0];
         capital.properties.nationId = nationId;
         capital.properties.settlement = '首都';
         capitals.push(capital);
+    });
 
-        cluster.forEach(city => {
-            if (city !== capital) {
-                city.properties.nationId = nationId;
-                city.properties.settlement = '領都';
-                // ★★★ [変更] 無条件に自国の首都を親とする ★★★
-                city.properties.parentHexId = getIndex(capital.col, capital.row);
-                regionalCapitals.push(city);
+    // 4. 首都以外の全都市を、最も近い首都の国家に所属させ「領都」とする
+    allCities.forEach(city => {
+        // 既に首都になっている都市はスキップ
+        if (city.properties.settlement === '首都') return;
+
+        let closestCapital = null;
+        let minDistance = Infinity;
+        capitals.forEach(capital => {
+            const dist = getDistance(city, capital);
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestCapital = capital;
             }
         });
+
+        if (closestCapital) {
+            city.properties.nationId = closestCapital.properties.nationId;
+            city.properties.settlement = '領都';
+            city.properties.parentHexId = getIndex(closestCapital.col, closestCapital.row);
+            regionalCapitals.push(city);
+        }
     });
 
     return { capitals, regionalCapitals };
@@ -196,32 +227,29 @@ export async function generateCivilization(allHexes, addLogMessage) {
     classifySettlements(allHexes);
 
     const cities = allHexes.filter(h => h.properties.settlement === '都市');
-    if (cities.length < config.NUM_NATIONS) {
+
+    // ★★★ [修正] configの値をローカル変数にコピーして使用する ★★★
+    let numNations = config.NUM_NATIONS; 
+
+    if (cities.length < numNations) {
         await addLogMessage(`警告: 都市が${cities.length}個しか形成されませんでした。国家数を${cities.length}に減らします。`);
-        config.NUM_NATIONS = Math.max(1, cities.length);
+        numNations = Math.max(1, cities.length); // ローカル変数を更新
     }
-    if (config.NUM_NATIONS === 0) {
+    if (numNations === 0) { // ローカル変数で判定
          await addLogMessage("都市が全く生成されなかったため、文明生成を中断します。");
          return { allHexes, roadPaths: [] };
     }
 
-    // K-Meansで都市を地理的にグループ化
-    await addLogMessage("地理的に近い都市をグループ化しています...");
-    const cityClusters = kMeansCluster(cities, config.NUM_NATIONS);
+    // ★★★ [変更] K-Meansを廃止し、新しい国家定義関数を呼び出す ★★★
+    await addLogMessage("地理的バランスを考慮して国家を配置しています...");
+    // ★★★ [修正] ローカル変数を関数に渡す ★★★
+    const { capitals, regionalCapitals } = defineNations(cities, numNations);
+    await addLogMessage(`世界の${numNations}大国を定義しました。`); // ログもローカル変数を使用
 
-    // グループから国家、首都、そして首都直轄の領都を定義
-    await addLogMessage(`世界の${config.NUM_NATIONS}大国を定義しています...`);
-    const { capitals, regionalCapitals } = defineNations(cityClusters);
-
-    // ③ 都市間の交易路を生成 (親子関係には影響しない)
+    // ③ 都市間の交易路を生成
     await addLogMessage("集落を結ぶ道路網を建設しています...");
-    // await addLogMessage("主要都市を結ぶ交易路を建設しています...");
-    const { roadPaths: tradeRoutePaths, routeData: tradeRoutes } = await generateTradeRoutes(cities, allHexes, addLogMessage);
+    const { roadPaths: tradeRoutePaths } = await generateTradeRoutes(cities, allHexes, addLogMessage);
     let allRoadPaths = tradeRoutePaths;
-
-    // ★★★ [変更] refineHubAffiliations の呼び出しを削除 ★★★
-    // await addLogMessage("国内の支配関係を最適化しています...");
-    // refineHubAffiliations(capitals, regionalCapitals, tradeRoutes);
     
     // ⑪～⑬ 下位集落の所属決定とインフラ整備
     const hubs = [...capitals, ...regionalCapitals];
@@ -229,21 +257,15 @@ export async function generateCivilization(allHexes, addLogMessage) {
     const towns = allHexes.filter(h => h.properties.settlement === '町');
     const villages = allHexes.filter(h => h.properties.settlement === '村');
     
-    // await addLogMessage("街から主要都市へ街道を敷設しています...");
     const streetRoads = await generateFeederRoads(streets, hubs, allHexes, '街', addLogMessage);
     allRoadPaths.push(...streetRoads);
 
-    // await addLogMessage("町から街や都市へ町道を敷設しています...");
     const townRoads = await generateFeederRoads(towns, [...hubs, ...streets], allHexes, '町', addLogMessage);
     allRoadPaths.push(...townRoads);
 
-    // await addLogMessage("村から上位の集落へ村道を敷設しています...");
     const villageRoads = await generateFeederRoads(villages, [...hubs, ...streets, ...towns], allHexes, '村', addLogMessage);
     allRoadPaths.push(...villageRoads);
-
-    await addLogMessage("各集落の所属を確定させています...");
-    propagateNationId(allHexes, hubs);
-
+    
     const totalPopulation = allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
     await addLogMessage(`文明が生まれました... 総人口: ${totalPopulation.toLocaleString()}人`);
 

@@ -49,14 +49,26 @@ const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
     if (pB.isWater) return Infinity;
 
     let cost = 1;
+    // 河川コスト
     cost += pB.flow > 2 ? pB.flow * 3 : 0;
+    // 植生コスト
     if (pB.vegetation === '森林' || pB.vegetation === '疎林') cost += 2;
     if (pB.vegetation === '密林' || pB.vegetation === '針葉樹林') cost += 4;
+    // 標高コスト
     if (pB.elevation > 1000) cost += Math.pow(pB.elevation / 700, 2.8);
 
+    // ★★★ [新規] 稜線を横断する際の追加コスト ★★★
+    // ridgeFlow（稜線の太さ）が大きいほど、コストが指数関数的に増加する
+    if (pB.ridgeFlow > 0) {
+        cost += pB.ridgeFlow * config.RIDGE_CROSSING_COST_MULTIPLIER;
+    }
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+    // 高低差コスト
     const elevationDiff = Math.abs(hexA.properties.elevation - hexB.properties.elevation);
     cost += elevationDiff * 0.05;
 
+    // 他国領土コスト
     if (ownerNationId && pB.nationId !== 0 && pB.nationId !== ownerNationId) {
         cost *= 50; 
     }
@@ -233,11 +245,22 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         let bestTarget = null;
         let minCost = Infinity;
 
-        const targetCandidates = upperSettlements;
-        targetCandidates.sort((a,b) => getDistance(lower, a) - getDistance(lower, b));
-        const searchCandidates = targetCandidates.slice(0, 5);
+        // ★★★ [変更] 自国の上位集落を優先的に探索候補とする ★★★
+        const lowerNationId = lower.properties.nationId;
+        const targetCandidates = upperSettlements.sort((a, b) => {
+            // 自国の集落を優先
+            const aIsOwn = a.properties.nationId === lowerNationId;
+            const bIsOwn = b.properties.nationId === lowerNationId;
+            if (aIsOwn && !bIsOwn) return -1;
+            if (!aIsOwn && bIsOwn) return 1;
+            // 同じ国なら距離順
+            return getDistance(lower, a) - getDistance(lower, b);
+        });
 
-        const costFunc = createCostFunction(allHexes, null);
+        const searchCandidates = targetCandidates.slice(0, 10); // 探索候補を増やす
+
+        // ★★★ [変更] A*のコスト関数に自国領土ボーナスを追加 ★★★
+        const costFunc = createCostFunction(allHexes, lowerNationId);
         const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
         const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
         
@@ -250,19 +273,35 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         }
         
         if (bestTarget) {
+            const superiorNationId = bestTarget.superior.properties.nationId;
+            
+            // 1. 下位集落に親のIDと国籍を設定
             lower.properties.parentHexId = getIndex(bestTarget.superior.col, bestTarget.superior.row);
+            lower.properties.nationId = superiorNationId;
+
+            // 2. 道のり・日数を計算して設定
             const distance = calculateRoadDistance(bestTarget.path, roadLevel, allHexes);
             const travelDays = calculateTravelDays(bestTarget.path, roadLevel, allHexes);
             lower.properties.distanceToParent = distance;
             lower.properties.travelDaysToParent = travelDays;
-            roadPaths.push({ path: bestTarget.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: 0 });
+            
+            // 3. 道路オブジェクトに国籍を設定して追加
+            roadPaths.push({ path: bestTarget.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: superiorNationId });
+            
+            // ★★★ [新規] 4. 道路経路上の全ヘックスに国籍を設定（飛び地防止） ★★★
+            bestTarget.path.forEach(pos => {
+                const hex = allHexes[getIndex(pos.x, pos.y)];
+                // 既存の領土や水域は上書きしない
+                if (hex && hex.properties.nationId === 0 && !hex.properties.isWater) {
+                    hex.properties.nationId = superiorNationId;
+                }
+            });
         }
         
         processedCount++;
         if (addLogMessage) {
             const percent = Math.floor((processedCount / totalCount) * 100);
             if (percent > lastReportedPercent) {
-                // ★★★ [変更] 汎用関数を呼び出す ★★★
                 const message = formatProgressBar({ current: processedCount, total: totalCount, prefix: prefix });
                 await addLogMessage(message, progressId);
                 lastReportedPercent = percent;

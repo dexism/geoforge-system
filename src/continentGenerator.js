@@ -64,11 +64,14 @@ function generateBaseProperties(col, row) {
     const dynamicLakeThreshold = config.lakeThresholdScale(internalElevation);
     const isWater = internalElevation < 0.0 || (inlandWaterNoise < dynamicLakeThreshold && internalElevation < 1.3);
     properties.isWater = isWater;
-    properties.elevation = isWater ? 0 : config.elevationScale(internalElevation);
+
+    // ★★★ [変更] 海(大陸外)なら標高0、それ以外(陸地や湖)なら地形に応じた標高を設定 ★★★
+    properties.elevation = internalElevation < 0.0 ? 0 : config.elevationScale(internalElevation);
+    // properties.elevation = isWater ? 0 : config.elevationScale(internalElevation);
     
     // 気温と降水量の計算
     const latitude = row / config.ROWS;
-    const baseTemp = -5 + (latitude * 35);
+    const baseTemp = 0 + (latitude * 35);
     properties.climate = baseTemp + climateNoise(nx, ny) * 5;
     
     let elevationCorrection = 0;
@@ -153,7 +156,8 @@ function generateWaterSystems(allHexes) {
             if (lowestNeighbor) {
                 currentCol = lowestNeighbor.col;
                 currentRow = lowestNeighbor.row;
-                if (lowestNeighbor.properties.isWater) {
+                // ★★★ [変更] 川の終点を、標高0の水域(海)に到達した場合のみとする ★★★
+                if (lowestNeighbor.properties.isWater && lowestNeighbor.properties.elevation <= 0) {
                     lowestNeighbor.properties.flow += 1;
                     break;
                 }
@@ -184,7 +188,7 @@ function generateRidgeLines(allHexes) {
         if (!isCandidate) return false;
 
         // その中から30%をランダムで選ぶ
-        return Math.random() < 0.3;
+        return Math.random() < 1.0;
     });
 
     // 2. 全ヘックスのridgeFlowプロパティを初期化
@@ -251,10 +255,16 @@ function calculateFinalProperties(allHexes) {
         properties.landUse = { river: 0, desert: 0, barren: 0, grassland: 0, forest: 0 };
 
         if (isWater) {
-            // 水域ヘックスの場合、従来の植生タイプのみ設定
-            if (config.elevationScale.invert(elevation) < -0.4) properties.vegetation = '深海';
-            else if (config.elevationScale.invert(elevation) < 0.0) properties.vegetation = '海洋';
-            else properties.vegetation = '湖沼';
+            // ★★★ [変更] 水域の植生タイプを標高ベースで判定する ★★★
+            if (properties.elevation <= 0) { // 標高0以下は海
+                if (config.elevationScale.invert(elevation) < -0.4) {
+                    properties.vegetation = '深海';
+                } else {
+                    properties.vegetation = '海洋';
+                }
+            } else { // 標高が0より大きい水域は湖
+                properties.vegetation = '湖沼';
+            }
         } else {
             // 2. 陸地ヘックスの場合、各土地利用タイプの「ポテンシャル」を計算
             const potentials = {

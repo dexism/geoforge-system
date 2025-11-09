@@ -49,6 +49,24 @@ export function setupUI(allHexes, roadPaths) {
             const cx = col * (hexWidth * 3 / 4) + config.r;
             const cy = row * hexHeight + offsetY + config.r;
             const hexData = allHexes[getIndex(col, row)];
+
+            // ★★★ [ここから新規] 陰影計算ロジック ★★★
+            let northElevation = hexData.properties.elevation;
+            let southElevation = hexData.properties.elevation;
+
+            // 北側の隣人の標高を取得 (マップ上端でない場合)
+            if (row > 0) {
+                const northNeighbor = allHexes[getIndex(col, row - 1)];
+                if (northNeighbor) northElevation = northNeighbor.properties.elevation;
+            }
+            // 南側の隣人の標高を取得 (マップ下端でない場合)
+            if (row < config.ROWS - 1) {
+                const southNeighbor = allHexes[getIndex(col, row + 1)];
+                if (southNeighbor) southElevation = southNeighbor.properties.elevation;
+            }
+            // 南北の標高差を計算
+            const elevationDifference = southElevation - northElevation;
+            // ★★★ [ここまで新規] ★★★
             
             let downstreamIndex = -1;
             if (hexData.properties.flow > 0 && !hexData.properties.isWater) {
@@ -70,7 +88,10 @@ export function setupUI(allHexes, roadPaths) {
                 index: getIndex(col, row),
                 x: col, y: (config.ROWS - 1) - row, cx: cx, cy: cy,
                 points: d3.range(6).map(i => [cx + config.r * Math.cos(Math.PI / 3 * i), cy + config.r * Math.sin(Math.PI / 3 * i)]),
-                properties: hexData.properties,
+                properties: {
+                    ...hexData.properties,
+                    shadingValue: elevationDifference // ★★★ [新規] 計算した陰影値をプロパティに追加
+                },
                 downstreamIndex: downstreamIndex,
                 neighbors: hexData.neighbors,
             });
@@ -161,6 +182,7 @@ export function setupUI(allHexes, roadPaths) {
     const snowLayer = createLayer('snow');                                      // 積雪
     const whiteMapOverlayLayer = createLayer('white-map-overlay', false);       // 白地図
     const elevationOverlayLayer = createLayer('elevation-overlay', false);      // 土地利用
+    const shadingLayer = createLayer('shading');                                // 陰影
     const riverLayer = createLayer('river');                                    // 河川
     const precipOverlayLayer = createLayer('precip-overlay', false);            // 降水量
     const tempOverlayLayer = createLayer('temp-overlay', false);                // 気温
@@ -190,6 +212,21 @@ export function setupUI(allHexes, roadPaths) {
         if (config.TERRAIN_COLORS[veg]) return config.TERRAIN_COLORS[veg];
         return config.getElevationColor(d.properties.elevation);
     });
+
+    // 陰影レイヤーの描画
+    const shadingOpacityScale = d3.scaleLinear()
+        .domain([0, 400]) // 標高差400mで最大不透明度になるように設定
+        .range([0, 0.10]) // 最大不透明度は35%
+        .clamp(true);
+
+    shadingLayer.selectAll('.shading-hex')
+        .data(hexes.filter(d => !d.properties.isWater)) // 水域には陰影をつけない
+        .enter().append('polygon')
+        .attr('class', 'shading-hex')
+        .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+        .attr('fill', d => d.properties.shadingValue > 0 ? '#fff' : '#000') // 南が高い(坂の上)なら白、北が高い(坂の下)なら黒
+        .style('fill-opacity', d => shadingOpacityScale(Math.abs(d.properties.shadingValue)))
+        .style('pointer-events', 'none');
 
     // 3b. 国境線レイヤー (変更なし)
     const borderSegments = [];
@@ -229,22 +266,25 @@ export function setupUI(allHexes, roadPaths) {
         .attr('y1', d => d.p1[1])
         .attr('x2', d => d.p2[0])
         .attr('y2', d => d.p2[1])
-        .attr('stroke', '#a00')
+        .attr('stroke', '#f00')
         .attr('stroke-width', 4)
         .attr('stroke-linecap', 'round')
         .style('pointer-events', 'none');
 
-    // ★★★ [新規] 白地図オーバーレイの描画 ★★★
+    // ★★★ [修正] 白地図オーバーレイの描画ロジックをグラデーション対応に変更 ★★★
     whiteMapOverlayLayer.selectAll('.white-map-hex')
         .data(hexes)
         .enter().append('polygon')
         .attr('class', 'white-map-hex')
         .attr('points', d => d.points.map(p => p.join(',')).join(' '))
         .attr('fill', d => {
-            if (d.properties.isWater) return config.WHITE_MAP_COLORS.WATER;
-            if (d.properties.terrainType === '山岳') return config.WHITE_MAP_COLORS.MOUNTAIN_PEAK;
-            if (d.properties.terrainType === '山地') return config.WHITE_MAP_COLORS.MOUNTAIN;
-            return config.WHITE_MAP_COLORS.LAND;
+            if (d.properties.isWater) {
+                // 水域の色は固定色を使用
+                return config.WHITE_MAP_COLORS.WATER;
+            } else {
+                // 陸地は、標高を基に新しいカラースケールから色を取得
+                return config.whiteMapElevationColor(d.properties.elevation);
+            }
         })
         .style('pointer-events', 'none');
 

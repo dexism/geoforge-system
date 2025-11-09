@@ -15,7 +15,7 @@ export const r = 20; // 描画用のヘックス半径 (pixel)
 // ----------------------------------------------------------------
 // ■ 地形生成パラメータ
 // ----------------------------------------------------------------
-export const NOISE_SCALE =               0.05; 
+export const NOISE_SCALE =               0.04; 
 export const LAND_BIAS =                 0.8; 
 export const ELEVATION_PEAK_FACTOR =     4.0; 
 export const CONTINENT_FALLOFF_FACTOR =  5.0;
@@ -112,13 +112,19 @@ export const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 
 export const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]);
 export const populationColor = d3.scaleLog().domain([1, 150000]).range(["black", "red"]).clamp(true);
 
-// ★★★ [新規] 白地図モード用の配色 ★★★
+// ★★★ [修正] 白地図モード用の配色をグラデーションスケールに変更 ★★★
 export const WHITE_MAP_COLORS = {
-    LAND:         '#fff', // 平地・丘陵
-    MOUNTAIN:     '#fee', // 山地
-    MOUNTAIN_PEAK:'#edd', // 山岳
-    WATER:        '#bbb', // 海・湖・川
+    LAND:         '#fff', // この行は使用されなくなります
+    MOUNTAIN:     '#fee', // この行は使用されなくなります
+    MOUNTAIN_PEAK:'#edd', // この行は使用されなくなります
+    WATER:        '#aaa', // 水の色を少し明るいグレーに調整
 };
+
+// ★★★ [新規] 白地図用の標高グラデーションを定義 ★★★
+export const whiteMapElevationColor = d3.scaleLinear()
+    .domain([0, 1000, 2000, 4000, 7000]) // 標高のキーポイント (0m, 1000m, 3000m, 5000m)
+    .range(['#fff', '#fff', '#fee', '#edd', '#cbb']) // 対応する淡いグレーの色
+    .clamp(true);
 
 // ----------------------------------------------------------------
 // ■ 文明生成パラメータ
@@ -189,6 +195,10 @@ export const TERRAIN_MULTIPLIERS = {
     '山岳': 2.5,
     RIVER_BONUS: 0.3 // 河川がある場合の追加乗数
 };
+
+// ★★★ [新規] 稜線横断コスト係数 ★★★
+// 道路生成時、ヘックスのridgeFlow値にこの係数が乗算されてコストに加算される
+export const RIDGE_CROSSING_COST_MULTIPLIER = 8.0;
 
 // ■ 道のり計算用の道路整備乗数
 export const ROAD_MULTIPLIERS = {
