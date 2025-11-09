@@ -140,10 +140,15 @@ header .sub-title { font-style: italic; opacity: 0.9; }
 
 main {
     flex-grow: 1;
+}
+
+section {
+    flex-grow: 1;
     background-color: var(--surface-color);
     padding: 2rem;
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 3rem;
 }
 
 footer {
