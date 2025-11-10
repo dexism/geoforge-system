@@ -93,10 +93,10 @@ export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
 // ★★★ [変更] 人口生成パラメータを刷新 ★★★
 export const POPULATION_PARAMS = {
     // 正規化された居住適性(0-1)がこの値を下回る場合、人口は0になる (足切り値)
-    HABITABILITY_THRESHOLD: 0.00,
+    HABITABILITY_THRESHOLD: 0.01,
 
     // 1ヘックスあたりの最大人口数。居住適性が1.0の地点の理論上の最大値。
-    MAX_POPULATION_PER_HEX: 30000,
+    MAX_POPULATION_PER_HEX: 50000,
 
     // 人口の集中度合いを調整する指数。値が大きいほど、ごく一部の好立地に人口が集中する。
     POPULATION_CURVE: 10.0,
