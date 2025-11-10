@@ -127,6 +127,43 @@ button.active:hover {
     color: #fff;
 }
 
+.legend-container {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: rgba(0,0,0,0.2);
+    border-radius: 5px;
+}
+.legend-container h4 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: var(--primary-color);
+    border-bottom: 1px solid #667;
+    padding-bottom: 5px;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+    font-size: 13px;
+}
+.legend-color-box {
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+    border: 1px solid #888;
+    flex-shrink: 0;
+}
+.legend-gradient-bar {
+    width: 100%;
+    height: 20px;
+    border: 1px solid #888;
+}
+.legend-gradient-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-top: 4px;
+}
 
 /* --- ハンバーガーメニュー --- */
 .menu-toggle-label {
@@ -409,4 +446,46 @@ text-align: right;
 /* 計曲線 (1000mごと) */
 .contour-index {
     stroke-width: 0.6px;
+}
+
+/* 強制再生成ボタンのスタイル */
+#force-regenerate-btn {
+    background-color: #a00; /* 暗めの赤 */
+    border-color: #c00;
+    color: #fff;
+}
+#force-regenerate-btn:hover {
+    background-color: #c00; /* ホバー時に少し明るい赤に */
+    border-color: #e00;
+}
+
+/* プログレスバーのスタイル */
+.progress-bar-container {
+    width: 50%;
+    max-width: 500px;
+    height: 10px;
+    background-color: #0008;
+    border-radius: 5px;
+    margin: 20px auto;
+    overflow: hidden; /* はみ出したバーを隠す */
+}
+
+.progress-bar {
+    width: 100%;
+    height: 100%;
+    background-color: var(--primary-color);
+    border-radius: 10px;
+    
+    /* アニメーションの定義 */
+    animation: indeterminate-progress 2s infinite linear;
+}
+
+/* バーが左右に動くアニメーション */
+@keyframes indeterminate-progress {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
 }

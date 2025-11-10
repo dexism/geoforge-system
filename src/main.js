@@ -1,43 +1,37 @@
 // ================================================================
-// GeoForge System - メインスクリプト (v2.0 - 新文明生成ロジック)
+// GeoForge System - メインスクリプト (v2.1 - Googleスプレッドシート連携)
 // ================================================================
 
-import * as d3 from 'd3'; 
+import * as d3 from 'd3';
 import * as config from './config.js';
 import { generateContinent } from './continentGenerator.js';
 import { generateCivilization, determineTerritories } from './civilizationGenerator.js';
 import { simulateEconomy, calculateTerritoryAggregates } from './economySimulator.js';
-// generateRoads は civilizationGenerator から呼び出されるため、直接のインポートは不要
-// import { generateRoads } from './roadGenerator.js'; 
 import { setupUI } from './ui.js';
+
+// ★★★ [新規] GASのデプロイで取得したウェブアプリのURLをここに貼り付けてください ★★★
+const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyS8buNL8u2DK9L3UZRtQqLWgDLvuj0WE5ZrzzdXNXSWH3bnGo-JsiO9KSrHp6YOjmtvg/exec';
 
 const loadingOverlay = document.getElementById('loading-overlay');
 const logContainer = document.getElementById('loading-log');
 const sidebar = document.querySelector('.sidebar');
 const menuToggle = document.querySelector('.menu-toggle-label');
-// const uiContainer = document.querySelector('.ui-container');
 const populationDisplay = document.getElementById('population-display');
+const regenerateBtn = document.getElementById('force-regenerate-btn');
+const progressBarContainer = document.getElementById('progress-bar-container');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-/**
- * ★★★ [改修] ログメッセージを出力する (IDを指定するとその要素を更新) ★★★
- * @param {string} message - 表示するメッセージ
- * @param {string|null} id - メッセージ要素のDOM ID (nullなら新規作成)
- */
 async function addLogMessage(message, id = null) {
     console.log(message);
     let entry;
-    // IDが指定されていれば、既存の要素を探す
     if (id) {
         entry = document.getElementById(id);
     }
 
     if (entry) {
-        // 既存の要素があれば、内容を更新する
         entry.textContent = `・ ${message}`;
     } else {
-        // なければ新しい要素を作成する
         entry = document.createElement('p');
         entry.className = 'log-entry';
         if (id) {
@@ -48,48 +42,142 @@ async function addLogMessage(message, id = null) {
     }
     
     logContainer.scrollTop = logContainer.scrollHeight;
-    // プログレスバーの高速な更新のため、ID付きの場合はsleepを短くする
     await sleep(id ? 1 : 20);
 }
 
-async function runWorldGeneration() {
-    // --- 1. 大陸生成 (変更なし) ---
+// ★★★ [ここから変更] 世界を「新規生成」する処理を独立した関数にまとめる ★★★
+async function generateNewWorld() {
+    // 1. ローディング画面をリセットして表示
+    logContainer.innerHTML = ''; // ログをクリア
+    loadingOverlay.style.opacity = '1';
+    loadingOverlay.style.display = 'flex';
+
+    // 2. 大陸生成
     let allHexes = await generateContinent(addLogMessage);
     
-    // --- 2. 新・文明生成 (人口→集落→国家→街道網の順で生成) ---
+    // 3. 文明生成
     const civResult = await generateCivilization(allHexes, addLogMessage);
     allHexes = civResult.allHexes;
     const roadPaths = civResult.roadPaths;
     
-    // --- 3. 領土の最終確定 (集落を基点に空白地を塗り分ける) ---
+    // 4. 領土の最終確定
     allHexes = await determineTerritories(allHexes, addLogMessage);
     
-    // --- 4. 経済シミュレーション ---
+    // 5. 経済シミュレーション
     allHexes = await simulateEconomy(allHexes, addLogMessage);
     
-    // --- 5. 主要都市の支配領域データを集計 ---
+    // 6. 主要都市の支配領域データを集計
     allHexes = await calculateTerritoryAggregates(allHexes, addLogMessage);
     
-    // --- 6. UIのセットアップと描画 ---
+    // 7. UIのセットアップと描画
     await addLogMessage("世界を描画しています...");
-    // ★★★ [修正] setupUIをawaitで呼び出し、addLogMessageを渡す ★★★
     await setupUI(allHexes, roadPaths, addLogMessage);
 
-    // --- 7. ローディング画面の終了処理 ---
+    // 8. スプレッドシートに保存
+    if (GAS_WEB_APP_URL.startsWith('https://script.google.com')) {
+      try {
+          await addLogMessage('生成した世界をスプレッドシートに保存しています...');
+          fetch(GAS_WEB_APP_URL, {
+              method: 'POST',
+              mode: 'no-cors', 
+              cache: 'no-cache',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({ allHexes, roadPaths }),
+              redirect: 'follow'
+          });
+          await addLogMessage('保存リクエストを送信しました。');
+      } catch (error) {
+          await addLogMessage(`スプレッドシートへの保存に失敗しました: ${error.message}`);
+      }
+    }
+
+    // 9. ローディング画面の終了処理
     const totalPopulation = allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
     await sleep(500); 
     loadingOverlay.style.opacity = '0';
     populationDisplay.textContent = `総人口: ${totalPopulation.toLocaleString()}人`;
     populationDisplay.style.display = 'block';
-    // uiContainer.style.display = 'block';
-
-    // ★★★ [変更] サイドバーとメニューボタンを表示する ★★★
     sidebar.style.display = 'block';
-    menuToggle.style.display = 'flex'; // SP用のハンバーガーメニューボタン
+    menuToggle.style.display = 'flex'; 
 
     setTimeout(() => {
         loadingOverlay.style.display = 'none';
     }, 500);
 }
 
-runWorldGeneration();
+// ★★★ [ここから変更] 読み込み関数にプログレスバーの表示/非表示処理を追加 ★★★
+async function loadExistingWorld() {
+    if (!GAS_WEB_APP_URL.startsWith('https://script.google.com')) {
+        await addLogMessage('[設定注意] GASのURLが設定されていません。新規生成のみ行います。');
+        return false;
+    }
+    
+    // try...finally を使って、成功しても失敗しても必ずバーを非表示にする
+    try {
+        await addLogMessage('既存の世界データをスプレッドシートから読み込み中...');
+        // プログレスバーを表示
+        progressBarContainer.style.display = 'block';
+
+        const response = await fetch(GAS_WEB_APP_URL);
+        if (!response.ok) {
+            throw new Error(`サーバーからの応答が不正です (ステータス: ${response.status})`);
+        }
+        const worldData = await response.json();
+
+        if (worldData && worldData.allHexes && worldData.allHexes.length > 0) {
+            await addLogMessage('データの読み込みに成功しました。世界を再構築します。');
+            
+            const { allHexes, roadPaths } = worldData;
+            await addLogMessage("世界を描画しています...");
+            await setupUI(allHexes, roadPaths, addLogMessage);
+
+            const totalPopulation = allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
+            await sleep(500); 
+            loadingOverlay.style.opacity = '0';
+            populationDisplay.textContent = `総人口: ${totalPopulation.toLocaleString()}人`;
+            populationDisplay.style.display = 'block';
+            sidebar.style.display = 'block';
+            menuToggle.style.display = 'flex';
+
+            setTimeout(() => { loadingOverlay.style.display = 'none'; }, 500);
+            
+            return true; // 読み込み成功
+        } else {
+            await addLogMessage('既存のデータが見つかりませんでした。');
+            return false; // データが空なので読み込み失敗
+        }
+    } catch (error) {
+        await addLogMessage(`データ読み込みに失敗しました: ${error.message}。`);
+        return false; // エラーなので読み込み失敗
+    } finally {
+        // 処理が完了したらプログレスバーを非表示にする
+        progressBarContainer.style.display = 'none';
+    }
+}
+
+// ★★★ [ここから変更] メインの実行フローを制御する関数 ★★★
+async function main() {
+    // 最初に読み込みを試行
+    const loaded = await loadExistingWorld();
+    
+    // 読み込みに失敗した場合のみ、新規生成を実行
+    if (!loaded) {
+        await addLogMessage('新しい世界を創造します。');
+        await generateNewWorld();
+    }
+}
+
+// ★★★ [ここから新規] 強制再生成ボタンのイベントリスナーを追加 ★★★
+regenerateBtn.addEventListener('click', async () => {
+    const confirmationMessage = "【警告】\n" +
+                                "世界の再生成には10分以上かかる場合があります。\n" +
+                                "保存されているデータは上書きされます。\n\n" +
+                                "覚悟はよろしいですか？";
+                              
+    if (window.confirm(confirmationMessage)) {
+        await generateNewWorld();
+    }
+});
+
+// ★★★ [変更] アプリケーションの実行開始 ★★★
+main();

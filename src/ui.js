@@ -13,7 +13,8 @@ import { getIndex, formatProgressBar } from './utils.js';
 // --- グローバル変数 ---
 // 全ての描画レイヤー（<g>要素）を管理するオブジェクト
 const layers = {};
-
+// ★★★ [ここが変更点] 凡例表示用コンテナをグローバル変数として保持 ★★★
+let legendContainer = null;
 
 // ================================================================
 // ■ ヘルパー関数 (モジュールスコープ)
@@ -60,6 +61,113 @@ function toggleLayerVisibility(layerName, buttonElement) {
     buttonElement.classList.toggle('active', layer.visible);
 }
 
+/**
+ * 気温の凡例を生成する
+ */
+function createTemperatureLegend() {
+    const scale = config.tempColor;
+    const gradientColors = d3.range(0, 1.01, 0.1).map(t => scale.interpolator()(t));
+    
+    return `
+        <h4>気温凡例</h4>
+        <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
+        <div class="legend-gradient-labels">
+            <span>${scale.domain()[0]}℃</span>
+            <span>${scale.domain()[1]}℃</span>
+        </div>
+    `;
+}
+
+/**
+ * 降水量の凡例を生成する
+ */
+function createPrecipitationLegend() {
+    const scale = config.precipColor;
+    const domain = scale.domain();
+    const range = scale.range();
+    let itemsHtml = '';
+
+    for (let i = 0; i < range.length; i++) {
+        const color = range[i];
+        const lowerBound = domain[i - 1] ? domain[i-1] : 0;
+        const upperBound = domain[i];
+        const label = i === 0 ? `～ ${upperBound} mm` : `${lowerBound} - ${upperBound} mm`;
+        itemsHtml += `
+            <div class="legend-item">
+                <div class="legend-color-box" style="background-color: ${color};"></div>
+                <span>${label}</span>
+            </div>
+        `;
+    }
+
+    return `<h4>降水量凡例 (mm/年)</h4>${itemsHtml}`;
+}
+
+/**
+ * 気候帯の凡例を生成する
+ */
+function createClimateZoneLegend() {
+    let itemsHtml = '';
+    for (const [zone, color] of Object.entries(config.CLIMATE_ZONE_COLORS)) {
+        itemsHtml += `
+            <div class="legend-item">
+                <div class="legend-color-box" style="background-color: ${color};"></div>
+                <span>${zone}</span>
+            </div>
+        `;
+    }
+    return `<h4>気候帯凡例</h4>${itemsHtml}`;
+}
+
+/**
+ * 人口分布の凡例を生成する
+ */
+function createPopulationLegend() {
+    const scale = config.populationColor;
+    // ★★★ ここを修正 ★★★
+    // scaleLogにはinterpolatorがないため、rangeの色から直接補間関数を作成する
+    const interpolator = d3.interpolate(scale.range()[0], scale.range()[1]);
+    const gradientColors = d3.range(0, 1.01, 0.1).map(interpolator);
+    
+    return `
+        <h4>人口分布凡例</h4>
+        <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
+        <div class="legend-gradient-labels">
+            <span>${scale.domain()[0].toLocaleString()}人</span>
+            <span>${scale.domain()[1].toLocaleString()}人</span>
+        </div>
+    `;
+}
+
+/**
+ * 表示する凡例を更新する
+ * @param {string|null} layerName 表示したい凡例のレイヤー名、または非表示にする場合はnull
+ */
+function updateLegend(layerName) {
+    if (!legendContainer) return;
+
+    let legendHtml = '';
+    switch (layerName) {
+        case 'temp-overlay':
+            legendHtml = createTemperatureLegend();
+            break;
+        case 'precip-overlay':
+            legendHtml = createPrecipitationLegend();
+            break;
+        case 'climate-zone-overlay':
+            legendHtml = createClimateZoneLegend();
+            break;
+        case 'population-overlay':
+            legendHtml = createPopulationLegend();
+            break;
+        default:
+            legendHtml = ''; // 対応する凡例がなければ空にする
+            break;
+    }
+    
+    legendContainer.innerHTML = legendHtml;
+    legendContainer.style.display = legendHtml ? 'block' : 'none';
+}
 
 // ================================================================
 // ■ UIセットアップ メイン関数
@@ -74,6 +182,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const infoWindow = document.getElementById('info-window');
     const infoContent = document.getElementById('info-window-content');
     const infoCloseBtn = document.getElementById('info-close-btn');
+
+    legendContainer = document.getElementById('legend-container');
 
     // --- 2. 描画用データの事前計算 ---
     const hexes = [];
@@ -699,7 +809,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .attr('dominant-baseline', 'middle')
         .style('display', 'none')
         .text(d => d.properties.resourceRank);
-        
+
     const zoom = d3.zoom().scaleExtent([0.2, 10]).on('zoom', (event) => {
         g.attr('transform', event.transform);
         const effectiveRadius = config.r * event.transform.k;
@@ -751,10 +861,46 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     d3.select('#toggleRidgeWaterSystemLayer').on('click', function() { toggleLayerVisibility('ridge-water-system', this); });
 
     // 6c. 地理情報カテゴリのボタン
-    d3.select('#toggleTempLayer').on('click', function() { toggleLayerVisibility('temp-overlay', this); });
-    d3.select('#togglePrecipLayer').on('click', function() { toggleLayerVisibility('precip-overlay', this); });
-    d3.select('#toggleClimateZoneLayer').on('click', function() { toggleLayerVisibility('climate-zone-overlay', this); });
-    d3.select('#togglePopulationLayer').on('click', function() { toggleLayerVisibility('population-overlay', this); });
+    // ★★★ [ここから修正] 地理情報ボタンの排他的な動作を実装 ★★★
+    const geoInfoButtons = {
+        '#toggleTempLayer': 'temp-overlay',
+        '#togglePrecipLayer': 'precip-overlay',
+        '#toggleClimateZoneLayer': 'climate-zone-overlay',
+        '#togglePopulationLayer': 'population-overlay'
+    };
+
+    const geoInfoButtonSelectors = Object.keys(geoInfoButtons);
+
+    geoInfoButtonSelectors.forEach(selector => {
+        d3.select(selector).on('click', function() {
+            const clickedButton = this;
+            const targetLayerName = geoInfoButtons[selector];
+            const isDisabling = clickedButton.classList.contains('active');
+
+            // 最初に、すべての地理情報ボタンとレイヤーを非アクティブ/非表示にする
+            geoInfoButtonSelectors.forEach(s => {
+                const btn = d3.select(s).node();
+                const layerName = geoInfoButtons[s];
+                if (layers[layerName]) {
+                    layers[layerName].visible = false;
+                    layers[layerName].group.style('display', 'none');
+                    btn.classList.remove('active');
+                }
+            });
+
+            updateLegend(null);
+
+            // もし非アクティブ化（トグルオフ）でなければ、クリックされたものを再度有効化する
+            if (!isDisabling) {
+                if (layers[targetLayerName]) {
+                    layers[targetLayerName].visible = true;
+                    layers[targetLayerName].group.style('display', 'inline');
+                    clickedButton.classList.add('active');
+                    updateLegend(targetLayerName);
+                }
+            }
+        });
+    });
 
     // 6d. 資源カテゴリのボタン
     d3.select('#toggleManaLayer').on('click', function() { toggleLayerVisibility('mana-overlay', this); });

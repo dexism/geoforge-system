@@ -1,0 +1,160 @@
+// ================================================================
+// GeoForge System - Google Sheets Data API (v1.0)
+// ================================================================
+
+// ターゲットのスプレッドシートIDを設定
+const SPREADSHEET_ID = '1WJqsaohJoXxwRcREsyZzA0ihvSOpfMXI7CnQfZX68PE';
+
+// 各データを保存するシート名
+const HEX_SHEET_NAME = 'HexData';
+const ROAD_SHEET_NAME = 'RoadData';
+
+/**
+ * WebアプリからGETリクエストを受け取ったときに実行される関数。
+ * スプレッドシートからデータを読み込み、JSON形式で返す。
+ */
+function doGet(e) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    
+    // ヘックスデータを読み込む
+    const hexSheet = ss.getSheetByName(HEX_SHEET_NAME);
+    const hexValues = hexSheet.getDataRange().getValues();
+    const allHexes = valuesToObjects(hexValues);
+    
+    // 道路データを読み込む
+    const roadSheet = ss.getSheetByName(ROAD_SHEET_NAME);
+    const roadValues = roadSheet.getDataRange().getValues();
+    const roadPaths = valuesToObjects(roadValues);
+
+    const worldData = {
+      allHexes: allHexes,
+      roadPaths: roadPaths,
+    };
+
+    // JSON形式で出力
+    return ContentService
+      .createTextOutput(JSON.stringify(worldData))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    // エラーが発生した場合は、エラーメッセージを返す
+    return ContentService
+      .createTextOutput(JSON.stringify({ error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * WebアプリからPOSTリクエストを受け取ったときに実行される関数。
+ * 送信されてきたJSONデータをパースし、スプレッドシートに保存する。
+ */
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const allHexes = data.allHexes;
+    const roadPaths = data.roadPaths;
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // ヘックスデータをシートに書き込む
+    const hexSheet = getOrCreateSheet(ss, HEX_SHEET_NAME);
+    const hexRows = objectsToValues(allHexes);
+    updateSheetData(hexSheet, hexRows);
+    
+    // 道路データをシートに書き込む
+    const roadSheet = getOrCreateSheet(ss, ROAD_SHEET_NAME);
+    const roadRows = objectsToValues(roadPaths);
+    updateSheetData(roadSheet, roadRows);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'success' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// --- ヘルパー関数 ---
+
+/**
+ * 指定された名前のシートを取得、なければ作成する
+ */
+function getOrCreateSheet(spreadsheet, sheetName) {
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(sheetName);
+  }
+  return sheet;
+}
+
+/**
+ * シートのデータをクリアして新しいデータを書き込む
+ */
+function updateSheetData(sheet, dataRows) {
+  sheet.clearContents();
+  if (dataRows.length > 0) {
+    sheet.getRange(1, 1, dataRows.length, dataRows[0].length).setValues(dataRows);
+  }
+}
+
+/**
+ * オブジェクトの配列をスプレッドシート書き込み用の2次元配列に変換する
+ */
+function objectsToValues(objects) {
+  if (!objects || objects.length === 0) return [];
+
+  // 1. 全オブジェクトからすべてのキーを収集してヘッダーを作成
+  const headerSet = new Set();
+  objects.forEach(obj => {
+    Object.keys(obj).forEach(key => headerSet.add(key));
+  });
+  const header = Array.from(headerSet);
+
+  // 2. 各オブジェクトをヘッダーの順序に従って配列に変換
+  const rows = objects.map(obj => {
+    return header.map(key => {
+      const value = obj[key];
+      // 値がオブジェクトや配列の場合はJSON文字列に変換
+      if (typeof value === 'object' && value !== null) {
+        return JSON.stringify(value);
+      }
+      return value !== undefined ? value : ''; // undefinedは空文字に
+    });
+  });
+
+  return [header, ...rows];
+}
+
+/**
+ * スプレッドシートから読み込んだ2次元配列をオブジェクトの配列に変換する
+ */
+function valuesToObjects(values) {
+    if (!values || values.length < 2) return [];
+
+    const header = values[0];
+    const objects = [];
+
+    for (let i = 1; i < values.length; i++) {
+        const row = values[i];
+        const obj = {};
+        for (let j = 0; j < header.length; j++) {
+            const key = header[j];
+            let value = row[j];
+            // 値がJSON文字列のように見えればパースを試みる
+            if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
+                try {
+                    value = JSON.parse(value);
+                } catch (e) {
+                    // パース失敗時はそのままの文字列を使用
+                }
+            }
+            obj[key] = value;
+        }
+        objects.push(obj);
+    }
+    return objects;
+}
