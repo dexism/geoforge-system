@@ -86,7 +86,7 @@ function generatePopulation(allHexes) {
         if (!p.isWater && p.vegetation !== '高山' && p.vegetation !== '砂漠') {
             score += p.agriPotential * 30;   
             score += p.fishingPotential * 20; 
-            const idealTemp = 17.5;
+            const idealTemp = 5.0;
             score += Math.max(0, 1 - Math.abs(p.temperature - idealTemp) / 15) * 15;
             score += p.manaValue * 10;        
             score += p.miningPotential * 5;   
@@ -96,7 +96,7 @@ function generatePopulation(allHexes) {
         
         if (p.habitability > 0) {
             const normalizedHabitability = p.habitability / 50.0;
-            const populationFactor = Math.pow(normalizedHabitability, 8);
+            const populationFactor = Math.pow(normalizedHabitability, 9);
             p.population = Math.floor(populationFactor * 1000);
         } else {
             p.population = 0;

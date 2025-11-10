@@ -52,7 +52,6 @@ async function addLogMessage(message, id = null) {
     await sleep(id ? 1 : 20);
 }
 
-
 async function runWorldGeneration() {
     // --- 1. 大陸生成 (変更なし) ---
     let allHexes = await generateContinent(addLogMessage);
@@ -73,7 +72,8 @@ async function runWorldGeneration() {
     
     // --- 6. UIのセットアップと描画 ---
     await addLogMessage("世界を描画しています...");
-    setupUI(allHexes, roadPaths);
+    // ★★★ [修正] setupUIをawaitで呼び出し、addLogMessageを渡す ★★★
+    await setupUI(allHexes, roadPaths, addLogMessage);
 
     // --- 7. ローディング画面の終了処理 ---
     const totalPopulation = allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);

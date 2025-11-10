@@ -1,77 +1,91 @@
 // ================================================================
-// GeoForge System - 大陸生成モジュール (v2.3 - 鉱業適正の鋭敏化)
+// GeoForge System - 大陸生成モジュール (v3.1 - 安定自然地形モデル)
 // ================================================================
 
 import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
 import * as config from './config.js';
 import { getIndex } from './utils.js';
 
-// ----------------------------------------------------------------
-// ■ ノイズジェネレーターの初期化
-// ----------------------------------------------------------------
-const terrainNoise = createNoise2D();
+// --- ノイズジェネレーターの初期化 ---
+const continentNoise = createNoise2D();
+const mountainNoise = createNoise2D();
+const hillNoise = createNoise2D();
+const detailNoise = createNoise2D();
+// (以下、従来から使用しているノイズ)
 const manaNoise = createNoise2D();
 const climateNoise = createNoise2D();
 const precipitationNoise = createNoise2D();
 const forestPotentialNoise = createNoise2D();
-const taigaPotentialNoise = createNoise2D();
-const junglePotentialNoise = createNoise2D();
-const vegetationCoverageNoise = createNoise2D();
 const grasslandPotentialNoise = createNoise2D();
 const miningPotentialNoise = createNoise2D();
 
+
 /**
- * 第1パス：物理的な基本プロパティを生成する
+ * ★★★ [全面書き換え] 安定した手法で自然な地形を生成する ★★★
  * @param {number} col - ヘックスの列
  * @param {number} row - ヘックスの行
  * @returns {object} - 計算されたプロパティ
  */
 function generateBaseProperties(col, row) {
-    const nx = col * config.NOISE_SCALE;
-    const ny = row * config.NOISE_SCALE;
-    
-    // 大陸形状と標高の計算
-    let baseElevation = terrainNoise(nx, ny);
+    const nx = col / config.COLS;
+    const ny = row / config.ROWS;
 
-    // ★★★ [変更/新規] ここから中央平野を生成するロジック ★★★
-    const centerX = config.COLS / 2;
-    const centerY = config.ROWS / 2;
-    const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
-    const distFromCenter = Math.sqrt(Math.pow(col - centerX, 2) + Math.pow(row - centerY, 2));
+    // --- 1. 大陸マスクの生成 (陸地強度: 0.0 - 1.0) ---
+    // a. ベースとなるノイズ
+    let landStrength = (continentNoise(nx * config.CONTINENT_NOISE_FREQ, ny * config.CONTINENT_NOISE_FREQ) + 1) / 2; // 0-1に正規化
 
-    // 1. 中央平野を適用する半径を計算
-    const plainRadius = maxDist * config.CENTRAL_PLAIN_RADIUS;
-
-    // 2. もしヘックスがこの半径内なら、標高を抑制する
-    if (distFromCenter < plainRadius) {
-        // 中​​心に近いほど1.0に、半径の端に近づくほど0.0になる係数を計算
-        const suppressionFactor = Math.pow(1.0 - (distFromCenter / plainRadius), 2);
-        // 係数と設定値を使って、元の標高を抑制（平坦化）する
-        baseElevation -= baseElevation * suppressionFactor * config.CENTRAL_PLAIN_FLATNESS;
+    // b. 中央からの距離による減衰
+    const distFromCenter = Math.hypot(nx - 0.5, ny - 0.5) * 2;
+    if (distFromCenter > config.CONTINENT_FALLOFF_START) {
+        const falloff = (distFromCenter - config.CONTINENT_FALLOFF_START) / config.CONTINENT_FALLOFF_RANGE;
+        landStrength *= (1 - Math.min(1, falloff));
     }
 
-    if (baseElevation > 0) {
-        baseElevation = Math.pow(baseElevation, config.ELEVATION_PEAK_FACTOR);
+    // c. 地形バイアスを適用
+    // 東の海
+    if (nx > config.EAST_SEA_BIAS_X_START) {
+        const bias = (nx - config.EAST_SEA_BIAS_X_START) / (1 - config.EAST_SEA_BIAS_X_START);
+        landStrength -= bias * config.EAST_SEA_BIAS_INTENSITY;
     }
-    
-    const falloff = Math.pow(distFromCenter / maxDist, config.CONTINENT_FALLOFF_FACTOR);
-    const internalElevation = baseElevation + config.LAND_BIAS - falloff;
+    // 北西の海
+    const distFromNW = Math.hypot(nx, ny);
+    if (distFromNW < config.NW_SEA_BIAS_RADIUS) {
+        const bias = (config.NW_SEA_BIAS_RADIUS - distFromNW) / config.NW_SEA_BIAS_RADIUS;
+        landStrength -= bias * config.NW_SEA_BIAS_INTENSITY;
+    }
+    landStrength = Math.max(0, landStrength);
 
+    const isWater = landStrength < config.SEA_LEVEL;
+
+    // --- 2. 陸地に地形の起伏を追加 ---
+    let elevation = 0;
+    if (!isWater) {
+        // a. 山脈の生成
+        let mountain = (mountainNoise(nx * config.MOUNTAIN_NOISE_FREQ, ny * config.MOUNTAIN_NOISE_FREQ) + 1) / 2;
+        mountain = Math.pow(mountain, config.MOUNTAIN_DISTRIBUTION_POWER); // 山脈の分布を絞る
+        mountain *= Math.pow(landStrength, config.MOUNTAIN_SHAPE_POWER); // 大陸中央部ほど高く、鋭くする
+        mountain *= config.MOUNTAIN_HEIGHT_MAX;
+
+        // b. 丘陵の生成
+        let hills = (hillNoise(nx * config.HILL_NOISE_FREQ, ny * config.HILL_NOISE_FREQ) + 1) / 2;
+        hills *= config.HILL_HEIGHT_MAX;
+
+        // c. 細かい起伏の生成
+        let details = (detailNoise(nx * config.DETAIL_NOISE_FREQ, ny * config.DETAIL_NOISE_FREQ) + 1) / 2;
+        details *= config.DETAIL_HEIGHT_MAX;
+
+        // d. 全ての起伏を合成
+        elevation = mountain + hills + details;
+    }
+
+    // --- 3. 最終的なプロパティを計算 ---
     const properties = {};
-    
-    // ... (以降のプロパティ計算は変更なし) ...
-    const inlandWaterNoise = terrainNoise(nx + 100, ny + 100);
-    const dynamicLakeThreshold = config.lakeThresholdScale(internalElevation);
-    const isWater = internalElevation < 0.0 || (inlandWaterNoise < dynamicLakeThreshold && internalElevation < 1.3);
     properties.isWater = isWater;
+    properties.elevation = isWater ? 0 : config.elevationScale(elevation);
 
-    // ★★★ [変更] 海(大陸外)なら標高0、それ以外(陸地や湖)なら地形に応じた標高を設定 ★★★
-    properties.elevation = internalElevation < 0.0 ? 0 : config.elevationScale(internalElevation);
-    // properties.elevation = isWater ? 0 : config.elevationScale(internalElevation);
-    
-    // 気温と降水量の計算
+    // --- 4. 気候とその他のプロパティを計算 (従来ロジックを流用) ---
     const latitude = row / config.ROWS;
-    const baseTemp = 0 + (latitude * 35);
+    const baseTemp = -5 + (latitude * 35);
     properties.climate = baseTemp + climateNoise(nx, ny) * 5;
     
     let elevationCorrection = 0;
@@ -81,15 +95,15 @@ function generateBaseProperties(col, row) {
     properties.temperature = properties.climate - elevationCorrection;
 
     const basePrecip = (col / config.COLS);
-    const precipNoiseValue = precipitationNoise(nx, ny) * 0.2;
+    const precipNoiseValue = precipitationNoise(nx / 2, ny / 2) * 0.2;
     properties.precipitation = Math.max(0, Math.min(1, basePrecip + precipNoiseValue));
     
-    // 気候帯の決定
-    if (properties.climate < config.TEMP_ZONES.COLD) {
+    // ★★★ [修正] 気候帯の判定を、標高を考慮した「temperature」で行う ★★★
+    if (properties.temperature < config.TEMP_ZONES.COLD) {
         if (properties.precipitation < config.PRECIP_ZONES.DRY) properties.climateZone = "砂漠気候(寒)";
         else if (properties.precipitation < config.PRECIP_ZONES.MODERATE) properties.climateZone = "ツンドラ気候";
         else properties.climateZone = "亜寒帯湿潤気候";
-    } else if (properties.climate < config.TEMP_ZONES.TEMPERATE) {
+    } else if (properties.temperature < config.TEMP_ZONES.TEMPERATE) {
         if (properties.precipitation < config.PRECIP_ZONES.DRY) properties.climateZone = "ステップ気候";
         else if (properties.precipitation < config.PRECIP_ZONES.MODERATE) properties.climateZone = "地中海性気候";
         else properties.climateZone = "温暖湿潤気候";
@@ -99,27 +113,22 @@ function generateBaseProperties(col, row) {
         else properties.climateZone = "熱帯雨林気候";
     }
 
-    // 積雪判定
     properties.hasSnow = false;
     if (!isWater && properties.temperature <= config.SNOW_THRESHOLDS.TEMPERATURE && properties.precipitation > config.SNOW_THRESHOLDS.PRECIPITATION_LIGHT) {
         properties.hasSnow = true;
     }
-
-    // 魔力と資源の基礎値
-    const rawManaValue = manaNoise(nx / 2, ny / 2);
+    const rawManaValue = manaNoise(nx * 2, ny * 2);
     properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
     if (properties.manaValue > 0.9) properties.manaRank = 'S';
     else if (properties.manaValue > 0.7) properties.manaRank = 'A';
     else if (properties.manaValue > 0.4) properties.manaRank = 'B';
     else if (properties.manaValue > 0.1) properties.manaRank = 'C';
     else properties.manaRank = 'D';
-
     const resourceSymbols = ['木', '石', '鉄', '金', '晶'];
     properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
     
     return properties;
 }
-
 
 /**
  * 第2パス：水系（河川）を生成する
@@ -231,11 +240,12 @@ function generateRidgeLines(allHexes) {
 function calculateFinalProperties(allHexes) {
     allHexes.forEach(h => {
         const { properties, col, row } = h;
-        const { isWater, elevation, temperature, precipitation, climate } = properties;
-        const nx = col * config.NOISE_SCALE;
-        const ny = row * config.NOISE_SCALE;
+        const { isWater, elevation, temperature, precipitation } = properties; // climateは不要なので削除
+        // ★★★ [修正] 座標の正規化手法をgenerateBasePropertiesと統一する ★★★
+        const nx = col / config.COLS;
+        const ny = row / config.ROWS;
 
-        // ★★★ [新規] 標高から地形タイプを決定 ★★★
+        // ★★★ [修正] 標高から地形タイプを決定 ★★★
         if (isWater) {
             properties.terrainType = '水域';
         } else if (elevation >= config.TERRAIN_ELEVATION.MOUNTAIN_PEAK) {
@@ -301,13 +311,14 @@ function calculateFinalProperties(allHexes) {
                 properties.landUse.barren = 1.0;
             }
 
-            // 5. 従来の vegetation プロパティ（最も優勢な地目）を決定
+             // 5. 従来の vegetation プロパティ（最も優勢な地目）を決定
             let dominantVeg = '荒れ地';
             
             if (properties.landUse.forest >= 0.5) {
-                if (climate > config.TEMP_ZONES.TEMPERATE && precipitation > config.VEGETATION_THRESHOLDS.JUNGLE_MIN_PRECIP) {
+                // ★★★ [修正] 植生の判定を、標高を考慮した「temperature」で行う ★★★
+                if (temperature > config.TEMP_ZONES.TEMPERATE && precipitation > config.VEGETATION_THRESHOLDS.JUNGLE_MIN_PRECIP) {
                     dominantVeg = '密林';
-                } else if (climate < config.TEMP_ZONES.COLD) {
+                } else if (temperature < config.TEMP_ZONES.COLD) {
                     dominantVeg = '針葉樹林';
                 } else {
                     dominantVeg = '森林';
@@ -338,22 +349,17 @@ function calculateFinalProperties(allHexes) {
 
         properties.forestPotential = properties.landUse.forest || 0;
 
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★★★ [修正] ここから鉱業適正の計算ロジックを全面的に刷新 ★★★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // 鉱業適正の計算ロジック
         let miningPotential = 0;
         if (!isWater) {
             // 1. ノイズ関数から-1.0～1.0の範囲で「鉱脈の素」となる値を取得
-            //    龍脈より周波数を高く（nx*2）して、より細かい分布にする
-            const rawMiningValue = miningPotentialNoise(nx * 0.5, ny * 0.5);
+            const rawMiningValue = miningPotentialNoise(nx * 2.0, ny * 2.0); // 周波数を調整
 
-            // 2. 龍脈と同様の計算で、値のピークを鋭くする
-            //    powの指数を大きくするほど、ピークはより鋭く、希少になる (龍脈は8)
-            const peakFactor = 5;
+            // 2. 値のピークを鋭くする (powの指数を大きくするほど鋭くなる)
+            const peakFactor = 8;
             let noisePotential = Math.pow(1.0 - Math.abs(rawMiningValue), peakFactor);
             
             // 3. 標高が高いほど鉱脈が存在しやすい、という補正を加える
-            //    標高4000m以上で最大1.5倍のボーナスがかかる
             const elevationFactor = 1 + (Math.min(4000, elevation) / 4000) * 0.5;
             
             // 4. 最終的なポテンシャルを計算
@@ -361,10 +367,7 @@ function calculateFinalProperties(allHexes) {
         }
         // 最終的な値を 0.0 ～ 1.0 の範囲に収める
         properties.miningPotential = Math.min(1.0, miningPotential);
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // ★★★ 修正はここまで ★★★
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        
+
         let fishingPotential = 0;
         if (!isWater) {
             let waterBonus = 0;

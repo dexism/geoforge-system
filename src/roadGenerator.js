@@ -143,8 +143,11 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
  */
 function calculateRoadDistance(path, roadLevel, allHexes) {
     if (path.length < 2) return 0;
-    const directDistancePerHex = config.HEX_SIZE_KM * Math.sqrt(3) / 2;
-    const totalDirectDistance = directDistancePerHex * (path.length - 1);
+    
+    // ★★★ [修正] 隣接ヘックス間の中心距離は、どの方向でもHEX_SIZE_KM(高さ)と等しい ★★★
+    const distancePerHex = config.HEX_SIZE_KM;
+    const totalDirectDistance = distancePerHex * (path.length - 1);
+
     const terrainMultipliers = path.map(pos => {
         const hex = allHexes[getIndex(pos.x, pos.y)];
         const p = hex.properties;
@@ -179,7 +182,8 @@ function calculateRoadDistance(path, roadLevel, allHexes) {
 function calculateTravelDays(path, roadLevel, allHexes) {
     if (path.length < 2) return 0;
 
-    const segmentDistance = config.HEX_SIZE_KM * Math.sqrt(3) / 2; // 1ヘックス進むごとの直線距離
+    // ★★★ [修正] 1ヘックス進むごとの距離を正しい値に修正 ★★★
+    const segmentDistance = config.HEX_SIZE_KM;
     let totalTravelHours = 0;
 
     // 道路整備による速度乗数を取得

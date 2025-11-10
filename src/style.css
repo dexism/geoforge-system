@@ -33,9 +33,15 @@ button {
   border-radius: 4px;
   text-align: left;
   margin-bottom: 5px;
+  transition: background-color 0.2s, border-color 0.2s;
 }
-button:hover {
-    background-color: #556;
+button.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+button.active:hover {
+    background-color: #45abf5;
 }
 
 /* --- 全体レイアウト --- */
@@ -83,6 +89,42 @@ button:hover {
 }
 .sidebar details[open] summary { 
   color: var(--primary-color); 
+}
+/* ★★★ [新規] 注釈用のスタイル ★★★ */
+.sidebar .note {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 10px;
+    padding-left: 5px;
+}
+
+
+/* ★★★ [新規] 基本地図選択ラジオボタンのスタイル ★★★ */
+.map-type-selector {
+    display: flex;
+    gap: 5px;
+    margin: 0.5rem 0;
+}
+.map-type-selector input[type="radio"] {
+    display: none; /* デフォルトのラジオボタンを隠す */
+}
+.map-type-selector label {
+    flex-grow: 1;
+    padding: 8px 0; /* 上下のパディングを調整 */
+    background-color: #445;
+    color: var(--text-color);
+    border: 1px solid #667;
+    border-radius: 4px;
+    text-align: center; /* 中央揃え */
+    cursor: pointer;
+    font-size: 16px; /* フォントサイズを調整 */
+    font-weight: bold;
+    transition: all 0.2s;
+}
+.map-type-selector input[type="radio"]:checked + label {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
 }
 
 
@@ -346,4 +388,24 @@ text-align: right;
   /* \n などの改行を正しく表示するための設定 */
   white-space: pre-wrap;
   line-height: 1.6;
+}
+
+/* ================================================================
+   等高線レイヤー スタイル
+   ================================================================ */
+.contour-path {
+    fill: none;
+    stroke: #5a3d23; /* 茶色系の線 */
+    stroke-opacity: 0.5; /* 透過50% */
+    pointer-events: none;
+}
+
+/* 主曲線 (200mごと) */
+.contour-intermediate {
+    stroke-width: 0.3px;
+}
+
+/* 計曲線 (1000mごと) */
+.contour-index {
+    stroke-width: 0.6px;
 }
