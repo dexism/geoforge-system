@@ -317,6 +317,7 @@ button.active:hover {
 
 /* 座標ラベル (E00-N00) */
 .hex-label {
+  fill: #555;
   font-weight: 900;
 }
 

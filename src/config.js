@@ -71,14 +71,17 @@ export const PRECIPITATION_PARAMS = {
     // --- 人口生成で参照する閾値 (mm/年) ---
     DRYNESS_FARMING_THRESHOLD: 600,  // 安定した定住農耕が可能になる年間降水量
     DRYNESS_PASTORAL_THRESHOLD: 250, // 牧畜が可能になる最低限の年間降水量
+
+    // ★★★ [新規] 密林と湿地の生成条件パラメータ ★★★
+    JUNGLE_MIN_TEMP: 22,         // 密林が生成される最低気温 (℃)
+    JUNGLE_MIN_PRECIP_MM: 1800,  // 密林が生成される最低年間降水量 (mm)
+    MARSH_MAX_ELEVATION: 150,    // 湿地が生成される最大標高 (m)
+    MARSH_MIN_FLOW: 1.5,         // 湿地が生成される最低流量
 };
 
 export const TERRAIN_ELEVATION = { MOUNTAIN_PEAK: 3000, MOUNTAIN: 2000, HILLS: 1000 };
-export const VEGETATION_THRESHOLDS = { JUNGLE_MIN_IPREC: 0.10 }; // この値は使われなくなります
 export const SNOW_THRESHOLDS = { TEMPERATURE: -10, PRECIPITATION_LIGHT: 0.1 };
-export const TEMP_ZONES = { COLD: 0, TEMPERATE: 30 };
-// precipitationの0-1スケールは使われなくなるため、PRECIP_ZONESは廃止します
-// export const PRECIP_ZONES = { DRY: 0.50, MODERATE: 0.70 };
+export const TEMP_ZONES = { COLD: 5, TEMPERATE: 40 };
 
 // ================================================================
 // ■ 4. 文明・経済パラメータ
@@ -90,13 +93,13 @@ export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
 // ★★★ [変更] 人口生成パラメータを刷新 ★★★
 export const POPULATION_PARAMS = {
     // 正規化された居住適性(0-1)がこの値を下回る場合、人口は0になる (足切り値)
-    HABITABILITY_THRESHOLD: 0.15,
+    HABITABILITY_THRESHOLD: 0.00,
 
     // 1ヘックスあたりの最大人口数。居住適性が1.0の地点の理論上の最大値。
-    MAX_POPULATION_PER_HEX: 15000,
+    MAX_POPULATION_PER_HEX: 30000,
 
     // 人口の集中度合いを調整する指数。値が大きいほど、ごく一部の好立地に人口が集中する。
-    POPULATION_CURVE: 5.0,
+    POPULATION_CURVE: 10.0,
 };
 export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面積(ha)
     '小麦': { yield: 0.60, type: '畑作', cultivation_ha_per_person: 1.5 },
@@ -117,6 +120,13 @@ export const SETTLEMENT_PARAMS = { // 労働力率, 1人当たり消費量(t), �
 // ================================================================
 // ■ 5. 街道・移動パラメータ
 // ================================================================
+// ★★★ [新規] 下位道路の最大敷設日数 ★★★
+export const MAX_TRAVEL_DAYS = {
+    4: 10, // 街道 (街 -> 上位) は最大10日
+    3: 7,  // 町道 (町 -> 上位) は最大7日
+    2: 3,  // 村道 (村 -> 上位) は最大3日
+};
+
 export const RIDGE_CROSSING_COST_MULTIPLIER = 8.0;
 export const TERRAIN_MULTIPLIERS = { 
     '平地': 1.4, 
@@ -178,7 +188,8 @@ export const TERRAIN_COLORS = {
     砂漠: '#e8d9b5', 
     森林: '#6aa84f', 
     針葉樹林: '#3b6e4f', 
-    密林: '#1b5e20' 
+    密林: '#1b5e20', 
+    湿地: '#5a6e5a'
 };
 export const CLIMATE_ZONE_COLORS = { 
     "砂漠気候(寒)": '#d2b48c', 
@@ -193,11 +204,26 @@ export const CLIMATE_ZONE_COLORS = {
 };
 export const manaColor = d3.scaleSequential(d3.interpolatePurples).domain([0, 1]); 
 export const tempColor = d3.scaleSequential(d3.interpolateTurbo).domain([-15, 35]);
-export const precipColor = d3.scaleSequential(d3.interpolateBlues).domain([0, 1]);
+export const precipColor = d3.scaleLog()
+    // 0mmに近い値でもエラーにならないように、最小値を1に設定
+    .domain([1, 150, 400, 800, 1200, 1600, 2000, 2500]) // 降水量(mm)の区切り
+    .range([
+        "#fff", // 白 (～1mm)
+        "#0ff", // 水色 (～150mm)
+        "#00f", // 青 (～400mm)
+        "#8f8", // 黄緑 (～800mm)
+        "#0a0", // 緑 (～1200mm)
+        "#ff0", // 黄 (～1600mm)
+        "#f00", // 赤 (～2000mm)
+        "#808"  // 紫 (～2500mm+)
+    ])
+    .clamp(true); // domainの範囲外の値は、範囲の端の色を適用する
 export const agriColor = d3.scaleSequential(d3.interpolateGreens).domain([0, 1]);
 export const forestColor = d3.scaleSequential(d3.interpolateYlGn).domain([0, 1]);
 export const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 1]);
 export const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]);
 export const populationColor = d3.scaleLog().domain([1, 150000]).range(["black", "red"]).clamp(true);
 export const WHITE_MAP_COLORS = { WATER: '#aaa' };
-export const whiteMapElevationColor = d3.scaleLinear().domain([0, 1000, 2000, 4000, 7000]).range(['#fff', '#fff', '#fee', '#edd', '#cbb']).clamp(true);
+export const whiteMapElevationColor = d3.scaleLinear()
+    .domain([0, 1000, 2000, 4000, 7000])
+    .range(['#fff', '#fff', '#fee', '#edd', '#cbb']).clamp(true);

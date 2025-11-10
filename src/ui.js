@@ -458,9 +458,9 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // 4k. 各種情報オーバーレイヤー
     const nationColor = d3.scaleOrdinal(d3.schemeTableau10);
     const overlayLayers = {
-        'climate-zone-overlay': { data: hexes, fill: d => config.CLIMATE_ZONE_COLORS[d.properties.climateZone], opacity: 0.8 },
+        'climate-zone-overlay': { data: hexes, fill: d => config.CLIMATE_ZONE_COLORS[d.properties.climateZone], opacity: 0.6 },
         'temp-overlay': { data: hexes, fill: d => config.tempColor(d.properties.temperature), opacity: 0.6 },
-        'precip-overlay': { data: hexes, fill: d => config.precipColor(d.properties.precipitation), opacity: 0.6 },
+        'precip-overlay': { data: hexes, fill: d => config.precipColor(d.properties.precipitation_mm), opacity: 0.6 },
         'mana-overlay': { data: hexes, fill: d => config.manaColor(d.properties.manaValue), opacity: 0.6 },
         'agri-overlay': { data: hexes, fill: d => config.agriColor(d.properties.agriPotential), opacity: 0.7 },
         'forest-overlay': { data: hexes, fill: d => config.forestColor(d.properties.forestPotential), opacity: 0.7 },
@@ -542,7 +542,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                    `気候帯　： ${p.climateZone}\n` +
                    `標高　　： ${Math.round(p.elevation)}m\n` +
                    `気温　　： ${p.temperature.toFixed(1)}℃\n` +
-                   `降水量　： ${(p.precipitation * 100).toFixed(0)}%\n` +
+                   // ★★★ [変更] 降水量の表示を mm/年 に変更 ★★★
+                   `降水量　： ${p.precipitation_mm.toFixed(0)}mm/年\n` +
                    `魔力　　： ${p.manaRank}\n` +
                    `資源　　： ${p.resourceRank}\n` +
                    `--- 資源ポテンシャル ---\n` +
@@ -658,10 +659,47 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         event.stopPropagation();
     });
         
+    // 各種ラベルの描画
     const hexLabelGroups = labelLayer.selectAll('.hex-label-group').data(hexes).enter().append('g');
-    hexLabelGroups.append('text').attr('class', 'hex-label').attr('x', d => d.cx).attr('y', d => d.cy + hexHeight * 0.4).attr('text-anchor', 'middle').attr('dominant-baseline', 'middle').style('display', 'none').text(d => `${String(d.x).padStart(2, '0')}${String(d.y).padStart(2, '0')}`);
-    hexLabelGroups.filter(d => d.properties.settlement).append('text').attr('class', 'settlement-label').attr('x', d => d.cx).attr('y', d => d.cy).attr('text-anchor', 'middle').attr('dominant-baseline', 'middle').text(d => d.properties.settlement);
     
+    // 座標ラベル (ズームインで表示)
+    hexLabelGroups.append('text')
+        .attr('class', 'hex-label')
+        .attr('x', d => d.cx).attr('y', d => d.cy + hexHeight * 0.4)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+        .style('display', 'none')
+        .text(d => `${String(d.x).padStart(2, '0')}${String(d.y).padStart(2, '0')}`);
+        
+    // 集落ラベル
+    hexLabelGroups.filter(d => d.properties.settlement)
+        .append('text')
+        .attr('class', 'settlement-label')
+        .attr('x', d => d.cx).attr('y', d => d.cy)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+        .text(d => d.properties.settlement);
+
+    // ★★★【ここから修正】欠落していたプロパティラベルの描画コードを追記 ★★★
+    
+    // 魔力ランクラベル (左側・ズームインで表示)
+    hexLabelGroups.append('text')
+        .attr('class', 'property-label')
+        .attr('x', d => d.cx - config.r * 0.7) // ヘックス中心から少し左に配置
+        .attr('y', d => d.cy)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .style('display', 'none')
+        .text(d => d.properties.manaRank);
+
+    // 資源ランクラベル (右側・ズームインで表示)
+    hexLabelGroups.append('text')
+        .attr('class', 'property-label')
+        .attr('x', d => d.cx + config.r * 0.7) // ヘックス中心から少し右に配置
+        .attr('y', d => d.cy)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .style('display', 'none')
+        .text(d => d.properties.resourceRank);
+        
     const zoom = d3.zoom().scaleExtent([0.2, 10]).on('zoom', (event) => {
         g.attr('transform', event.transform);
         const effectiveRadius = config.r * event.transform.k;

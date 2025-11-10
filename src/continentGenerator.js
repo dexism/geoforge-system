@@ -298,7 +298,7 @@ function generateRidgeLines(allHexes) {
 function calculateFinalProperties(allHexes) {
     allHexes.forEach(h => {
         const { properties, col, row } = h;
-        const { isWater, elevation, temperature, precipitation } = properties; // climateは不要なので削除
+        const { isWater, elevation, temperature } = properties; // precipitation は直接使わないので削除
         // ★★★ [修正] 座標の正規化手法をgenerateBasePropertiesと統一する ★★★
         const nx = col / config.COLS;
         const ny = row / config.ROWS;
@@ -334,60 +334,88 @@ function calculateFinalProperties(allHexes) {
                 properties.vegetation = '湖沼';
             }
         } else {
-            // 2. 陸地ヘックスの場合、各土地利用タイプの「ポテンシャル」を計算
-            const potentials = {
-                river: 0,
-                desert: 0,
-                barren: 0,
-                grassland: 0,
-                forest: 0,
-            };
-
-            potentials.river = Math.sqrt(properties.flow) * 2;
-            potentials.desert = Math.pow(Math.max(0, 1 - precipitation / 0.1), 2) * 10;
-            const alpineFactor = Math.pow(Math.max(0, elevation - 3500) / 3500, 2);
-            const tundraFactor = Math.pow(Math.max(0, -5 - temperature) / 20, 2);
-            potentials.barren = (alpineFactor + tundraFactor) * 10;
-            const forestTempFactor = Math.max(0, 1 - Math.abs(temperature - 15) / 20);
-            const forestPrecipFactor = Math.max(0, precipitation - 0.05);
-            potentials.forest = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 5;
-            const grasslandTempFactor = Math.max(0, 1 - Math.abs(temperature - 18) / 25);
-            const grasslandPrecipFactor = 1 - Math.abs(precipitation - 0.3) * 2;
-            potentials.grassland = ((1 + grasslandPotentialNoise(nx, ny)) / 2) * grasslandTempFactor * grasslandPrecipFactor * 3;
-
-            // 3. 全ポテンシャルの合計値を計算
-            const totalPotential = Object.values(potentials).reduce((sum, val) => sum + val, 0);
-
-            // 4. 合計値を使って各ポテンシャルを正規化し、割合（%）を算出
-            if (totalPotential > 0) {
-                properties.landUse.river = potentials.river / totalPotential;
-                properties.landUse.desert = potentials.desert / totalPotential;
-                properties.landUse.barren = potentials.barren / totalPotential;
-                properties.landUse.grassland = potentials.grassland / totalPotential;
-                properties.landUse.forest = potentials.forest / totalPotential;
-            } else {
-                properties.landUse.barren = 1.0;
-            }
-
-             // 5. 従来の vegetation プロパティ（最も優勢な地目）を決定
-            let dominantVeg = '荒れ地';
+            // --- ステップ1: 特別な植生（湿地・密林）を優先的に判定 ---
             
-            if (properties.landUse.forest >= 0.5) {
-                // ★★★ [修正] 植生の判定を、標高を考慮した「temperature」で行う ★★★
-                if (temperature > config.TEMP_ZONES.TEMPERATE && precipitation > config.VEGETATION_THRESHOLDS.JUNGLE_MIN_PRECIP) {
-                    dominantVeg = '密林';
-                } else if (temperature < config.TEMP_ZONES.COLD) {
-                    dominantVeg = '針葉樹林';
-                } else {
-                    dominantVeg = '森林';
-                }
-            } else {
-                let maxRatio = 0;
-                if (properties.landUse.grassland > maxRatio){ maxRatio = properties.landUse.grassland; dominantVeg = '草原'; }
-                if (properties.landUse.desert > maxRatio)   { maxRatio = properties.landUse.desert;    dominantVeg = '砂漠'; }
-                if (properties.landUse.barren > maxRatio)   { maxRatio = properties.landUse.barren;    dominantVeg = '荒れ地'; }
+            // a. 湿地の判定
+            // 条件: 標高が低く、かつ川の流れが一定以上ある
+            const isMarshCondition = 
+                elevation < config.PRECIPITATION_PARAMS.MARSH_MAX_ELEVATION && 
+                properties.flow >= config.PRECIPITATION_PARAMS.MARSH_MIN_FLOW;
+
+            if (isMarshCondition) {
+                properties.vegetation = '湿地';
+            } 
+            // b. 密林の判定 (湿地でない場合のみ)
+            // 条件: 気温が高く、かつ降水量が非常に多い
+            else if (
+                temperature >= config.PRECIPITATION_PARAMS.JUNGLE_MIN_TEMP && 
+                properties.precipitation_mm >= config.PRECIPITATION_PARAMS.JUNGLE_MIN_PRECIP_MM
+            ) {
+                properties.vegetation = '密林';
             }
-            properties.vegetation = dominantVeg;
+            // --- ステップ2: 上記以外の場合、従来のポテンシャルベースの判定を行う ---
+            else {
+                // 2. 陸地ヘックスの場合、各土地利用タイプの「ポテンシャル」を計算
+                const potentials = {
+                    river: 0,
+                    desert: 0,
+                    barren: 0,
+                    grassland: 0,
+                    forest: 0,
+                };
+
+                // 1. 川による森林へのボーナスを計算
+                // 川の流れ(flow)が強いほどボーナスが大きくなるが、効果が過剰にならないよう上限を設ける
+                const riverBonusToForest = 1.0 + Math.min(2.0, Math.sqrt(properties.flow) * 0.5);
+
+                // 2. 各ポテンシャルを計算。森林ポテンシャルに川のボーナスを乗算する
+                potentials.river = Math.sqrt(properties.flow) * 2;
+                potentials.desert = Math.pow(Math.max(0, 1 - properties.precipitation / 0.1), 2) * 10;
+                const alpineFactor = Math.pow(Math.max(0, elevation - 3500) / 3500, 2);
+                const tundraFactor = Math.pow(Math.max(0, -5 - temperature) / 20, 2);
+                potentials.barren = (alpineFactor + tundraFactor) * 10;
+
+                const forestTempFactor = Math.max(0, 1 - Math.abs(temperature - 15) / 20);
+                const forestPrecipFactor = Math.max(0, properties.precipitation - 0.05);
+                // 元の森林ポテンシャル計算式に、川からのボーナスを掛け合わせる
+                potentials.forest = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 5 * riverBonusToForest;
+
+                const grasslandTempFactor = Math.max(0, 1 - Math.abs(temperature - 18) / 25);
+                const grasslandPrecipFactor = 1 - Math.abs(properties.precipitation - 0.3) * 2;
+                potentials.grassland = ((1 + grasslandPotentialNoise(nx, ny)) / 2) * grasslandTempFactor * grasslandPrecipFactor * 3;
+
+                // 3. 全ポテンシャルの合計値を計算
+                const totalPotential = Object.values(potentials).reduce((sum, val) => sum + val, 0);
+
+                // 4. 合計値を使って各ポテンシャルを正規化し、割合（%）を算出
+                if (totalPotential > 0) {
+                    properties.landUse.river = potentials.river / totalPotential;
+                    properties.landUse.desert = potentials.desert / totalPotential;
+                    properties.landUse.barren = potentials.barren / totalPotential;
+                    properties.landUse.grassland = potentials.grassland / totalPotential;
+                    properties.landUse.forest = potentials.forest / totalPotential;
+                } else {
+                    properties.landUse.barren = 1.0;
+                }
+
+                // 5. 従来の vegetation プロパティ（最も優勢な地目）を決定
+                let dominantVeg = '荒れ地';
+                if (properties.landUse.forest >= 0.5) {
+                    if (temperature < config.TEMP_ZONES.COLD) {
+                        dominantVeg = '針葉樹林';
+                    } else {
+                        dominantVeg = '森林';
+                    }
+                } else {
+                    // 砂漠・草原・荒れ地の判定
+                    if (properties.climateZone.includes("砂漠")) {
+                        dominantVeg = '砂漠';
+                    } else if (properties.climateZone.includes("ステップ")) {
+                        dominantVeg = '草原';
+                    }
+                }
+                properties.vegetation = dominantVeg;
+            }
         }
 
         // 産業ポテンシャル

@@ -20,7 +20,6 @@ function squaredDistance(point1, point2) {
 // ■ ヘルパー関数群 (一部変更)
 // ================================================================
 
-// ★★★ [関数全体を新しいロジックに書き換え] ★★★
 function generatePopulation(allHexes) {
     let maxHabitability = 0;
 
@@ -28,14 +27,14 @@ function generatePopulation(allHexes) {
     allHexes.forEach(h => {
         const p = h.properties;
         let score = 0;
-        if (!p.isWater && p.vegetation !== '高山' && p.vegetation !== '砂漠') {
+
+        // ★★★ [ロジック変更] いったん全ての陸地でスコアを計算する ★★★
+        if (!p.isWater) {
             score += p.agriPotential * 30;
             score += p.fishingPotential * 20;
             const idealTemp = 5.0;
             score += Math.max(0, 1 - Math.abs(p.temperature - idealTemp) / 15) * 15;
             
-            // ★★★ [新規] 降水量を居住適性に加える ★★★
-            // 農耕限界(600mm)前後が最も快適とし、それ以上/以下はスコアが下がるように設定
             const idealPrecip = config.PRECIPITATION_PARAMS.DRYNESS_FARMING_THRESHOLD;
             const precipScore = Math.max(0, 1 - Math.abs(p.precipitation_mm - idealPrecip) / 800) * 10;
             score += precipScore;
@@ -43,13 +42,31 @@ function generatePopulation(allHexes) {
             score += p.manaValue * 10;
             score += p.miningPotential * 5;
             score += p.forestPotential * 5;
+
+            // ★★★ [新規] 特定の植生タイプに対して厳しいペナルティを課す ★★★
+            // スコアを乗算で減らすことで、元のスコアが高いほどペナルティの影響が大きくなる
+            switch (p.vegetation) {
+                case '高山':
+                    // 非常に厳しいペナルティ (元のスコアの10%に)
+                    score *= 0.1; 
+                    break;
+                case '砂漠':
+                    // 厳しいペナルティ (元のスコアの20%に)
+                    score *= 0.2;
+                    break;
+                case '湿地':
+                    // 中程度のペナルティ (元のスコアの40%に)
+                    score *= 0.4;
+                    break;
+            }
         }
+        
         p.habitability = score;
         if (p.habitability > maxHabitability) {
             maxHabitability = p.habitability;
         }
     });
-
+    
     // --- ステップ2: スコアを正規化し、新しいパラメータを使って人口を計算 ---
     allHexes.forEach(h => {
         const p = h.properties;
@@ -59,14 +76,18 @@ function generatePopulation(allHexes) {
 
             // 足切り判定
             if (normalizedHabitability >= config.POPULATION_PARAMS.HABITABILITY_THRESHOLD) {
-                // 足切り値からの差分を再計算して人口密度に影響させる
                 const effectiveHabitability = (normalizedHabitability - config.POPULATION_PARAMS.HABITABILITY_THRESHOLD) / (1.0 - config.POPULATION_PARAMS.HABITABILITY_THRESHOLD);
-                
-                // 人口増加曲線を適用
                 const populationFactor = Math.pow(effectiveHabitability, config.POPULATION_PARAMS.POPULATION_CURVE);
+                const calculatedPopulation = Math.floor(populationFactor * config.POPULATION_PARAMS.MAX_POPULATION_PER_HEX);
                 
-                // 最大人口スケールを適用
-                p.population = Math.floor(populationFactor * config.POPULATION_PARAMS.MAX_POPULATION_PER_HEX);
+                // ★★★ [ここから修正] 10人以下のヘックスは人口0とする ★★★
+                if (calculatedPopulation <= 10) {
+                    p.population = 0;
+                } else {
+                    p.population = calculatedPopulation;
+                }
+                // ★★★ [ここまで修正] ★★★
+
             } else {
                 p.population = 0;
             }

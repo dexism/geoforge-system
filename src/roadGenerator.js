@@ -240,6 +240,9 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
     const prefixMap = { '街': '街道:', '町': '町道:', '村': '村道:' };
     const prefix = prefixMap[type] || `${type}道:`;
 
+    // ★★★ [新規] configから最大日数を取得 ★★★
+    const maxDays = config.MAX_TRAVEL_DAYS[roadLevel] || Infinity;
+
     const progressId = `feeder-road-${type}`;
     let processedCount = 0;
     let lastReportedPercent = -1;
@@ -277,29 +280,39 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         }
         
         if (bestTarget) {
-            const superiorNationId = bestTarget.superior.properties.nationId;
-            
-            // 1. 下位集落に親のIDと国籍を設定
-            lower.properties.parentHexId = getIndex(bestTarget.superior.col, bestTarget.superior.row);
-            lower.properties.nationId = superiorNationId;
-
-            // 2. 道のり・日数を計算して設定
-            const distance = calculateRoadDistance(bestTarget.path, roadLevel, allHexes);
+            // ★★★ [ここから修正] 移動日数を計算し、上限を超えていないかチェック ★★★
             const travelDays = calculateTravelDays(bestTarget.path, roadLevel, allHexes);
-            lower.properties.distanceToParent = distance;
-            lower.properties.travelDaysToParent = travelDays;
-            
-            // 3. 道路オブジェクトに国籍を設定して追加
-            roadPaths.push({ path: bestTarget.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: superiorNationId });
-            
-            // ★★★ [新規] 4. 道路経路上の全ヘックスに国籍を設定（飛び地防止） ★★★
-            bestTarget.path.forEach(pos => {
-                const hex = allHexes[getIndex(pos.x, pos.y)];
-                // 既存の領土や水域は上書きしない
-                if (hex && hex.properties.nationId === 0 && !hex.properties.isWater) {
-                    hex.properties.nationId = superiorNationId;
-                }
-            });
+
+            // 移動日数が上限を超えていない場合のみ、道路を敷設し所属を決定
+            if (travelDays <= maxDays) {
+                const superiorNationId = bestTarget.superior.properties.nationId;
+                
+                // 1. 下位集落に親のIDと国籍を設定
+                lower.properties.parentHexId = getIndex(bestTarget.superior.col, bestTarget.superior.row);
+                lower.properties.nationId = superiorNationId;
+
+                // 2. 道のり・日数を計算して設定
+                const distance = calculateRoadDistance(bestTarget.path, roadLevel, allHexes);
+                lower.properties.distanceToParent = distance;
+                lower.properties.travelDaysToParent = travelDays;
+                
+                // 3. 道路オブジェクトに国籍を設定して追加
+                roadPaths.push({ path: bestTarget.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: superiorNationId });
+                
+                // 4. 道路経路上の全ヘックスに国籍を設定
+                bestTarget.path.forEach(pos => {
+                    const hex = allHexes[getIndex(pos.x, pos.y)];
+                    if (hex && hex.properties.nationId === 0 && !hex.properties.isWater) {
+                        hex.properties.nationId = superiorNationId;
+                    }
+                });
+            } else {
+                // 移動日数が上限を超えた場合、所属をリセットして「辺境」にする
+                lower.properties.parentHexId = null;
+                lower.properties.nationId = 0; // nationIdを0にすることで辺境扱いとなる
+                lower.properties.distanceToParent = null;
+                lower.properties.travelDaysToParent = null;
+            }
         }
         
         processedCount++;
