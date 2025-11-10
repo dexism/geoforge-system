@@ -71,7 +71,7 @@ function generateBaseProperties(col, row) {
     properties.isWater = isWater;
     properties.elevation = isWater ? 0 : config.elevationScale(elevation);
     const latitude = row / config.ROWS;
-    const baseTemp = -5 + (latitude * 35);
+    const baseTemp = 0 + (latitude * 40);
     properties.climate = baseTemp + climateNoise(nx, ny) * 5;
     let elevationCorrection = 0;
     if (properties.elevation > 0) {

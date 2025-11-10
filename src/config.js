@@ -80,8 +80,8 @@ export const PRECIPITATION_PARAMS = {
 };
 
 export const TERRAIN_ELEVATION = { MOUNTAIN_PEAK: 3000, MOUNTAIN: 2000, HILLS: 1000 };
-export const SNOW_THRESHOLDS = { TEMPERATURE: -10, PRECIPITATION_LIGHT: 0.1 };
-export const TEMP_ZONES = { COLD: 5, TEMPERATE: 40 };
+export const SNOW_THRESHOLDS = { TEMPERATURE: -10, PRECIPITATION_LIGHT: 0.3 };
+export const TEMP_ZONES = { COLD: 5, TEMPERATE: 22 };
 
 // ================================================================
 // ■ 4. 文明・経済パラメータ
@@ -99,7 +99,7 @@ export const POPULATION_PARAMS = {
     MAX_POPULATION_PER_HEX: 50000,
 
     // 人口の集中度合いを調整する指数。値が大きいほど、ごく一部の好立地に人口が集中する。
-    POPULATION_CURVE: 10.0,
+    POPULATION_CURVE: 11.0,
 };
 export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面積(ha)
     '小麦': { yield: 0.60, type: '畑作', cultivation_ha_per_person: 1.5 },
@@ -122,9 +122,9 @@ export const SETTLEMENT_PARAMS = { // 労働力率, 1人当たり消費量(t), �
 // ================================================================
 // ★★★ [新規] 下位道路の最大敷設日数 ★★★
 export const MAX_TRAVEL_DAYS = {
-    4: 10, // 街道 (街 -> 上位) は最大10日
-    3: 7,  // 町道 (町 -> 上位) は最大7日
-    2: 3,  // 村道 (村 -> 上位) は最大3日
+    4: 15, // 街道 (街 -> 上位) は最大10日
+    3: 10,  // 町道 (町 -> 上位) は最大7日
+    2: 5,  // 村道 (村 -> 上位) は最大3日
 };
 
 export const RIDGE_CROSSING_COST_MULTIPLIER = 8.0;

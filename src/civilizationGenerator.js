@@ -32,7 +32,7 @@ function generatePopulation(allHexes) {
         if (!p.isWater) {
             score += p.agriPotential * 30;
             score += p.fishingPotential * 20;
-            const idealTemp = 5.0;
+            const idealTemp = 10.0;
             score += Math.max(0, 1 - Math.abs(p.temperature - idealTemp) / 15) * 15;
             
             const idealPrecip = config.PRECIPITATION_PARAMS.DRYNESS_FARMING_THRESHOLD;
@@ -66,7 +66,7 @@ function generatePopulation(allHexes) {
             maxHabitability = p.habitability;
         }
     });
-    
+
     // --- ステップ2: スコアを正規化し、新しいパラメータを使って人口を計算 ---
     allHexes.forEach(h => {
         const p = h.properties;
