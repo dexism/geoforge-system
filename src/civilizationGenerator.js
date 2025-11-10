@@ -16,92 +16,65 @@ function squaredDistance(point1, point2) {
     return dx * dx + dy * dy;
 }
 
-function kMeansCluster(cities, k) {
-    if (cities.length === 0) return [];
-    
-    let centroids = cities.slice(0, k).map(city => ({ col: city.col, row: city.row }));
-    let assignments = [];
-    let changed = true;
-    const MAX_ITERATIONS = 50;
-    let iterations = 0;
-
-    while (changed && iterations < MAX_ITERATIONS) {
-        changed = false;
-        assignments = new Array(k).fill(0).map(() => []);
-
-        cities.forEach(city => {
-            let minDistance = Infinity;
-            let closestCentroidIndex = 0;
-            centroids.forEach((centroid, index) => {
-                const dist = squaredDistance(city, centroid);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    closestCentroidIndex = index;
-                }
-            });
-            assignments[closestCentroidIndex].push(city);
-        });
-
-        const newCentroids = [];
-        assignments.forEach((cluster, index) => {
-            if (cluster.length > 0) {
-                const sum = cluster.reduce((acc, city) => {
-                    acc.col += city.col;
-                    acc.row += city.row;
-                    return acc;
-                }, { col: 0, row: 0 });
-                
-                const newCentroid = {
-                    col: sum.col / cluster.length,
-                    row: sum.row / cluster.length,
-                };
-                newCentroids.push(newCentroid);
-
-                if (centroids[index].col !== newCentroid.col || centroids[index].row !== newCentroid.row) {
-                    changed = true;
-                }
-            } else {
-                newCentroids.push(centroids[index]); 
-            }
-        });
-        
-        centroids = newCentroids;
-        iterations++;
-    }
-
-    return assignments;
-}
-
-
 // ================================================================
 // ■ ヘルパー関数群 (一部変更)
 // ================================================================
 
-// generatePopulation, classifySettlements は変更ありません
-
+// ★★★ [関数全体を新しいロジックに書き換え] ★★★
 function generatePopulation(allHexes) {
+    let maxHabitability = 0;
+
+    // --- ステップ1: 全ヘックスの居住適性スコアを計算し、最大値を取得 ---
     allHexes.forEach(h => {
         const p = h.properties;
         let score = 0;
         if (!p.isWater && p.vegetation !== '高山' && p.vegetation !== '砂漠') {
-            score += p.agriPotential * 30;   
-            score += p.fishingPotential * 20; 
+            score += p.agriPotential * 30;
+            score += p.fishingPotential * 20;
             const idealTemp = 5.0;
             score += Math.max(0, 1 - Math.abs(p.temperature - idealTemp) / 15) * 15;
-            score += p.manaValue * 10;        
-            score += p.miningPotential * 5;   
-            score += p.forestPotential * 5;   
+            
+            // ★★★ [新規] 降水量を居住適性に加える ★★★
+            // 農耕限界(600mm)前後が最も快適とし、それ以上/以下はスコアが下がるように設定
+            const idealPrecip = config.PRECIPITATION_PARAMS.DRYNESS_FARMING_THRESHOLD;
+            const precipScore = Math.max(0, 1 - Math.abs(p.precipitation_mm - idealPrecip) / 800) * 10;
+            score += precipScore;
+            
+            score += p.manaValue * 10;
+            score += p.miningPotential * 5;
+            score += p.forestPotential * 5;
         }
         p.habitability = score;
-        
-        if (p.habitability > 0) {
-            const normalizedHabitability = p.habitability / 50.0;
-            const populationFactor = Math.pow(normalizedHabitability, 9);
-            p.population = Math.floor(populationFactor * 1000);
+        if (p.habitability > maxHabitability) {
+            maxHabitability = p.habitability;
+        }
+    });
+
+    // --- ステップ2: スコアを正規化し、新しいパラメータを使って人口を計算 ---
+    allHexes.forEach(h => {
+        const p = h.properties;
+        if (maxHabitability > 0) {
+            // スコアを 0.0 - 1.0 の範囲に正規化
+            const normalizedHabitability = p.habitability / maxHabitability;
+
+            // 足切り判定
+            if (normalizedHabitability >= config.POPULATION_PARAMS.HABITABILITY_THRESHOLD) {
+                // 足切り値からの差分を再計算して人口密度に影響させる
+                const effectiveHabitability = (normalizedHabitability - config.POPULATION_PARAMS.HABITABILITY_THRESHOLD) / (1.0 - config.POPULATION_PARAMS.HABITABILITY_THRESHOLD);
+                
+                // 人口増加曲線を適用
+                const populationFactor = Math.pow(effectiveHabitability, config.POPULATION_PARAMS.POPULATION_CURVE);
+                
+                // 最大人口スケールを適用
+                p.population = Math.floor(populationFactor * config.POPULATION_PARAMS.MAX_POPULATION_PER_HEX);
+            } else {
+                p.population = 0;
+            }
         } else {
             p.population = 0;
         }
-        
+
+        // プロパティの初期化
         p.settlement = null;
         p.nationId = 0;
         p.parentHexId = null;
@@ -225,6 +198,26 @@ export async function generateCivilization(allHexes, addLogMessage) {
     generatePopulation(allHexes);
     await addLogMessage("人口分布から都市や村を形成しています...");
     classifySettlements(allHexes);
+
+    // ★★★ [ここから新規] 集落数の集計とログ出力 ★★★
+    const settlementCounts = {
+        '都市': 0,
+        '街': 0,
+        '町': 0,
+        '村': 0,
+    };
+    allHexes.forEach(h => {
+        const settlementType = h.properties.settlement;
+        if (settlementCounts[settlementType] !== undefined) {
+            settlementCounts[settlementType]++;
+        }
+    });
+
+    // ログメッセージを生成
+    const countMessage = Object.entries(settlementCounts)
+        .map(([type, count]) => `${type}×${count}`)
+        .join('、');
+    await addLogMessage(` ${countMessage}`);
 
     const cities = allHexes.filter(h => h.properties.settlement === '都市');
 

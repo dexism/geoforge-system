@@ -1,23 +1,24 @@
 // ================================================================
-// GeoForge System - 大陸生成モジュール (v3.1 - 安定自然地形モデル)
+// GeoForge System - 大陸生成モジュール (v3.2 - 新降水モデル)
 // ================================================================
 
 import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
 import * as config from './config.js';
 import { getIndex } from './utils.js';
+import * as d3 from 'd3'; // d3-scaleをスケール計算に利用
 
 // --- ノイズジェネレーターの初期化 ---
 const continentNoise = createNoise2D();
 const mountainNoise = createNoise2D();
 const hillNoise = createNoise2D();
 const detailNoise = createNoise2D();
-// (以下、従来から使用しているノイズ)
 const manaNoise = createNoise2D();
-const climateNoise = createNoise2D();
-const precipitationNoise = createNoise2D();
+const climateNoise = createNoise2D(); 
 const forestPotentialNoise = createNoise2D();
 const grasslandPotentialNoise = createNoise2D();
 const miningPotentialNoise = createNoise2D();
+const precipitationNoise = createNoise2D();
+const seasonalityNoise = createNoise2D();
 
 
 /**
@@ -30,93 +31,115 @@ function generateBaseProperties(col, row) {
     const nx = col / config.COLS;
     const ny = row / config.ROWS;
 
-    // --- 1. 大陸マスクの生成 (陸地強度: 0.0 - 1.0) ---
-    // a. ベースとなるノイズ
-    let landStrength = (continentNoise(nx * config.CONTINENT_NOISE_FREQ, ny * config.CONTINENT_NOISE_FREQ) + 1) / 2; // 0-1に正規化
-
-    // b. 中央からの距離による減衰
+    // --- 1. 大陸マスクの生成 (従来通り) ---
+    // (この部分は変更ありません)
+    let landStrength = (continentNoise(nx * config.CONTINENT_NOISE_FREQ, ny * config.CONTINENT_NOISE_FREQ) + 1) / 2;
     const distFromCenter = Math.hypot(nx - 0.5, ny - 0.5) * 2;
     if (distFromCenter > config.CONTINENT_FALLOFF_START) {
         const falloff = (distFromCenter - config.CONTINENT_FALLOFF_START) / config.CONTINENT_FALLOFF_RANGE;
         landStrength *= (1 - Math.min(1, falloff));
     }
-
-    // c. 地形バイアスを適用
-    // 東の海
     if (nx > config.EAST_SEA_BIAS_X_START) {
         const bias = (nx - config.EAST_SEA_BIAS_X_START) / (1 - config.EAST_SEA_BIAS_X_START);
         landStrength -= bias * config.EAST_SEA_BIAS_INTENSITY;
     }
-    // 北西の海
     const distFromNW = Math.hypot(nx, ny);
     if (distFromNW < config.NW_SEA_BIAS_RADIUS) {
         const bias = (config.NW_SEA_BIAS_RADIUS - distFromNW) / config.NW_SEA_BIAS_RADIUS;
         landStrength -= bias * config.NW_SEA_BIAS_INTENSITY;
     }
     landStrength = Math.max(0, landStrength);
-
     const isWater = landStrength < config.SEA_LEVEL;
 
-    // --- 2. 陸地に地形の起伏を追加 ---
+    // --- 2. 陸地に地形の起伏を追加 (従来通り) ---
+    // (この部分は変更ありません)
     let elevation = 0;
     if (!isWater) {
-        // a. 山脈の生成
         let mountain = (mountainNoise(nx * config.MOUNTAIN_NOISE_FREQ, ny * config.MOUNTAIN_NOISE_FREQ) + 1) / 2;
-        mountain = Math.pow(mountain, config.MOUNTAIN_DISTRIBUTION_POWER); // 山脈の分布を絞る
-        mountain *= Math.pow(landStrength, config.MOUNTAIN_SHAPE_POWER); // 大陸中央部ほど高く、鋭くする
+        mountain = Math.pow(mountain, config.MOUNTAIN_DISTRIBUTION_POWER);
+        mountain *= Math.pow(landStrength, config.MOUNTAIN_SHAPE_POWER);
         mountain *= config.MOUNTAIN_HEIGHT_MAX;
-
-        // b. 丘陵の生成
         let hills = (hillNoise(nx * config.HILL_NOISE_FREQ, ny * config.HILL_NOISE_FREQ) + 1) / 2;
         hills *= config.HILL_HEIGHT_MAX;
-
-        // c. 細かい起伏の生成
         let details = (detailNoise(nx * config.DETAIL_NOISE_FREQ, ny * config.DETAIL_NOISE_FREQ) + 1) / 2;
         details *= config.DETAIL_HEIGHT_MAX;
-
-        // d. 全ての起伏を合成
         elevation = mountain + hills + details;
     }
 
-    // --- 3. 最終的なプロパティを計算 ---
+    // --- 3. 気温と標高を計算 (従来通り) ---
     const properties = {};
     properties.isWater = isWater;
     properties.elevation = isWater ? 0 : config.elevationScale(elevation);
-
-    // --- 4. 気候とその他のプロパティを計算 (従来ロジックを流用) ---
     const latitude = row / config.ROWS;
     const baseTemp = -5 + (latitude * 35);
     properties.climate = baseTemp + climateNoise(nx, ny) * 5;
-    
     let elevationCorrection = 0;
     if (properties.elevation > 0) {
         elevationCorrection = (properties.elevation / 100) * 0.6;
     }
     properties.temperature = properties.climate - elevationCorrection;
 
-    const basePrecip = (col / config.COLS);
-    const precipNoiseValue = precipitationNoise(nx / 2, ny / 2) * 0.2;
-    properties.precipitation = Math.max(0, Math.min(1, basePrecip + precipNoiseValue));
-    
-    // ★★★ [修正] 気候帯の判定を、標高を考慮した「temperature」で行う ★★★
-    if (properties.temperature < config.TEMP_ZONES.COLD) {
-        if (properties.precipitation < config.PRECIP_ZONES.DRY) properties.climateZone = "砂漠気候(寒)";
-        else if (properties.precipitation < config.PRECIP_ZONES.MODERATE) properties.climateZone = "ツンドラ気候";
-        else properties.climateZone = "亜寒帯湿潤気候";
-    } else if (properties.temperature < config.TEMP_ZONES.TEMPERATE) {
-        if (properties.precipitation < config.PRECIP_ZONES.DRY) properties.climateZone = "ステップ気候";
-        else if (properties.precipitation < config.PRECIP_ZONES.MODERATE) properties.climateZone = "地中海性気候";
-        else properties.climateZone = "温暖湿潤気候";
-    } else {
-        if (properties.precipitation < config.PRECIP_ZONES.DRY) properties.climateZone = "砂漠気候(熱)";
-        else if (properties.precipitation < config.PRECIP_ZONES.MODERATE) properties.climateZone = "熱帯草原気候";
-        else properties.climateZone = "熱帯雨林気候";
-    }
+    // ★★★ [ここから新規] 新しい降水量モデル ★★★
+    let precipitation_mm = 0;
+    if (!isWater) {
+        // a. 大域勾配: 西から東へ行くほど降水量が増加するベースを作成
+        const gradient = Math.pow(nx, config.PRECIPITATION_PARAMS.GRADIENT_POWER);
+        let basePrecip = d3.scaleLinear()
+            .domain([0, 1])
+            .range([config.PRECIPITATION_PARAMS.WEST_COAST_MM, config.PRECIPITATION_PARAMS.EAST_COAST_MM])(gradient);
 
+        // b. 局所ノイズ: 大域的なムラと、局所的な変化を追加
+        const largeNoise = (precipitationNoise(nx * config.PRECIPITATION_PARAMS.LARGE_NOISE_FREQ, ny * config.PRECIPITATION_PARAMS.LARGE_NOISE_FREQ) + 1) / 2;
+        const detailNoise = (precipitationNoise(nx * config.PRECIPITATION_PARAMS.DETAIL_NOISE_FREQ, ny * config.PRECIPITATION_PARAMS.DETAIL_NOISE_FREQ) + 1) / 2;
+        // 乾燥地帯は大きなムラ、湿潤地帯は細かい変化の影響を強く受けるように合成
+        const noiseEffect = d3.scaleLinear().domain([250, 800]).range([300, 600]).clamp(true)(basePrecip);
+        basePrecip += (largeNoise * 0.6 + detailNoise * 0.4 - 0.5) * noiseEffect;
+        
+        // c. 南東部の多雨バイアス: 南東角に近いほど降水量をブースト
+        const distFromSE = Math.hypot(1.0 - nx, 1.0 - ny);
+        const southeastBias = Math.max(0, 1.0 - distFromSE / 0.5); // 南東角から半径50%の範囲
+        basePrecip += Math.pow(southeastBias, 2) * config.PRECIPITATION_PARAMS.SOUTHEAST_BIAS_INTENSITY;
+        
+        precipitation_mm = Math.max(0, basePrecip);
+    }
+    properties.precipitation_mm = precipitation_mm;
+    // 古い0-1スケールの降水量は廃止。互換性のため最大3000mmで正規化した値を残す。
+    properties.precipitation = Math.min(1.0, precipitation_mm / 3000);
+
+    // ★★★ [ここから新規] ケッペンの乾燥限界に基づいた新しい気候帯判定 ★★★
+    // (山脈補正は、全ヘックス生成後の第2パスで行うため、ここでは仮計算)
+
+    // a. 季節性係数 'x' をノイズで決定
+    const seasonNoise = (seasonalityNoise(nx * 0.5, ny * 0.5) + 1) / 2;
+    let seasonalityFactor;
+    if (seasonNoise < 0.33) seasonalityFactor = config.PRECIPITATION_PARAMS.SEASONALITY_WINTER_RAIN; // 冬雨
+    else if (seasonNoise > 0.66) seasonalityFactor = config.PRECIPITATION_PARAMS.SEASONALITY_SUMMER_RAIN; // 夏雨
+    else seasonalityFactor = config.PRECIPITATION_PARAMS.SEASONALITY_UNIFORM; // 通年
+
+    // b. 乾燥限界 r = 20(t+x) を計算
+    const drynessLimit = 20 * (properties.temperature + seasonalityFactor);
+
+    // c. 新しい基準で気候帯を判定
+    if (properties.precipitation_mm < drynessLimit * 0.5) {
+        properties.climateZone = properties.temperature < 18 ? "砂漠気候(寒)" : "砂漠気候(熱)";
+    } else if (properties.precipitation_mm < drynessLimit) {
+        properties.climateZone = "ステップ気候";
+    } else { // 湿潤気候の場合、従来の気温ベースの判定を行う
+        if (properties.temperature < config.TEMP_ZONES.COLD) {
+            properties.climateZone = "亜寒帯湿潤気候";
+        } else if (properties.temperature < config.TEMP_ZONES.TEMPERATE) {
+            properties.climateZone = "温暖湿潤気候";
+        } else {
+            properties.climateZone = "熱帯雨林気候";
+        }
+    }
+    
+    // --- 4. その他のプロパティ (従来通り) ---
     properties.hasSnow = false;
     if (!isWater && properties.temperature <= config.SNOW_THRESHOLDS.TEMPERATURE && properties.precipitation > config.SNOW_THRESHOLDS.PRECIPITATION_LIGHT) {
         properties.hasSnow = true;
     }
+    // (中略... manaValue, resourceRank など)
     const rawManaValue = manaNoise(nx * 2, ny * 2);
     properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
     if (properties.manaValue > 0.9) properties.manaRank = 'S';
@@ -128,6 +151,41 @@ function generateBaseProperties(col, row) {
     properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
     
     return properties;
+}
+
+/**
+ * ★★★ [新規] 第1.5パス：山脈や海岸線に応じて降水量を補正する ★★★
+ * @param {Array<object>} allHexes - 全ヘックスのデータ
+ */
+function applyGeographicPrecipitationEffects(allHexes) {
+    const precipCorrections = new Array(allHexes.length).fill(0);
+
+    allHexes.forEach((h, index) => {
+        const p = h.properties;
+        if (p.isWater) return;
+
+        // a. 山岳による地形性降水 (風上)
+        if (p.elevation > 1500) {
+            precipCorrections[index] += config.PRECIPITATION_PARAMS.MOUNTAIN_UPLIFT_BONUS * (p.elevation / 7000);
+        }
+
+        // b. 雨陰効果 (風下)
+        const westNeighbor = h.col > 0 ? allHexes[getIndex(h.col - 1, h.row)] : null;
+        if (westNeighbor && !westNeighbor.properties.isWater) {
+            const elevationDiff = westNeighbor.properties.elevation - p.elevation;
+            if (elevationDiff > 800) { // 西側が800m以上高い山なら雨陰
+                precipCorrections[index] += config.PRECIPITATION_PARAMS.RAIN_SHADOW_PENALTY;
+            }
+        }
+    });
+
+    // 補正を適用
+    allHexes.forEach((h, index) => {
+        if (!h.properties.isWater) {
+            h.properties.precipitation_mm = Math.max(0, h.properties.precipitation_mm + precipCorrections[index]);
+            h.properties.precipitation = Math.min(1.0, h.properties.precipitation_mm / 3000);
+        }
+    });
 }
 
 /**
@@ -333,6 +391,7 @@ function calculateFinalProperties(allHexes) {
         }
 
         // 産業ポテンシャル
+        // ★★★ [修正] 農業ポテンシャルの計算で新しい降水量基準を使用 ★★★
         let agriPotential = 0;
         if (!isWater) {
             if (properties.isAlluvial) agriPotential += 0.5;
@@ -341,8 +400,12 @@ function calculateFinalProperties(allHexes) {
             const idealTemp = 17.5;
             const tempFactor = Math.max(0, 1 - Math.abs(temperature - idealTemp) / 15);
             agriPotential += tempFactor * 0.3;
-            const idealPrecip = 0.55;
-            const precipFactor = Math.max(0, 1 - Math.abs(precipitation - idealPrecip) / 0.3);
+
+            // 新しい降水量スケール(mm/年)で農業適性を評価
+            const precipFactor = d3.scaleLinear()
+                .domain([config.PRECIPITATION_PARAMS.DRYNESS_PASTORAL_THRESHOLD, config.PRECIPITATION_PARAMS.DRYNESS_FARMING_THRESHOLD])
+                .range([0.1, 1.0]) // 牧畜限界で少し、農耕限界で最大のボーナス
+                .clamp(true)(properties.precipitation_mm);
             agriPotential += precipFactor * 0.2;
         }
         properties.agriPotential = Math.min(1.0, agriPotential);
@@ -417,6 +480,10 @@ export async function generateContinent(addLogMessage) {
         ].filter(n => n.col >= 0 && n.col < config.COLS && n.row >= 0 && n.row < config.ROWS)
          .map(n => getIndex(n.col, n.row));
     });
+
+    // ★★★ [新規] パス1.5：降水量の地理的補正を適用 ★★★
+    await addLogMessage("風と地形による降水量を計算しています...");
+    applyGeographicPrecipitationEffects(allHexes);
 
     // パス2：水系を生成
     await addLogMessage("水系と河川を配置しています...");

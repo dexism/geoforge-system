@@ -47,18 +47,57 @@ export const elevationScale = d3.scalePow().exponent(1.2).domain([0.0, 5.0]).ran
 // ================================================================
 // ■ 3. 気候・植生パラメータ
 // ================================================================
+// ★★★ [新規] 降水量モデルのパラメータ ★★★
+export const PRECIPITATION_PARAMS = {
+    // --- ノイズ周波数 ---
+    LARGE_NOISE_FREQ: 0.8,  // 大域的な降水量のムラを生成するノイズ
+    DETAIL_NOISE_FREQ: 3.5, // 局所的な降水量の変化を生成するノイズ
+
+    // --- 大域的な降水勾配 (mm/年) ---
+    WEST_COAST_MM: 200,     // 西端の基本降水量
+    EAST_COAST_MM: 1200,    // 東端の基本降水量
+    GRADIENT_POWER: 0.8,    // 西から東への降水量増加カーブ（1.0未満で緩やかに）
+    
+    // --- 地域的な補正 (mm/年) ---
+    SOUTHEAST_BIAS_INTENSITY: 1300, // 南東部の最大追加降水量
+    MOUNTAIN_UPLIFT_BONUS: 400,    // 山岳による地形性降水の最大ボーナス
+    RAIN_SHADOW_PENALTY: -600,   // 山脈風下（雨陰）の最大減少量
+
+    // --- ケッペンの乾燥限界式 r = 20(t+x) のための季節性係数 'x' ---
+    SEASONALITY_SUMMER_RAIN: 14, // 夏に雨が集中する地域の係数
+    SEASONALITY_WINTER_RAIN: 0,  // 冬に雨が集中する地域の係数
+    SEASONALITY_UNIFORM: 7,      // 通年で平均的に雨が降る地域の係数
+    
+    // --- 人口生成で参照する閾値 (mm/年) ---
+    DRYNESS_FARMING_THRESHOLD: 600,  // 安定した定住農耕が可能になる年間降水量
+    DRYNESS_PASTORAL_THRESHOLD: 250, // 牧畜が可能になる最低限の年間降水量
+};
+
 export const TERRAIN_ELEVATION = { MOUNTAIN_PEAK: 3000, MOUNTAIN: 2000, HILLS: 1000 };
-export const VEGETATION_THRESHOLDS = { JUNGLE_MIN_IPREC: 0.10 };
+export const VEGETATION_THRESHOLDS = { JUNGLE_MIN_IPREC: 0.10 }; // この値は使われなくなります
 export const SNOW_THRESHOLDS = { TEMPERATURE: -10, PRECIPITATION_LIGHT: 0.1 };
 export const TEMP_ZONES = { COLD: 0, TEMPERATE: 30 };
-export const PRECIP_ZONES = { DRY: 0.50, MODERATE: 0.70 };
+// precipitationの0-1スケールは使われなくなるため、PRECIP_ZONESは廃止します
+// export const PRECIP_ZONES = { DRY: 0.50, MODERATE: 0.70 };
 
 // ================================================================
 // ■ 4. 文明・経済パラメータ
 // ================================================================
 export const NUM_NATIONS = 4;
 export const NATION_NAMES = ["アルファ国", "ブラボー国", "チャーリー国", "デルタ国", "エコー国", "フォクストロット国", "ゴルフ国", "ホテル国"];
-export const HEX_AREA_HA = 8660;
+export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
+
+// ★★★ [変更] 人口生成パラメータを刷新 ★★★
+export const POPULATION_PARAMS = {
+    // 正規化された居住適性(0-1)がこの値を下回る場合、人口は0になる (足切り値)
+    HABITABILITY_THRESHOLD: 0.15,
+
+    // 1ヘックスあたりの最大人口数。居住適性が1.0の地点の理論上の最大値。
+    MAX_POPULATION_PER_HEX: 15000,
+
+    // 人口の集中度合いを調整する指数。値が大きいほど、ごく一部の好立地に人口が集中する。
+    POPULATION_CURVE: 5.0,
+};
 export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面積(ha)
     '小麦': { yield: 0.60, type: '畑作', cultivation_ha_per_person: 1.5 },
     '大麦': { yield: 0.75, type: '畑作', cultivation_ha_per_person: 1.5 },
