@@ -448,6 +448,15 @@ text-align: right;
     stroke-width: 0.6px;
 }
 
+/* ヘックス境界線のスタイル */
+.hex-border {
+    fill: none; /* 塗りつぶしはしない */
+    stroke: #000; /* 境界線の色 */
+    stroke-width: 0.5px; /* 境界線の太さ */
+    stroke-opacity: 0.2; /* 透明度 */
+    pointer-events: none; /* クリックイベントを透過させる */
+}
+
 /* 強制再生成ボタンのスタイル */
 #force-regenerate-btn {
     background-color: #a00; /* 暗めの赤 */

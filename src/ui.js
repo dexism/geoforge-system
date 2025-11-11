@@ -179,6 +179,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const svg = d3.select('#hexmap');
     const g = svg.append('g');
 
+    const hexOverlapScale = 1.01; // 隙間を埋めるための拡大率を定義。1%拡大
+    
     const infoWindow = document.getElementById('info-window');
     const infoContent = document.getElementById('info-window-content');
     const infoCloseBtn = document.getElementById('info-close-btn');
@@ -226,7 +228,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                 }
             }
             
-            // ★★★【修正箇所：欠落していた稜線の流れを計算するロジックを復元】★★★
+            // 稜線の流れを計算するロジック
             let ridgeUpstreamIndex = -1;
             if (hexData.properties.ridgeFlow > 0 && !hexData.properties.isWater) {
                 let highestNeighbor = null;
@@ -252,7 +254,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                 points: d3.range(6).map(i => [cx + config.r * Math.cos(Math.PI / 3 * i), cy + config.r * Math.sin(Math.PI / 3 * i)]),
                 properties: { ...hexData.properties, shadingValue: elevationDifference },
                 downstreamIndex: downstreamIndex,
-                ridgeUpstreamIndex: ridgeUpstreamIndex, // ★★★【修正箇所】計算結果をオブジェクトに追加
+                ridgeUpstreamIndex: ridgeUpstreamIndex, 
                 neighbors: hexData.neighbors,
             });
         }
@@ -303,6 +305,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // --- UI操作用 ---
     const highlightOverlayLayer = createLayer('highlight-overlay');             // クリック時のハイライト
     const labelLayer = createLayer('labels');                                   // ラベル (集落名など)
+    const hexBorderLayer = createLayer('hex-border', true);                     // ヘックスの境界線
     const interactionLayer = createLayer('interaction');                        // クリックイベントを受け取る透明レイヤー
     // ----- [描画順序: 手前] -----
 
@@ -315,11 +318,14 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .enter()
         .append('polygon')
             .attr('class', 'hex')
-            .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+            // ★★★ [変更点] 座標指定と拡大処理を分離 ★★★
+            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
             .attr('fill', d => {
                 if (d.properties.isWater) return config.TERRAIN_COLORS[d.properties.vegetation];
                 return config.getElevationColor(d.properties.elevation);
-            });
+            })
+            .attr('stroke', 'none');
 
     // 4b. 白地図オーバーレイヤー
     whiteMapOverlayLayer.selectAll('.white-map-hex')
@@ -327,7 +333,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .enter()
         .append('polygon')
             .attr('class', 'white-map-hex')
-            .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
             .attr('fill', d => d.properties.isWater ? config.WHITE_MAP_COLORS.WATER : config.whiteMapElevationColor(d.properties.elevation))
             .style('pointer-events', 'none');
 
@@ -337,7 +344,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .enter()
         .append('polygon')
             .attr('class', 'veg-overlay-hex')
-            .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
             .attr('fill', d => config.TERRAIN_COLORS[d.properties.vegetation] || 'transparent')
             .style('fill-opacity', 0.8)
             .style('pointer-events', 'none');
@@ -348,7 +356,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .enter()
         .append('polygon')
             .attr('class', 'snow-hex')
-            .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
             .attr('fill', '#fff')
             .style('fill-opacity', 0.8)
             .style('pointer-events', 'none');
@@ -360,7 +369,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .enter()
         .append('polygon')
             .attr('class', 'shading-hex')
-            .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
             .attr('fill', d => d.properties.shadingValue > 0 ? '#fff' : '#000')
             .style('fill-opacity', d => shadingOpacityScale(Math.abs(d.properties.shadingValue)))
             .style('pointer-events', 'none');
@@ -462,7 +472,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         }
     });
     
-    // ★★★【修正箇所：稜線データの計算ロジックを完全な形で復元】★★★
+    // 稜線データの計算ロジック
     const ridgeSegmentsData = [];
     hexes.forEach(sourceHex => {
         if (sourceHex.properties.ridgeFlow > 0 && !sourceHex.properties.isWater) {
@@ -505,7 +515,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .data(hexes.filter(d => d.properties.isWater))
         .enter()
         .append('polygon')
-            .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
             .attr('fill', '#0077be');
         
     ridgeWaterSystemLayer.selectAll('.rws-river-segment')
@@ -549,20 +560,49 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         }
     });
     roadLayer.selectAll('.road-segment')
-        .data(finalRoadSegments).enter().append('line')
-        .attr('class', 'road-segment')
-        .attr('x1', d => d.start[0]).attr('y1', d => d.start[1])
-        .attr('x2', d => d.end[0]).attr('y2', d => d.end[1])
-        .attr('stroke', d => ({ 5: '#a0f', 4: '#f00', 3: '#f00', 2: '#f00', 1: '#800' }[d.level] || '#000'))
-        .attr('stroke-width', d => ({ 5: 6.0, 4: 4.0, 3: 2.0, 2: 1.0, 1: 1.0 }[d.level] || 1))
-        .attr('stroke-dasharray', d => ({ 5: '6, 6', 4: '4, 4', 3: '2, 2', 2: '1, 1', 1: '1, 2' }[d.level] || '2, 2'))
+        .data(finalRoadSegments).enter()
+        .append('line')
+            .attr('class', 'road-segment')
+            .attr('x1', d => d.start[0]).attr('y1', d => d.start[1])
+            .attr('x2', d => d.end[0]).attr('y2', d => d.end[1])
+            .attr('stroke', d => ({ 
+                5: '#a0f', 
+                4: '#f00', 
+                3: '#f00', 
+                2: '#f00', 
+                1: '#800' 
+            }[d.level] || '#000'))
+            .attr('stroke-width', d => ({ 
+                5: 6.0, 
+                4: 4.0, 
+                3: 2.0, 
+                2: 1.0, 
+                1: 1.0 
+            }[d.level] || 1))
+            .attr('stroke-dasharray', d => ({ 
+                5: '6, 6', 
+                4: '4, 4', 
+                3: '2, 2', 
+                2: '1, 1', 
+                1: '1, 2' 
+            }[d.level] || '2, 2'))
         .style('pointer-events', 'none');
     
     // 4j. 集落シンボル
     settlementLayer.selectAll('.settlement-hex')
-        .data(hexes.filter(d => ['町', '街', '領都', '首都'].includes(d.properties.settlement))).enter().append('polygon')
-        .attr('class', 'settlement-hex').attr('points', d => d.points.map(p => p.join(',')).join(' '))
-        .attr('fill', d => ({ '首都': '#f0f', '都市': '#f00', '領都': '#f60', '街': '#fa0', '町': '#ff0' }[d.properties.settlement]))
+        .data(hexes.filter(d => ['町', '街', '領都', '首都'].includes(d.properties.settlement))).enter()
+        .append('polygon')
+            .attr('class', 'settlement-hex')
+            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', d => `translate(${d.cx},${d.cy}) scale(0.7)`)
+            .attr('fill', d => ({ 
+                '首都': '#f0f', 
+                '都市': '#f00', 
+                '領都': '#f00', 
+                '街': '#f80', 
+                '町': '#ff0' 
+            }[d.properties.settlement]))
+        .style('fill-opacity', 0.8)
         .style('pointer-events', 'none');
     
     // 4k. 各種情報オーバーレイヤー
@@ -582,14 +622,24 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
     for (const [layerName, { data, fill, opacity }] of Object.entries(overlayLayers)) {
         layers[layerName].group.selectAll(`.${layerName}-hex`)
-            .data(data).enter().append('polygon')
-            .attr('class', `${layerName}-hex`)
-            .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-            .attr('fill', fill)
+            .data(data).enter()
+            .append('polygon')
+                .attr('class', `${layerName}-hex`)
+                .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+                .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
+                .attr('fill', fill)
             .style('fill-opacity', opacity)
             .style('pointer-events', 'none');
     }
-    
+
+    // 4l. ヘックス境界線レイヤーの描画
+    hexBorderLayer.selectAll('.hex-border')
+        .data(hexes)
+        .enter()
+        .append('polygon')
+            .attr('class', 'hex-border')
+            .attr('points', d => d.points.map(p => p.join(',')).join(' '));
+
     // --- 5. 情報ウィンドウとインタラクション ---
     
     /**
@@ -854,6 +904,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         labelLayer.selectAll('.settlement-label').style('display', isVisible ? 'inline' : 'none');
     });
 
+    d3.select('#toggleHexBorderLayer').on('click', function() { toggleLayerVisibility('hex-border', this); });
     d3.select('#toggleReliefLayer').on('click', function() { toggleLayerVisibility('shading', this); });
     d3.select('#toggleContourLayer').on('click', function() { toggleLayerVisibility('contour', this); });
     d3.select('#toggleRoadLayer').on('click', function() { toggleLayerVisibility('road', this); });

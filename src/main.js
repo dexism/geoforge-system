@@ -9,7 +9,7 @@ import { generateCivilization, determineTerritories } from './civilizationGenera
 import { simulateEconomy, calculateTerritoryAggregates } from './economySimulator.js';
 import { setupUI } from './ui.js';
 
-// ★★★ [新規] GASのデプロイで取得したウェブアプリのURLをここに貼り付けてください ★★★
+// GASのデプロイで取得したウェブアプリのURL
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyS8buNL8u2DK9L3UZRtQqLWgDLvuj0WE5ZrzzdXNXSWH3bnGo-JsiO9KSrHp6YOjmtvg/exec';
 
 const loadingOverlay = document.getElementById('loading-overlay');
@@ -45,7 +45,7 @@ async function addLogMessage(message, id = null) {
     await sleep(id ? 1 : 20);
 }
 
-// ★★★ [ここから変更] 世界を「新規生成」する処理を独立した関数にまとめる ★★★
+// 世界を「新規生成」する処理
 async function generateNewWorld() {
     // 1. ローディング画面をリセットして表示
     logContainer.innerHTML = ''; // ログをクリア
@@ -105,7 +105,7 @@ async function generateNewWorld() {
     }, 500);
 }
 
-// ★★★ [ここから変更] 読み込み関数にプログレスバーの表示/非表示処理を追加 ★★★
+// 読み込み関数にプログレスバーの表示/非表示処理
 async function loadExistingWorld() {
     if (!GAS_WEB_APP_URL.startsWith('https://script.google.com')) {
         await addLogMessage('[設定注意] GASのURLが設定されていません。新規生成のみ行います。');
@@ -155,7 +155,7 @@ async function loadExistingWorld() {
     }
 }
 
-// ★★★ [ここから変更] メインの実行フローを制御する関数 ★★★
+// メインの実行フローを制御
 async function main() {
     // 最初に読み込みを試行
     const loaded = await loadExistingWorld();
@@ -167,7 +167,7 @@ async function main() {
     }
 }
 
-// ★★★ [ここから新規] 強制再生成ボタンのイベントリスナーを追加 ★★★
+// 強制再生成ボタンのイベントリスナー
 regenerateBtn.addEventListener('click', async () => {
     const confirmationMessage = "【警告】\n" +
                                 "世界の再生成には10分以上かかる場合があります。\n" +
@@ -179,5 +179,5 @@ regenerateBtn.addEventListener('click', async () => {
     }
 });
 
-// ★★★ [変更] アプリケーションの実行開始 ★★★
+// アプリケーションの実行
 main();
