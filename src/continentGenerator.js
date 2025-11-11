@@ -85,10 +85,10 @@ function generateBaseProperties(col, row) {
 
     // b. 局所ノイズ: 大域的なムラと、局所的な変化を追加
     const largeNoise = (precipitationNoise(nx * config.PRECIPITATION_PARAMS.LARGE_NOISE_FREQ, ny * config.PRECIPITATION_PARAMS.LARGE_NOISE_FREQ) + 1) / 2;
-    const detailNoise = (precipitationNoise(nx * config.PRECIPITATION_PARAMS.DETAIL_NOISE_FREQ, ny * config.PRECIPITATION_PARAMS.DETAIL_NOISE_FREQ) + 1) / 2;
+    const detailNoiseValue = (precipitationNoise(nx * config.PRECIPITATION_PARAMS.DETAIL_NOISE_FREQ, ny * config.PRECIPITATION_PARAMS.DETAIL_NOISE_FREQ) + 1) / 2;
     // 乾燥地帯は大きなムラ、湿潤地帯は細かい変化の影響を強く受けるように合成
     const noiseEffect = d3.scaleLinear().domain([250, 800]).range([300, 600]).clamp(true)(basePrecip);
-    basePrecip += (largeNoise * 0.6 + detailNoise * 0.4 - 0.5) * noiseEffect;
+    basePrecip += (largeNoise * 0.6 + detailNoiseValue * 0.4 - 0.5) * noiseEffect;
     
     // c. 南東部の多雨バイアス: 南東角に近いほど降水量をブースト
     const distFromSE = Math.hypot(1.0 - nx, 1.0 - ny);
