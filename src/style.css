@@ -369,7 +369,7 @@ button.active:hover {
 #info-window {
   position: fixed;
   bottom: 10px;
-  left: 10px;
+  right: 10px;
   width: 320px; 
   max-width: 90vw; /* スマホ画面では幅を可変に */
   max-height: 90vh; /* 高くなりすぎないように制限 */
@@ -497,4 +497,9 @@ text-align: right;
     100% {
         transform: translateX(100%);
     }
+}
+
+/* 河川パス */
+.river-segment {
+    fill: none; /* 塗りつぶしを無効化 */
 }

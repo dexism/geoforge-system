@@ -3,6 +3,7 @@
 // ================================================================
 import * as config from './config.js';
 import { getIndex, getDistance, formatProgressBar } from './utils.js';
+import * as d3 from 'd3';
 
 // Union-Find (変更なし)
 class UnionFind {
@@ -134,6 +135,34 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
     return { roadPaths, routeData };
 }
 
+// ★★★ [新規] 辺の中点を返すヘルパー関数 (ui.jsから移植) ★★★
+function getSharedEdgeMidpoint(hex1, hex2, hexWidth, hexHeight) {
+    if (!hex1 || !hex2) return null;
+
+    const getPoints = (h) => {
+        const offsetY = (h.col % 2 === 0) ? 0 : hexHeight / 2;
+        const cx = h.col * (hexWidth * 3 / 4) + config.r;
+        const cy = h.row * hexHeight + offsetY + config.r;
+        return d3.range(6).map(i => [cx + config.r * Math.cos(Math.PI / 3 * i), cy + config.r * Math.sin(Math.PI / 3 * i)]);
+    };
+
+    const points1 = getPoints(hex1);
+    const points2 = getPoints(hex2);
+    
+    const commonPoints = [];
+    for (const p1 of points1) {
+        for (const p2 of points2) {
+            if (Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) < 1e-6) {
+                commonPoints.push(p1);
+            }
+        }
+    }
+    if (commonPoints.length === 2) {
+        return [(commonPoints[0][0] + commonPoints[1][0]) / 2, (commonPoints[0][1] + commonPoints[1][1]) / 2];
+    }
+    return null;
+}
+
 /**
  * ★★★ [新規] パスに沿った道のりを計算する関数 ★★★
  * @param {Array<object>} path - ヘックスの座標リスト ({x, y})
@@ -144,13 +173,60 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
 function calculateRoadDistance(path, roadLevel, allHexes) {
     if (path.length < 2) return 0;
     
-    // ★★★ [修正] 隣接ヘックス間の中心距離は、どの方向でもHEX_SIZE_KM(高さ)と等しい ★★★
-    const distancePerHex = config.HEX_SIZE_KM;
-    const totalDirectDistance = distancePerHex * (path.length - 1);
+    // ★★★ [ここから全面的に変更] ★★★
+    
+    // ヘックスの描画サイズを計算
+    const hexWidth = 2 * config.r;
+    const hexHeight = Math.sqrt(3) * config.r;
+    
+    // ピクセル距離をkmに変換するスケール
+    // ヘックスの高さ(config.r * sqrt(3))がHEX_SIZE_KMに対応する
+    const pixelToKm = config.HEX_SIZE_KM / hexHeight;
 
-    const terrainMultipliers = path.map(pos => {
-        const hex = allHexes[getIndex(pos.x, pos.y)];
-        const p = hex.properties;
+    let totalDistanceKm = 0;
+
+    const pathHexes = path.map(p => allHexes[getIndex(p.x, p.y)]);
+
+    for (let i = 0; i < pathHexes.length; i++) {
+        const currentHex = pathHexes[i];
+        if (!currentHex) continue;
+
+        // セグメントの始点と終点を決定
+        let startPoint, endPoint;
+
+        // 始点の決定
+        if (i === 0) {
+            // パスの始点：最初のヘックスの中心
+            const offsetY = (currentHex.col % 2 === 0) ? 0 : hexHeight / 2;
+            startPoint = [
+                currentHex.col * (hexWidth * 3 / 4) + config.r,
+                currentHex.row * hexHeight + offsetY + config.r
+            ];
+        } else {
+            // パスの途中：前のヘックスとの境界の中点
+            startPoint = getSharedEdgeMidpoint(currentHex, pathHexes[i - 1], hexWidth, hexHeight);
+        }
+
+        // 終点の決定
+        if (i === pathHexes.length - 1) {
+            // パスの終点：最後のヘックスの中心
+            const offsetY = (currentHex.col % 2 === 0) ? 0 : hexHeight / 2;
+            endPoint = [
+                currentHex.col * (hexWidth * 3 / 4) + config.r,
+                currentHex.row * hexHeight + offsetY + config.r
+            ];
+        } else {
+            // パスの途中：次のヘックスとの境界の中点
+            endPoint = getSharedEdgeMidpoint(currentHex, pathHexes[i + 1], hexWidth, hexHeight);
+        }
+
+        if (!startPoint || !endPoint) continue;
+
+        // このセグメントのピクセル単位での直線距離を計算
+        const segmentPixelDistance = Math.hypot(endPoint[0] - startPoint[0], endPoint[1] - startPoint[1]);
+        
+        // 地形乗数を取得
+        const p = currentHex.properties;
         let multiplier = 1.0;
         switch (p.terrainType) {
             case '山岳': multiplier = config.TERRAIN_MULTIPLIERS.山岳; break;
@@ -163,13 +239,13 @@ function calculateRoadDistance(path, roadLevel, allHexes) {
                 break;
         }
         if (p.flow > 1) multiplier += config.TERRAIN_MULTIPLIERS.RIVER_BONUS;
-        return multiplier;
-    });
-    const productOfMultipliers = terrainMultipliers.reduce((acc, val) => acc * val, 1);
-    const geometricMeanMultiplier = Math.pow(productOfMultipliers, 1 / terrainMultipliers.length);
+
+        // セグメントの道のりを計算し、合計に加算
+        totalDistanceKm += (segmentPixelDistance * pixelToKm) * multiplier;
+    }
+
     const roadMultiplier = config.ROAD_MULTIPLIERS[roadLevel] || 1.0;
-    const finalDistance = totalDirectDistance * geometricMeanMultiplier * roadMultiplier;
-    return finalDistance;
+    return totalDistanceKm * roadMultiplier;
 }
 
 /**
@@ -252,21 +328,40 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         let bestTarget = null;
         let minCost = Infinity;
 
-        // ★★★ [変更] 自国の上位集落を優先的に探索候補とする ★★★
+        // ★★★ [ここから変更] 探索候補の選定方法を改善 ★★★
         const lowerNationId = lower.properties.nationId;
-        const targetCandidates = upperSettlements.sort((a, b) => {
-            // 自国の集落を優先
+        
+        // 探索範囲を定義（ヘックス単位での最大直線距離）
+        // 例えば、村道なら最大3日なので、3日で行ける大まかな距離を設定
+        const searchRadiusMap = { '街': 40, '町': 30, '村': 20 };
+        const searchRadius = searchRadiusMap[type] || 25;
+
+        // 1. 探索範囲内の候補をすべて抽出
+        const targetCandidates = upperSettlements.filter(upper => {
+            return getDistance(lower, upper) < searchRadius;
+        });
+
+        // 2. 範囲内に候補がなければ、最も近いものをいくつか追加で探索
+        if (targetCandidates.length === 0) {
+            // 全上位集落を距離でソートし、最も近い5つを候補とする
+            upperSettlements.sort((a, b) => getDistance(lower, a) - getDistance(lower, b));
+            targetCandidates.push(...upperSettlements.slice(0, 5));
+        }
+
+        // 3. 自国の集落を優先するためにソート
+        targetCandidates.sort((a, b) => {
             const aIsOwn = a.properties.nationId === lowerNationId;
             const bIsOwn = b.properties.nationId === lowerNationId;
             if (aIsOwn && !bIsOwn) return -1;
             if (!aIsOwn && bIsOwn) return 1;
-            // 同じ国なら距離順
-            return getDistance(lower, a) - getDistance(lower, b);
+            return 0; // 国籍が同じなら順序は問わない
         });
+        
+        const searchCandidates = targetCandidates; // 変数名を合わせる
+        // ★★★ [変更ここまで] ★★★
 
-        const searchCandidates = targetCandidates.slice(0, 10); // 探索候補を増やす
 
-        // ★★★ [変更] A*のコスト関数に自国領土ボーナスを追加 ★★★
+        // A*のコスト関数に自国領土ボーナスを追加
         const costFunc = createCostFunction(allHexes, lowerNationId);
         const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
         const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});

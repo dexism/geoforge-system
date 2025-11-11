@@ -449,62 +449,83 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
     // 4h. 河川と稜線
     
-    // 河川セグメントのデータを生成
-    const riverSegmentsData = [];
+    // --- 河川の曲線パスデータを生成 ---
+    const riverPathData = [];
     hexes.forEach(d => {
         if (d.properties.flow > 0 && !d.properties.isWater) {
             const downstreamHex = d.downstreamIndex !== -1 ? hexes[d.downstreamIndex] : null;
-            let endPoint = downstreamHex ? getSharedEdgeMidpoint(d, downstreamHex) : [d.cx, d.cy];
-            if (!endPoint) {
-                endPoint = [d.cx, d.cy];
-            }
+            if (!downstreamHex) return;
+
+            const endPoint = getSharedEdgeMidpoint(d, downstreamHex);
+            if (!endPoint) return;
+
+            // 制御点をヘックスの中心に設定
+            const controlPoint = [d.cx, d.cy];
+
             const upstreamNeighbors = hexes.filter(h => h.downstreamIndex === d.index);
-            if (upstreamNeighbors.length === 0) {
-                riverSegmentsData.push({ start: [d.cx, d.cy], end: endPoint, flow: d.properties.flow });
-            } else {
+            if (upstreamNeighbors.length === 0) { // 水源の場合
+                const startPoint = [d.cx, d.cy];
+                const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                riverPathData.push({ path: path, flow: d.properties.flow });
+            } else { // 中流の場合
                 upstreamNeighbors.forEach(upstreamHex => {
                     const startPoint = getSharedEdgeMidpoint(d, upstreamHex);
                     if (startPoint) {
-                        riverSegmentsData.push({ start: startPoint, end: endPoint, flow: upstreamHex.properties.flow });
+                        const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                        riverPathData.push({ path: path, flow: upstreamHex.properties.flow });
                     }
                 });
             }
         }
     });
     
-    // 稜線データの計算ロジック
-    const ridgeSegmentsData = [];
+    // --- 稜線の曲線パスデータを生成 ---
+    const ridgePathData = [];
     hexes.forEach(sourceHex => {
         if (sourceHex.properties.ridgeFlow > 0 && !sourceHex.properties.isWater) {
             const upstreamHex = sourceHex.ridgeUpstreamIndex !== -1 ? hexes[sourceHex.ridgeUpstreamIndex] : null;
-            let endPoint = upstreamHex ? getSharedEdgeMidpoint(sourceHex, upstreamHex) : [sourceHex.cx, sourceHex.cy];
-            if (!endPoint) {
+
+            // 山頂かどうかで終点を変更する
+            let endPoint;
+            if (upstreamHex) {
+                // 通常の稜線：終点は、より標高が高い上流ヘックスとの境界の中点
+                endPoint = getSharedEdgeMidpoint(sourceHex, upstreamHex);
+            } else {
+                // 山頂の処理：上流ヘックスがない場合、ここが山頂。終点はヘックスの中心。
                 endPoint = [sourceHex.cx, sourceHex.cy];
             }
 
+            if (!endPoint) return; // 終点が計算できなければスキップ
+            
+            // 制御点をヘックスの中心に設定
+            const controlPoint = [sourceHex.cx, sourceHex.cy];
+
             const downstreamRidgeNeighbors = hexes.filter(h => h.ridgeUpstreamIndex === sourceHex.index);
-            if (downstreamRidgeNeighbors.length === 0) {
+            if (downstreamRidgeNeighbors.length === 0) { // 稜線の末端の場合
                 const startPoint = [sourceHex.cx, sourceHex.cy];
-                ridgeSegmentsData.push({ start: startPoint, end: endPoint, flow: sourceHex.properties.ridgeFlow });
-            } else {
+                const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                ridgePathData.push({ path: path, flow: sourceHex.properties.ridgeFlow });
+            } else { // 稜線の途中
                 downstreamRidgeNeighbors.forEach(downstreamHex => {
                     const startPoint = getSharedEdgeMidpoint(sourceHex, downstreamHex);
                     if (startPoint) {
-                        ridgeSegmentsData.push({ start: startPoint, end: endPoint, flow: downstreamHex.properties.ridgeFlow });
+                        const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                        ridgePathData.push({ path: path, flow: downstreamHex.properties.ridgeFlow });
                     }
                 });
             }
         }
     });
     
+    // --- 各レイヤーへの描画 ---
+
     // 河川レイヤーに描画
     riverLayer.selectAll('.river-segment')
-        .data(riverSegmentsData)
+        .data(riverPathData)
         .enter()
-        .append('line')
+        .append('path')
             .attr('class', 'river-segment')
-            .attr('x1', d => d.start[0]).attr('y1', d => d.start[1])
-            .attr('x2', d => d.end[0]).attr('y2', d => d.end[1])
+            .attr('d', d => d.path)
             .attr('stroke', '#058')
             .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
             .attr('stroke-linecap', 'round')
@@ -517,54 +538,79 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .append('polygon')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
             .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-            .attr('fill', '#0077be');
+            .attr('fill', '#07c');
         
     ridgeWaterSystemLayer.selectAll('.rws-river-segment')
-        .data(riverSegmentsData)
+        .data(riverPathData)
         .enter()
-        .append('line')
-            .attr('x1', d => d.start[0]).attr('y1', d => d.start[1])
-            .attr('x2', d => d.end[0]).attr('y2', d => d.end[1])
+        .append('path')
+            .attr('d', d => d.path)
             .attr('stroke', '#07c')
             .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
-            .attr('stroke-linecap', 'round');
+            .attr('stroke-linecap', 'round')
+            .style('fill', 'none');
         
     ridgeWaterSystemLayer.selectAll('.rws-ridge-segment')
-        .data(ridgeSegmentsData)
+        .data(ridgePathData) // 稜線の曲線データを使用
         .enter()
-        .append('line')
-            .attr('x1', d => d.start[0]).attr('y1', d => d.start[1])
-            .attr('x2', d => d.end[0]).attr('y2', d => d.end[1])
-            .attr('stroke', '#a00')
+        .append('path') // pathで描画
+            .attr('d', d => d.path)
+            .attr('stroke', '#c00')
             .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 1.5, config.r * 0.8))
-            .attr('stroke-linecap', 'round');
+            .attr('stroke-linecap', 'round')
+            .style('fill', 'none'); // fillを無効化
     
     // 4i. 道路網
-    const finalRoadSegments = [];
-    const roadSegmentGrid = new Map();
+    const roadPathData = [];
+    const roadSegmentGrid = new Map(); // 重複描画防止用
+
+    // 道路レベルが高い順にソートして、下位の道路が上位の道路に上書きされないようにする
     [...roadPaths].sort((a, b) => b.level - a.level).forEach(road => {
         if (road.path.length < 2) return;
+        
         const pathHexes = road.path.map(p => hexes[getIndex(p.x, p.y)]);
+
         for (let i = 0; i < pathHexes.length; i++) {
-            const currentHex = pathHexes[i]; if (!currentHex) continue;
-            let startPoint, endPoint;
-            if (i === 0) startPoint = [currentHex.cx, currentHex.cy]; else startPoint = getSharedEdgeMidpoint(currentHex, pathHexes[i - 1]);
-            if (i === pathHexes.length - 1) endPoint = [currentHex.cx, currentHex.cy]; else endPoint = getSharedEdgeMidpoint(currentHex, pathHexes[i + 1]);
-            const prevHex = i > 0 ? pathHexes[i - 1] : currentHex, nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : currentHex;
-            const fromIndex = (i === 0) ? currentHex.index : prevHex.index, toIndex = (i === pathHexes.length - 1) ? currentHex.index : nextHex.index;
+            const currentHex = pathHexes[i];
+            if (!currentHex) continue;
+
+            const prevHex = i > 0 ? pathHexes[i - 1] : null;
+            const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
+            
+            // 各ヘックスを通過する1本の曲線を生成する
+
+            // 始点: 前のヘックスとの境界 (なければ中心)
+            const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
+            // 終点: 次のヘックスとの境界 (なければ中心)
+            const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
+            // 制御点: 常にヘックスの中心
+            const controlPoint = [currentHex.cx, currentHex.cy];
+            
+            if (!startPoint || !endPoint) continue;
+
+            // 始点と終点が同じ場合は描画しない (パスの終端で発生)
+            if (startPoint[0] === endPoint[0] && startPoint[1] === endPoint[1]) continue;
+
+            // このヘックスを通過する曲線パス
+            const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+
+            // 重複チェックキーを生成 (始点と終点ヘックスのインデックスで管理)
+            const fromIndex = prevHex ? prevHex.index : currentHex.index;
+            const toIndex = nextHex ? nextHex.index : currentHex.index;
             const segmentKey = Math.min(fromIndex, toIndex) + '-' + Math.max(fromIndex, toIndex);
-            if (startPoint && endPoint && !roadSegmentGrid.has(segmentKey)) {
+            
+            if (!roadSegmentGrid.has(segmentKey)) {
                 roadSegmentGrid.set(segmentKey, true);
-                finalRoadSegments.push({ start: startPoint, end: endPoint, level: road.level });
+                roadPathData.push({ path: path, level: road.level });
             }
         }
     });
+
     roadLayer.selectAll('.road-segment')
-        .data(finalRoadSegments).enter()
-        .append('line')
+        .data(roadPathData).enter()
+        .append('path')
             .attr('class', 'road-segment')
-            .attr('x1', d => d.start[0]).attr('y1', d => d.start[1])
-            .attr('x2', d => d.end[0]).attr('y2', d => d.end[1])
+            .attr('d', d => d.path)
             .attr('stroke', d => ({ 
                 5: '#a0f', 
                 4: '#f00', 
@@ -586,7 +632,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                 2: '1, 1', 
                 1: '1, 2' 
             }[d.level] || '2, 2'))
-        .style('pointer-events', 'none');
+        .style('pointer-events', 'none')
+        .style('fill', 'none');
     
     // 4j. 集落シンボル
     settlementLayer.selectAll('.settlement-hex')
