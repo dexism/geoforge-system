@@ -45,25 +45,33 @@ button.active:hover {
 }
 
 /* --- 全体レイアウト --- */
+/* .container の display: flex; は維持するが、sidebarのflex指定はfixedで無効化されるため削除 */
 .container {
-    display: flex;
     width: 100vw;
     height: 100vh;
 }
 .main-content {
-    flex-grow: 1;
+    width: 100%;
     height: 100vh;
 }
 
 /* --- サイドバー --- */
 .sidebar {
+    position: fixed; /* 全画面固定 */
+    top: 0;
+    left: 0;
     flex: 0 0 var(--sidebar-width);
     padding: 1rem;
     background-color: var(--sidebar-bg);
     border-right: 1px solid #999;
+    height: 100vh;
     max-height: 100vh;
     overflow-y: auto;
-    display: none; /* JSで表示を切り替える */
+    z-index: 20; /* 常にメインコンテンツより手前 */
+    
+    /* デフォルトの表示状態 (チェックボックス非チェック時: 非表示) */
+    transform: translateX(-100%); 
+    transition: transform 0.3s ease-out;
 }
 .sidebar h3 { 
   margin-top: 0; 
@@ -98,8 +106,7 @@ button.active:hover {
     padding-left: 5px;
 }
 
-
-/* ★★★ [新規] 基本地図選択ラジオボタンのスタイル ★★★ */
+/* --- 基本地図選択ラジオボタンのスタイル --- */
 .map-type-selector {
     display: flex;
     gap: 5px;
@@ -110,14 +117,14 @@ button.active:hover {
 }
 .map-type-selector label {
     flex-grow: 1;
-    padding: 8px 0; /* 上下のパディングを調整 */
+    padding: 8px 0;
     background-color: #445;
     color: var(--text-color);
     border: 1px solid #667;
     border-radius: 4px;
-    text-align: center; /* 中央揃え */
+    text-align: center;
     cursor: pointer;
-    font-size: 16px; /* フォントサイズを調整 */
+    font-size: 16px;
     font-weight: bold;
     transition: all 0.2s;
 }
@@ -170,7 +177,7 @@ button.active:hover {
     position: absolute;
     top: 10px;
     left: 10px;
-    z-index: 30; /* サイドバーより手前 */
+    z-index: 30; 
     width: 40px;
     height: 40px;
     cursor: pointer;
@@ -179,6 +186,7 @@ button.active:hover {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: left 0.3s ease-out;
 }
 .menu-toggle-label span,
 .menu-toggle-label span::before,
@@ -196,52 +204,16 @@ button.active:hover {
 .menu-toggle-checkbox {
     display: none;
 }
-.overlay {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: #0008;
-    z-index: 15;
-}
 
 /* メニュー開閉時の動作 */
-.menu-toggle-checkbox:checked + .menu-toggle-label {
-    /* left: calc(var(--sidebar-width) + 10px); */
+/* メニュー開閉時の動作 */
+.menu-toggle-checkbox:checked ~ .container .sidebar {
+    transform: translateX(0); /* 表示 */
 }
+/* ハンバーガーメニューアイコンの回転 */
 .menu-toggle-checkbox:checked + .menu-toggle-label span { transform: rotate(45deg); }
 .menu-toggle-checkbox:checked + .menu-toggle-label span::before { top: 0; transform: rotate(0); }
 .menu-toggle-checkbox:checked + .menu-toggle-label span::after { top: 0; transform: rotate(90deg); }
-.menu-toggle-checkbox:checked ~ .container .sidebar {
-    transform: translateX(0);
-}
-.menu-toggle-checkbox:checked ~ .overlay { display: block; }
-
-/* PC (幅769px以上) では常にサイドバーを表示 */
-@media screen and (min-width: 769px) {
-    .menu-toggle-label, .overlay {
-        display: none; /* PCではハンバーガーメニュー不要 */
-    }
-    .sidebar {
-        display: block; /* 常に表示 */
-    }
-}
-
-/* SP (幅768px以下) のスタイル */
-@media screen and (max-width: 768px) {
-    .sidebar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        height: 100vh;
-        z-index: 20;
-        transform: translateX(-100%);
-        transition: transform 0.3s ease-out;
-    }
-}
-
 
 /* --- ローディング画面 (変更なし) --- */
 #loading-overlay {
@@ -293,23 +265,6 @@ button.active:hover {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* UIコンテナ (起動時は非表示にする) */
-.ui-container {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 10;
-  display: none; /* ★★★ 起動時は非表示に。JSで表示を切り替える ★★★ */  
-}
-
-.ui-container button {
-  padding: 8px 12px;
-  background-color: #fff;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  cursor: pointer;
 }
 
 /* 人口表示用のコンテナ */

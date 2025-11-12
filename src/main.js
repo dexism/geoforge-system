@@ -97,7 +97,6 @@ async function generateNewWorld() {
     loadingOverlay.style.opacity = '0';
     populationDisplay.textContent = `総人口: ${totalPopulation.toLocaleString()}人`;
     populationDisplay.style.display = 'block';
-    sidebar.style.display = 'block';
     menuToggle.style.display = 'flex'; 
 
     setTimeout(() => {
@@ -136,7 +135,6 @@ async function loadExistingWorld() {
             loadingOverlay.style.opacity = '0';
             populationDisplay.textContent = `総人口: ${totalPopulation.toLocaleString()}人`;
             populationDisplay.style.display = 'block';
-            sidebar.style.display = 'block';
             menuToggle.style.display = 'flex';
 
             setTimeout(() => { loadingOverlay.style.display = 'none'; }, 500);
