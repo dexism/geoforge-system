@@ -45,27 +45,30 @@ button.active:hover {
 }
 
 /* --- 全体レイアウト --- */
-/* .container の display: flex; は維持するが、sidebarのflex指定はfixedで無効化されるため削除 */
 .container {
     width: 100vw;
-    height: 100vh;
+    height: 100dvh;
 }
 .main-content {
     width: 100%;
-    height: 100vh;
+    height: 100dvh;
 }
 
+/* ================================================================
+   サイドバー スタイル
+   ================================================================ */
 /* --- サイドバー --- */
 .sidebar {
     position: fixed; /* 全画面固定 */
     top: 0;
     left: 0;
-    flex: 0 0 var(--sidebar-width);
+    /* flex: 0 0 var(--sidebar-width); */
+    flex: 0 0 auto;
     padding: 1rem;
     background-color: var(--sidebar-bg);
     border-right: 1px solid #999;
-    height: 100vh;
-    max-height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
     overflow-y: auto;
     z-index: 20; /* 常にメインコンテンツより手前 */
     
@@ -98,7 +101,7 @@ button.active:hover {
 .sidebar details[open] summary { 
   color: var(--primary-color); 
 }
-/* ★★★ [新規] 注釈用のスタイル ★★★ */
+/* 注釈用のスタイル */
 .sidebar .note {
     font-size: 12px;
     color: #aaa;
@@ -134,11 +137,15 @@ button.active:hover {
     color: #fff;
 }
 
+/* ================================================================
+   凡例 スタイル
+   ================================================================ */
 .legend-container {
     margin-top: 20px;
     padding: 10px;
     background-color: rgba(0,0,0,0.2);
     border-radius: 5px;
+    display: none;
 }
 .legend-container h4 {
     margin: 0 0 10px 0;
@@ -172,6 +179,9 @@ button.active:hover {
     margin-top: 4px;
 }
 
+/* ================================================================
+   ハンバーガーメニュー スタイル
+   ================================================================ */
 /* --- ハンバーガーメニュー --- */
 .menu-toggle-label {
     position: absolute;
@@ -206,7 +216,6 @@ button.active:hover {
 }
 
 /* メニュー開閉時の動作 */
-/* メニュー開閉時の動作 */
 .menu-toggle-checkbox:checked ~ .container .sidebar {
     transform: translateX(0); /* 表示 */
 }
@@ -215,13 +224,16 @@ button.active:hover {
 .menu-toggle-checkbox:checked + .menu-toggle-label span::before { top: 0; transform: rotate(0); }
 .menu-toggle-checkbox:checked + .menu-toggle-label span::after { top: 0; transform: rotate(90deg); }
 
-/* --- ローディング画面 (変更なし) --- */
+/* ================================================================
+   ローディング画面 スタイル
+   ================================================================ */
+/* --- ローディング画面 --- */
 #loading-overlay {
   position: absolute;
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
   background-color: rgba(10, 20, 40, 0.95);
   z-index: 100;
   display: flex;
@@ -246,7 +258,7 @@ button.active:hover {
 
 /* ログメッセージのコンテナ */
 #loading-log {
-  max-height: 80vh; /* 画面の80%までの高さにする */
+  max-height: 90dvh; /* 画面の90%までの高さにする */
   overflow-y: auto; /* メッセージが増えたらスクロールさせる */
   text-align: left;
   background-color: #0008;
@@ -267,6 +279,9 @@ button.active:hover {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ================================================================
+   画面情報 スタイル
+   ================================================================ */
 /* 人口表示用のコンテナ */
 #population-display {
   position: absolute;
@@ -286,7 +301,9 @@ button.active:hover {
    ヘックス内情報 スタイル
    ================================================================ */
 /* ラベル共通設定 */
-.hex-label, .settlement-label, .property-label {
+.hex-label, 
+.settlement-label, 
+.property-label {
   pointer-events: none;
   user-select: none;
   margin: 0;
@@ -309,7 +326,7 @@ button.active:hover {
 
 /* 座標ラベル (E00-N00) */
 .hex-label {
-  fill: #555;
+  fill: #444;
   font-weight: 900;
 }
 
@@ -327,13 +344,13 @@ button.active:hover {
   right: 10px;
   width: auto; 
   max-width: 90vw; /* スマホ画面では幅を可変に */
-  max-height: 90vh; /* 高くなりすぎないように制限 */
+  max-height: 90dvh; /* 高くなりすぎないように制限 */
   background-color: rgba(10, 20, 40, 0.95);
   color: #eee;
   border: 1px solid #999;
   border-radius: 8px;
   z-index: 20; /* UIボタンより手前に表示 */
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 12px #0008;
   font-size: 14px;
   
   /* 表示・非表示のアニメーション */
@@ -377,7 +394,7 @@ text-align: right;
   padding: 12px;
   overflow-y: auto;
   /* (max-height - ヘッダーの高さ) で計算 */
-  max-height: calc(90vh - 45px); 
+  max-height: calc(90dvh - 45px); 
   /* \n などの改行を正しく表示するための設定 */
   white-space: pre-wrap;
   line-height: 1.6;
@@ -388,27 +405,28 @@ text-align: right;
    ================================================================ */
 .contour-path {
     fill: none;
-    stroke: #5a3d23; /* 茶色系の線 */
+    stroke: #642; /* 茶色系の線 */
     stroke-opacity: 0.5; /* 透過50% */
     pointer-events: none;
 }
-
 /* 主曲線 (200mごと) */
 .contour-intermediate {
-    stroke-width: 0.3px;
+    stroke-width: 0.1px;
 }
-
 /* 計曲線 (1000mごと) */
 .contour-index {
-    stroke-width: 0.6px;
+    stroke-width: 0.2px;
 }
 
+/* ================================================================
+   ヘックス境界線 スタイル
+   ================================================================ */
 /* ヘックス境界線のスタイル */
 .hex-border {
     fill: none; /* 塗りつぶしはしない */
-    stroke: #000; /* 境界線の色 */
-    stroke-width: 0.5px; /* 境界線の太さ */
-    stroke-opacity: 0.2; /* 透明度 */
+    stroke: #0003; /* 境界線の色 */
+    stroke-width: 1.0px; /* 境界線の太さ */
+    /* stroke-opacity: 0.2; /* 透明度 */
     pointer-events: none; /* クリックイベントを透過させる */
 }
 

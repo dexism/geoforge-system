@@ -397,21 +397,56 @@ function calculateFinalProperties(allHexes) {
                 }
 
                 // 5. 従来の vegetation プロパティ（最も優勢な地目）を決定
-                let dominantVeg = '荒れ地';
-                if (properties.landUse.forest >= 0.5) {
+                // ★★★ [ここからロジックを全面的に改訂] ★★★
+                // 気候帯ラベルへの直接依存を廃止し、気温・降水量・標高の組み合わせで植生を決定する
+                let dominantVeg = '荒れ地'; // デフォルトは荒れ地
+                const precip_mm = properties.precipitation_mm;
+
+                // --- STEP 0: 標高や特殊条件による優先判定 ---
+                if (elevation >= 3500) {
+                    dominantVeg = '高山'; // 標高3500m以上は問答無用で高山植生
+                } 
+                // (湿地と密林の判定は既にSTEP 1で完了している)
+
+                // --- STEP 1: 気温帯ごとの植生判定（ホイッタカーのバイオーム図を簡易的に模倣） ---
+                else {
+                    // 【a. 寒冷地 (Cold Zone)】
                     if (temperature < config.TEMP_ZONES.COLD) {
-                        dominantVeg = '針葉樹林';
-                    } else {
-                        dominantVeg = '森林';
+                        if (precip_mm < 200) {
+                            dominantVeg = '荒れ地'; // 寒冷な荒れ地（ツンドラに近い）
+                        } else {
+                            dominantVeg = '針葉樹林'; // タイガ
+                        }
+                    } 
+                    // 【b. 温帯 (Temperate Zone)】
+                    else if (temperature < config.TEMP_ZONES.TEMPERATE) {
+                        if (precip_mm < 150) {
+                            dominantVeg = '砂漠';
+                        } else if (precip_mm < 350) {
+                            // 砂漠の周辺に荒れ地を生成
+                            dominantVeg = '荒れ地'; 
+                        } else if (precip_mm < 600) {
+                            dominantVeg = '草原'; // ステップ気候に相当
+                        } else {
+                            dominantVeg = '森林'; // 温暖湿潤気候の森林
+                        }
                     }
-                } else {
-                    // 砂漠・草原・荒れ地の判定
-                    if (properties.climateZone.includes("砂漠")) {
-                        dominantVeg = '砂漠';
-                    } else if (properties.climateZone.includes("ステップ")) {
-                        dominantVeg = '草原';
+                    // 【c. 熱帯・亜熱帯 (Hot Zone)】
+                    else {
+                        if (precip_mm < 200) {
+                            dominantVeg = '砂漠';
+                        } else if (precip_mm < 500) {
+                            dominantVeg = '荒れ地';
+                        } else if (precip_mm < 1500) {
+                            // 熱帯の草原（サバンナ）
+                            dominantVeg = '草原'; 
+                        } else {
+                            // 既に '密林' 判定済みだが、ここに来る場合は通常の熱帯林とする
+                            dominantVeg = '森林'; 
+                        }
                     }
                 }
+                
                 properties.vegetation = dominantVeg;
             }
         }
