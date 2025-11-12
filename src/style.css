@@ -325,7 +325,7 @@ button.active:hover {
   position: fixed;
   bottom: 10px;
   right: 10px;
-  width: 320px; 
+  width: auto; 
   max-width: 90vw; /* スマホ画面では幅を可変に */
   max-height: 90vh; /* 高くなりすぎないように制限 */
   background-color: rgba(10, 20, 40, 0.95);
