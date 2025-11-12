@@ -907,11 +907,43 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .style('display', 'none')
         .text(d => d.properties.resourceRank);
 
-    const zoom = d3.zoom().scaleExtent([0.2, 10]).on('zoom', (event) => {
-        g.attr('transform', event.transform);
-        const effectiveRadius = config.r * event.transform.k;
-        labelLayer.selectAll('.hex-label, .property-label').style('display', effectiveRadius >= 50 ? 'inline' : 'none');
-    });
+    // パフォーマンス向上のため、ズーム操作中のレイヤー表示を制御する
+    const zoom = d3.zoom()
+        .scaleExtent([0.2, 10])
+        .on('start', () => {
+            // ズーム開始時に負荷の高いレイヤーを非表示にする
+            Object.entries(layers).forEach(([name, layer]) => {
+                // 基本地図、インタラクション、ハイライト用のレイヤーは常に表示しておく
+                const isEssential = ['terrain', 'white-map-overlay', 'interaction', 'highlight-overlay'].includes(name);
+                if (!isEssential && layer.visible) {
+                    layer.group.style('display', 'none');
+                }
+            });
+        })
+        .on('zoom', (event) => {
+            // ズーム中は全体の変形のみ適用
+            g.attr('transform', event.transform);
+        })
+        .on('end', (event) => {
+            // ズーム終了時に、もともと表示すべきレイヤーを再表示する
+            Object.entries(layers).forEach(([name, layer]) => {
+                 if (layer.visible) {
+                    // 基本地図の切り替え状態を考慮
+                    if (name === 'terrain' && d3.select('input[value="white"]').property('checked')) {
+                        layer.group.style('display', 'none');
+                    } else if (name === 'white-map-overlay' && !d3.select('input[value="white"]').property('checked')) {
+                         layer.group.style('display', 'none');
+                    } else {
+                        layer.group.style('display', 'inline');
+                    }
+                }
+            });
+
+            // ラベルの表示/非表示判定もここで行う
+            const effectiveRadius = config.r * event.transform.k;
+            labelLayer.selectAll('.hex-label, .property-label').style('display', effectiveRadius >= 50 ? 'inline' : 'none');
+        });
+
     svg.call(zoom);
 
     const closeInfoWindowAndHighlight = () => {
