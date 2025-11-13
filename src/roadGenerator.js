@@ -5,14 +5,14 @@ import * as config from './config.js';
 import { getIndex, getDistance, formatProgressBar } from './utils.js';
 import * as d3 from 'd3';
 
-// Union-Find (変更なし)
+// Union-Find 
 class UnionFind {
     constructor(elements) { this.parent = new Map(); elements.forEach(el => this.parent.set(el, el)); }
     find(i) { if (this.parent.get(i) === i) { return i; } const root = this.find(this.parent.get(i)); this.parent.set(i, root); return root; }
     union(i, j) { const rootI = this.find(i); const rootJ = this.find(j); if (rootI !== rootJ) { this.parent.set(rootJ, rootI); return true; } return false; }
 }
 
-// findAStarPath (変更なし)
+// findAStarPath 
 function findAStarPath({ start, goal, getNeighbors, heuristic, cost }) {
     const toVisit = [{ node: start, f: 0, g: 0, path: [start] }];
     const visited = new Map();
@@ -41,7 +41,7 @@ function findAStarPath({ start, goal, getNeighbors, heuristic, cost }) {
     return null;
 }
 
-// createCostFunction (変更なし)
+// createCostFunction 
 const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
     const hexA = allHexes[getIndex(nodeA.x, nodeA.y)];
     const hexB = allHexes[getIndex(nodeB.x, nodeB.y)];
@@ -49,14 +49,15 @@ const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
 
     if (pB.isWater) return Infinity;
 
-    // ★★★ [ここから修正] 全ての既存道路のコストをレベルに応じて下げる ★★★
+    // 全ての既存道路のコストをレベルに応じて下げる
     if (pB.roadLevel && pB.roadLevel > 0) {
         // 道路レベルが高いほどコストが低くなるように設定
-        // レベル5 (交易路): 0.2
-        // レベル4 (街道):   0.4
+        // レベル6 (交易路): 0.2
+        // レベル5 (交易路): 0.333
+        // レベル4 (街道):   0.466
         // レベル3 (町道):   0.6
-        // レベル2 (村道):   0.8
-        const roadCost = 1.0 - (pB.roadLevel / 5) * 0.8; // 簡易的な計算式
+        // レベル2 (村道):   0.733
+        const roadCost = 1.0 - (pB.roadLevel / 6) * 0.8; // 簡易的な計算式
         return roadCost;
     }
 
@@ -88,7 +89,7 @@ const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
 };
 
 /**
- * ★★★ [新規] 各首都間を結ぶ「通商路」を生成する関数 ★★★
+ * 各首都間を結ぶ「通商路」を生成する関数
  * @param {Array<object>} capitals - 首都のリスト
  * @param {Array<object>} allHexes - 全ヘックスデータ
  * @param {Function} addLogMessage - ログ出力用関数
@@ -133,7 +134,7 @@ export async function generateMainTradeRoutes(capitals, allHexes, addLogMessage)
 }
 
 /**
- * ★★★ [改訂] 全ての都市間に交易路を敷設し、移動日数も計算する ★★★
+ * 全ての都市間に交易路を敷設し、移動日数も計算する
  */
 export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
     const roadPaths = [];
@@ -179,7 +180,7 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
         }
     }
 
-    await addLogMessage(`交易路: 探索完了。全 ${allEdges.length} 経路を発見しました。`, progressId);
+    await addLogMessage(`交易路：探索完了。全 ${allEdges.length} 経路を発見しました。`);
 
     // MSTは使わず、全ての経路を返す
     allEdges.forEach(edge => {
@@ -373,7 +374,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
 
     // --- フェーズ1: 接続候補の経路を、最適化しながら探索 ---
     const progressId = `feeder-road-scan-${type}`;
-    await addLogMessage(`[${type}] 接続候補経路を探索中...`, progressId);
+    await addLogMessage(`${type}道：接続候補経路を探索中...`, progressId);
     let processedCount = 0;
     const totalCount = lowerSettlements.length;
     let lastReportedPercent = -1;
@@ -481,7 +482,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
     }
 
     // --- フェーズ2: 候補の中から、移動日数が少なく衝突のないルートを確定 ---
-    await addLogMessage(`[${type}] 最適な道路を敷設中...`);
+    await addLogMessage(`${type}道：最適な道路を敷設中...`);
     potentialRoutes.sort((a, b) => a.travelDays - b.travelDays); // 仕様3-5: 移動日数が少ない順にソート
     
     for (const route of potentialRoutes) {
@@ -528,7 +529,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
     // --- フェーズ3:最後まで国籍が決まらなかった辺境集落の処理 (仕様3-9) ---
     const remainingLower = lowerSettlements.filter(l => !processedLower.has(getIndex(l.col, l.row)));
     if (remainingLower.length > 0) {
-        await addLogMessage(`[${type}] 辺境地域の所属を決定中...`);
+        await addLogMessage(`${type}：辺境地域の所属を決定中...`);
         
         remainingLower.forEach(lower => {
             // この集落からの全仮経路の中から、最も日数が少ないものを探す

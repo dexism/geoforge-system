@@ -24,7 +24,7 @@ let infoWindow;
 let infoContent;
 let childrenMap = new Map();
 const nationColor = d3.scaleOrdinal(d3.schemeTableau10); // 国家ごとの色を固定するためのカラースケール
-// ★★★ [新規] ミニマップ関連の変数を追加 ★★★
+// ミニマップ関連の変数を追加
 let minimapContainer;
 let minimapSvg;
 let minimapViewport;
@@ -188,7 +188,7 @@ function updateLegend(layerName) {
 // ================================================================
 
 /**
- * ★★★ [新規] 道路網レイヤーを再描画する関数 ★★★
+ * 道路網レイヤーを再描画する関数
  * @param {Array<object>} roadPaths - 描画対象の道路データ
  */
 function drawRoads(roadPaths) {
@@ -200,7 +200,7 @@ function drawRoads(roadPaths) {
     const roadPathData = [];
     const roadSegmentGrid = new Map();
 
-    // ★★★ [修正] roadPathData に nationId を追加 ★★★
+    // roadPathData に nationId を追加
     [...roadPaths].sort((a, b) => b.level - a.level).forEach(road => {
         if (road.path.length < 2) return;
         const pathHexes = road.path.map(p => hexes[getIndex(p.x, p.y)]);
@@ -230,10 +230,10 @@ function drawRoads(roadPaths) {
         .append('path')
             .attr('class', 'road-segment')
             .attr('d', d => d.path)
-            // ★★★ [ここから修正] 国籍に応じて色を変える ★★★
+            // 国籍に応じて色を変える
             .attr('stroke', d => ({ 
-                6: '#0ff', // 通商路
-                5: '#a0f', // 交易路 (紫)
+                6: '#0cf', // 通商路
+                5: '#c0f', // 交易路 (紫)
                 4: '#f00', // 街道 (赤)
                 3: '#f00', // 町道 (赤)
                 2: '#f00', // 村道 (赤)
@@ -260,7 +260,7 @@ function drawRoads(roadPaths) {
 }
 
 /**
- * ★★★ [新規] 国境線レイヤーを再描画する関数 ★★★
+ * 国境線レイヤーを再描画する関数
  */
 function drawBorders() {
     // 1. 古い国境をクリア
@@ -306,7 +306,6 @@ function getInfoText(d) {
     // --- 上位集落の情報を整形 ---
     let superiorText = 'なし';
     if (p.parentHexId != null) {
-        // ★★★ [修正] グローバルな allHexesData を参照する ★★★
         const superiorHex = allHexesData[p.parentHexId]; 
         if (superiorHex) {
             let detailsText = '';
@@ -321,7 +320,6 @@ function getInfoText(d) {
             superiorText = `${superiorHex.properties.settlement} (E${superiorHex.col}-N${(config.ROWS-1)-superiorHex.row})${detailsText}`;
         }
     } else if (p.territoryId != null && getIndex(d.x, (config.ROWS - 1) - d.y) !== p.territoryId) {
-        // ★★★ [修正] グローバルな allHexesData を参照する ★★★
         const territoryHub = allHexesData[p.territoryId]; 
          if (territoryHub) {
             superiorText = `[中枢] ${territoryHub.properties.settlement} (E${territoryHub.col}-N${(config.ROWS-1)-territoryHub.row})`;
@@ -344,7 +342,7 @@ function getInfoText(d) {
     // --- 国家情報の整形 ---
     const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺境';
     
-    // ★★★ [ここから修正] 未定義の可能性があるプロパティにデフォルト値を設定 ★★★
+    // 未定義の可能性があるプロパティにデフォルト値を設定
     const population = p.population ?? 0;
     const cultivatedArea = p.cultivatedArea ?? 0;
     const habitability = p.habitability ?? 0;
@@ -404,7 +402,7 @@ function getInfoText(d) {
 }
 
 /**
- * ★★★ [新規] 集落の親子関係マップを更新する関数 ★★★
+ * 集落の親子関係マップを更新する関数
  * @param {Array<object>} hexesData - 全ヘックスのデータ
  */
 function updateChildrenMap(hexesData) {
@@ -451,7 +449,7 @@ function updateVisibleHexes(transform) {
     // 3. 各種スケールを定義
     const shadingOpacityScale = d3.scaleLinear().domain([0, 400]).range([0, 0.10]).clamp(true);
 
-    // ★★★ [ここから全面的に修正] 全てのレイヤー変数を "layers.xxx.group" 形式で参照 ★★★
+    // 全てのレイヤー変数を "layers.xxx.group" 形式で参照
 
     // 4a. 基本地形レイヤー
     layers.terrain.group.selectAll('.hex')
@@ -495,22 +493,21 @@ function updateVisibleHexes(transform) {
                         .attr('class', 'veg-overlay-hex')
                         .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
                         .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-                        // ★★★ [ここから修正] 表示ルールのみを変更する ★★★
+                        // 表示ルールのみを変更する
                         .attr('fill', d => {
                             const p = d.properties;
                             let displayVeg = p.vegetation; // まずはデータ上の優勢植生を取得
 
                             // もし優勢植生が森林系なら、優勢度チェックを行う
                             if (displayVeg === '森林' || displayVeg === '針葉樹林') {
-                                // landUse.forest が 15%未満なら、表示上は「草原」として扱う
-                                if (p.landUse.forest < 0.15) {
+                                // landUse.forest が 10%未満なら、表示上は「草原」として扱う
+                                if (p.landUse.forest < 0.10) {
                                     displayVeg = '草原';
                                 }
                             }
                             // 最終的に表示する植生の色を返す
                             return config.TERRAIN_COLORS[displayVeg] || 'transparent';
                         })
-                        // ★★★ [修正ここまで] ★★★
                         .style('fill-opacity', 0.6)
                         .style('pointer-events', 'none'),
                     update => update, // updateのロジックも必要であれば追記
@@ -525,7 +522,13 @@ function updateVisibleHexes(transform) {
         layers.snow.group.selectAll('.snow-hex')
             .data(visibleLandHexes.filter(d => d.properties.hasSnow), d => d.index)
             .join(
-                enter => enter.append('polygon').attr('class', 'snow-hex').attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' ')).attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`).attr('fill', '#fff').style('fill-opacity', 0.8).style('pointer-events', 'none'),
+                enter => enter.append('polygon')
+                    .attr('class', 'snow-hex')
+                    .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+                    .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
+                    .attr('fill', '#fff')
+                    .style('fill-opacity', 0.8)
+                    .style('pointer-events', 'none'),
                 update => update,
                 exit => exit.remove()
             );
@@ -538,7 +541,13 @@ function updateVisibleHexes(transform) {
         layers.shading.group.selectAll('.shading-hex')
             .data(visibleLandHexes, d => d.index)
             .join(
-                enter => enter.append('polygon').attr('class', 'shading-hex').attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' ')).attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`).attr('fill', d => d.properties.shadingValue > 0 ? '#fff' : '#000').style('fill-opacity', d => shadingOpacityScale(Math.abs(d.properties.shadingValue))).style('pointer-events', 'none'),
+                enter => enter.append('polygon')
+                    .attr('class', 'shading-hex')
+                    .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+                    .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
+                    .attr('fill', d => d.properties.shadingValue > 0 ? '#fff' : '#000')
+                    .style('fill-opacity', d => shadingOpacityScale(Math.abs(d.properties.shadingValue)))
+                    .style('pointer-events', 'none'),
                 update => update,
                 exit => exit.remove()
             );
@@ -548,9 +557,22 @@ function updateVisibleHexes(transform) {
     
     // 4j. 集落シンボル
     layers.settlement.group.selectAll('.settlement-hex')
-        .data(visibleHexes.filter(d => ['町', '街', '領都', '首都', '都市'].includes(d.properties.settlement)), d => d.index)
+        .data(visibleHexes.filter(d => ['村', '町', '街', '領都', '首都', '都市'].includes(d.properties.settlement)), d => d.index)
         .join(
-            enter => enter.append('polygon').attr('class', 'settlement-hex').attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' ')).attr('transform', d => `translate(${d.cx},${d.cy}) scale(0.7)`).attr('fill', d => ({'首都': '#f0f', '都市': '#f00', '領都': '#f00', '街': '#f80', '町': '#ff0'}[d.properties.settlement])).style('fill-opacity', 0.8).style('pointer-events', 'none'),
+            enter => enter.append('polygon')
+                .attr('class', 'settlement-hex')
+                .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+                .attr('transform', d => `translate(${d.cx},${d.cy}) scale(0.6)`)
+                .attr('fill', d => ({
+                    '首都': '#f0f', 
+                    '都市': '#f00', 
+                    '領都': '#f00', 
+                    '街': '#f80', 
+                    '町': '#ff0',
+                    '村': '#0f0'
+                }[d.properties.settlement]))
+                .style('fill-opacity', 0.8)
+                .style('pointer-events', 'none'),
             update => update,
             exit => exit.remove()
         );
@@ -577,7 +599,13 @@ function updateVisibleHexes(transform) {
         layers[layerName].group.selectAll(`.${layerName}-hex`)
             .data(data, d => d.index)
             .join(
-                enter => enter.append('polygon').attr('class', `${layerName}-hex`).attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' ')).attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`).attr('fill', fill).style('fill-opacity', opacity).style('pointer-events', 'none'),
+                enter => enter.append('polygon')
+                    .attr('class', `${layerName}-hex`)
+                    .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+                    .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
+                    .attr('fill', fill)
+                    .style('fill-opacity', opacity)
+                    .style('pointer-events', 'none'),
                 update => update,
                 exit => exit.remove()
             );
@@ -587,7 +615,9 @@ function updateVisibleHexes(transform) {
     layers['hex-border'].group.selectAll('.hex-border')
         .data(visibleHexes, d => d.index)
         .join(
-            enter => enter.append('polygon').attr('class', 'hex-border').attr('points', d => d.points.map(p => p.join(',')).join(' ')),
+            enter => enter.append('polygon')
+                .attr('class', 'hex-border')
+                .attr('points', d => d.points.map(p => p.join(',')).join(' ')),
             update => update,
             exit => exit.remove()
         );
@@ -598,36 +628,65 @@ function updateVisibleHexes(transform) {
         .data(visibleHexes, d => d.index)
         .join(enter => enter.append('g').attr('class', 'hex-label-group'));
     
-    hexLabelGroups.append('text').attr('class', 'hex-label').attr('x', d => d.cx).attr('y', d => d.cy + hexHeight * 0.4).attr('text-anchor', 'middle').attr('dominant-baseline', 'middle').text(d => `${String(d.x).padStart(2, '0')}${String(d.y).padStart(2, '0')}`);
+    hexLabelGroups.append('text') // 座標
+        .attr('class', 'hex-label')
+        .attr('x', d => d.cx).attr('y', d => d.cy + hexHeight * 0.4)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .text(d => `${String(d.x).padStart(3, '0')} ${String(d.y).padStart(3, '0')}`);
     
     if (layers.settlement.visible) {
         hexLabelGroups.filter(d => d.properties.settlement)
-            .append('text').attr('class', 'settlement-label').attr('x', d => d.cx).attr('y', d => d.cy).attr('text-anchor', 'middle').attr('dominant-baseline', 'middle').text(d => d.properties.settlement);
+            .append('text').attr('class', 'settlement-label')
+            .attr('x', d => d.cx).attr('y', d => d.cy)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .text(d => d.properties.settlement);
     }
 
-    hexLabelGroups.append('text').attr('class', 'property-label').attr('x', d => d.cx - config.r * 0.7).attr('y', d => d.cy).attr('text-anchor', 'middle').attr('dominant-baseline', 'middle').text(d => d.properties.manaRank);
-    hexLabelGroups.append('text').attr('class', 'property-label').attr('x', d => d.cx + config.r * 0.7).attr('y', d => d.cy).attr('text-anchor', 'middle').attr('dominant-baseline', 'middle').text(d => d.properties.resourceRank);
+    hexLabelGroups.append('text').attr('class', 'property-label') // 魔力ランク
+        .attr('x', d => d.cx - config.r * 0.7).attr('y', d => d.cy)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .text(d => d.properties.manaRank);
+    hexLabelGroups.append('text').attr('class', 'property-label') // 資源
+        .attr('x', d => d.cx + config.r * 0.7).attr('y', d => d.cy)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .text(d => d.properties.resourceRank);
     
     const effectiveRadius = config.r * transform.k;
-    layers.labels.group.selectAll('.hex-label, .property-label').style('display', effectiveRadius >= 50 ? 'inline' : 'none');
+    layers.labels.group.selectAll('.hex-label, .property-label')
+        .style('display', effectiveRadius >= 50 ? 'inline' : 'none');
 
     // インタラクションレイヤー
     layers.interaction.group.selectAll('.interactive-hex')
         .data(visibleHexes, d => d.index)
         .join(
             enter => {
-                const newHexes = enter.append('polygon').attr('class', 'interactive-hex').attr('points', d => d.points.map(p => p.join(',')).join(' ')).style('fill', 'transparent').style('cursor', 'pointer');
+                const newHexes = enter.append('polygon').attr('class', 'interactive-hex')
+                    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+                    .style('fill', 'transparent')
+                    .style('cursor', 'pointer');
                 newHexes.append('title').text(d => getInfoText(d));
                 newHexes.on('click', (event, d) => {
                     const highlightLayer = layers['highlight-overlay'].group;
                     highlightLayer.selectAll('*').remove();
-                    highlightLayer.append('polygon').attr('points', d.points.map(p => p.join(',')).join(' ')).attr('fill', 'none').attr('stroke', 'cyan').attr('stroke-width', 5).style('pointer-events', 'none');
+                    highlightLayer.append('polygon').attr('points', d.points.map(p => p.join(',')).join(' '))
+                        .attr('fill', 'none')
+                        .attr('stroke', 'cyan')
+                        .attr('stroke-width', 5)
+                        .style('pointer-events', 'none');
                     const p = d.properties;
                     if (['首都', '都市', '領都', '街', '町', '村'].includes(p.settlement)) {
                         if (p.parentHexId !== null) {
                             const superiorHex = hexes[p.parentHexId];
                             if (superiorHex) {
-                                highlightLayer.append('polygon').attr('points', superiorHex.points.map(pt => pt.join(',')).join(' ')).attr('fill', '#0ff').style('fill-opacity', 1.0).style('pointer-events', 'none');
+                                highlightLayer.append('polygon')
+                                    .attr('points', superiorHex.points.map(pt => pt.join(',')).join(' '))
+                                    .attr('fill', '#0ff')
+                                    .style('fill-opacity', 1.0)
+                                    .style('pointer-events', 'none');
                             }
                         }
                         const findAllDescendants = (startIndex) => {
@@ -652,10 +711,15 @@ function updateVisibleHexes(transform) {
                         const descendants = findAllDescendants(d.index);
                         if (descendants.length > 0) {
                             const maxDepth = Math.max(0, ...descendants.map(item => item.depth));
-                            const colorScale = d3.scaleLinear().domain([2, Math.max(2, maxDepth)]).range(['#660000', 'black']).interpolate(d3.interpolateRgb);
+                            const colorScale = d3.scaleLinear().domain([2, Math.max(2, maxDepth)])
+                                .range(['#660000', 'black']).interpolate(d3.interpolateRgb);
                             descendants.forEach(item => {
                                 let color = (item.depth === 1) ? 'red' : colorScale(item.depth);
-                                highlightLayer.append('polygon').attr('points', item.hex.points.map(pt => pt.join(',')).join(' ')).attr('fill', color).style('fill-opacity', 0.8).style('pointer-events', 'none');
+                                highlightLayer.append('polygon')
+                                    .attr('points', item.hex.points.map(pt => pt.join(',')).join(' '))
+                                    .attr('fill', color)
+                                    .style('fill-opacity', 0.8)
+                                    .style('pointer-events', 'none');
                             });
                         }
                     }
@@ -674,7 +738,7 @@ function updateVisibleHexes(transform) {
 }
 
 /**
- * ★★★ [新規] ミニマップ上のビューポート矩形を更新する関数 ★★★
+ * ミニマップ上のビューポート矩形を更新する関数
  * @param {d3.ZoomTransform} transform - 現在のズーム情報
  */
 function updateMinimapViewport(transform) {
@@ -706,11 +770,11 @@ function updateMinimapViewport(transform) {
 export async function setupUI(allHexes, roadPaths, addLogMessage) {
     allHexesData = allHexes;
     // --- 1. 初期設定とDOM要素の取得 ---
-    // ★★★ [修正] グローバル変数を使用するように変更 ★★★
+    // グローバル変数を使用するように変更
     svg = d3.select('#hexmap');
     const g = svg.append('g');
 
-    // ★★★ [ここからミニマップ関連の初期化を追加] ★★★
+    // ここからミニマップ関連の初期化を追加
     minimapContainer = d3.select('body').append('div').attr('id', 'minimap-container');
     minimapSvg = minimapContainer.append('svg').attr('id', 'minimap-svg');
     
@@ -763,10 +827,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     legendContainer = document.getElementById('legend-container');
 
     // --- 2. 描画用データの事前計算 ---
-    // ★★★ [修正] グローバル変数を使用するように変更 ★★★
     hexes = []; // データをリセット
-    // const hexWidth = 2 * config.r;
-    // const hexHeight = Math.sqrt(3) * config.r;
 
     for (let row = 0; row < config.ROWS; row++) {
         for (let col = 0; col < config.COLS; col++) {

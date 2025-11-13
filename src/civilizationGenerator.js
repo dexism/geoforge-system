@@ -113,7 +113,7 @@ function classifySettlements(allHexes) {
 }
 
 /**
- * ★★★ [改訂] 指定された数の首都を定義する関数 ★★★
+ * 指定された数の首都を定義する関数
  * K-Meansは使用せず、地理的バランスと人口に基づいて首都を選定する。
  * @param {Array<object>} allCities - 全ての「都市」ランクの集落リスト
  * @param {number} numNations - 生成する国家の数
@@ -152,7 +152,7 @@ function defineNations(allCities, numNations) {
 }
 
 /**
- * ★★★ [新規] 交易路の移動日数に基づき、首都の初期領土（領都）を割り当てる関数 ★★★
+ * 交易路の移動日数に基づき、首都の初期領土（領都）を割り当てる関数
  * @param {Array<object>} allCities - 全ての都市
  * @param {Array<object>} capitals - 首都のリスト
  * @param {Array<object>} tradeRouteData - 全都市間の経路データ

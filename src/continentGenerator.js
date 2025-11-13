@@ -7,13 +7,21 @@ import * as config from './config.js';
 import { getIndex } from './utils.js';
 import * as d3 from 'd3'; // d3-scaleをスケール計算に利用
 
-// ★★★ [ここから修正] ノイズ変数を let で宣言のみ行う ★★★
-let continentNoise, mountainNoise, hillNoise, detailNoise, manaNoise, 
-    climateNoise, forestPotentialNoise, grasslandPotentialNoise, 
-    miningPotentialNoise, precipitationNoise, seasonalityNoise;
+// ノイズ変数を let で宣言のみ行う
+let continentNoise, 
+    mountainNoise, 
+    hillNoise, 
+    detailNoise, 
+    manaNoise, 
+    climateNoise, 
+    forestPotentialNoise, 
+    grasslandPotentialNoise, 
+    miningPotentialNoise, 
+    precipitationNoise, 
+    seasonalityNoise;
 
 /**
- * ★★★ [新規] 全てのノイズ関数を新しいシードで再初期化する関数 ★★★
+ * 全てのノイズ関数を新しいシードで再初期化する関数
  */
 function initializeNoiseFunctions() {
     // Math.random をシード"関数"として使用する
@@ -450,7 +458,7 @@ function calculateFinalProperties(allHexes) {
                 // 1. 川による森林へのボーナスを計算
                 // 川の流れ(flow)が強いほどボーナスが大きくなるが、効果が過剰にならないよう上限を設ける
                 // const riverBonusToForest = 1.0 + Math.min(2.0, Math.sqrt(properties.flow) * 0.5);
-                // ★★★ [変更] ボーナスを乗算ではなく加算で使うように変更 (0.0 ～ 0.4程度) ★★★
+                // ボーナスを乗算ではなく加算で使うように変更 (0.0 ～ 0.4程度) 
                 const riverBonusToForest = Math.min(0.4, Math.sqrt(properties.flow) * 0.1);
 
                 // 2. 各ポテンシャルを計算。森林ポテンシャルに川のボーナスを乗算する
@@ -464,7 +472,7 @@ function calculateFinalProperties(allHexes) {
                 const forestPrecipFactor = Math.max(0, properties.precipitation - 0.05);
                 // 元の森林ポテンシャル計算式に、川からのボーナスを掛け合わせる
                 // potentials.forest = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 5 * riverBonusToForest;
-                // ★★★ [変更] 基本倍率を引き下げ、川のボーナスは最後に加算する ★★★
+                // 基本倍率を引き下げ、川のボーナスは最後に加算する
                 let baseForestPotential = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 2.0;
                 potentials.forest = baseForestPotential + riverBonusToForest;
 
@@ -495,7 +503,6 @@ function calculateFinalProperties(allHexes) {
                 if (elevation >= 3500) {
                     dominantVeg = '高山'; // 標高3500m以上は問答無用で高山植生
                 } 
-                // (湿地と密林の判定は既にSTEP 1で完了している)
 
                 // --- STEP 1: 気温帯ごとの植生判定（ホイッタカーのバイオーム図を簡易的に模倣） ---
                 else {
@@ -601,7 +608,7 @@ function calculateFinalProperties(allHexes) {
 
 
 /**
- * ★★★ [改訂] ステップ1: 物理的な大陸と水系を生成する ★★★
+ * ステップ1: 物理的な大陸と水系を生成する
  * @param {Function} addLogMessage - ログ出力用の関数
  * @returns {Array<object>} - 生成された全ヘックスのデータ
  */
@@ -647,7 +654,7 @@ export async function generatePhysicalMap(addLogMessage) {
 }
 
 /**
- * ★★★ [新規] ステップ2: 気候と植生を生成する ★★★
+ * ステップ2: 気候と植生を生成する
  * @param {Array<object>} allHexes - 物理マップデータ
  * @param {Function} addLogMessage - ログ出力用の関数
  * @returns {Array<object>} - 気候・植生情報が追加された全ヘックスデータ
@@ -669,7 +676,7 @@ export async function generateClimateAndVegetation(allHexes, addLogMessage) {
 }
 
 
-// ★★★ [修正] main.jsから呼び出すために、個別の関数をエクスポートする ★★★
+// main.jsから呼び出すために、個別の関数をエクスポートする
 export {
     applyGeographicPrecipitationEffects,
     generateWaterSystems,

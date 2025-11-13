@@ -70,7 +70,7 @@ function updateButtonStates(currentStep) {
 }
 
 /**
- * ★★★ [新規] 世界とUIの状態を完全にリセットする関数 ★★★
+ * 世界とUIの状態を完全にリセットする関数
  */
 function resetWorld() {
     // D3.jsで描画された古いSVG要素を全て削除
@@ -101,7 +101,7 @@ async function runStep1_Continent() {
     logContainer.innerHTML = '';
     await addLogMessage("ステップ1: 大陸の土台を生成しています...");
     
-    // ★★★ [変更] 物理マップ生成のみを呼び出す ★★★
+    // 物理マップ生成のみを呼び出す
     worldData.allHexes = await generatePhysicalMap(addLogMessage);
     
     if (!uiInitialized) {
@@ -121,7 +121,7 @@ async function runStep2_Climate() {
     logContainer.innerHTML = '';
     await addLogMessage("ステップ2: 気候と植生を計算しています...");
 
-    // ★★★ [変更] ステップ1のデータに気候・植生情報を追加する ★★★
+    // ステップ1のデータに気候・植生情報を追加する
     worldData.allHexes = await generateClimateAndVegetation(worldData.allHexes, addLogMessage);
 
     await addLogMessage("気候と植生を再描画しています...");
@@ -223,7 +223,7 @@ async function runStep4_Nations() {
             (r.fromId === capitalId && r.toId === regionalCapitalId)
         );
         if (route) {
-            // ★★★ [新規] ルートデータ自体に国籍情報を付与 ★★★
+            // ルートデータ自体に国籍情報を付与
             route.nationId = rc.properties.nationId;
             finalTradeRoutes.push(route);
             const routeKey = Math.min(route.fromId, route.toId) + '-' + Math.max(route.fromId, route.toId);
@@ -236,7 +236,7 @@ async function runStep4_Nations() {
         const routeKey = Math.min(route.fromId, route.toId) + '-' + Math.max(route.fromId, route.toId);
         // 保証済みのルートではなく、かつ30日未満のルートのみを追加
         if (!guaranteedRoutes.has(routeKey) && route.travelDays < config.MAX_TRADE_ROUTE_DAYS) {
-            // ★★★ [新規] 未所属の交易路として国籍ID:0 を設定 ★★★
+            // 未所属の交易路として国籍ID:0 を設定
             route.nationId = 0; // 中立的な交易路
             finalTradeRoutes.push(route);
         }
@@ -292,8 +292,6 @@ async function runStep4_Nations() {
     worldData.allHexes = await simulateEconomy(worldData.allHexes, addLogMessage);
     worldData.allHexes = await calculateTerritoryAggregates(worldData.allHexes, addLogMessage);
     
-    // ★★★ [手順の追加/移動ここまで] ★★★
-
     await addLogMessage("道路網、国境、経済情報を再描画しています...");
     await redrawRoadsAndNations(worldData.allHexes, worldData.roadPaths);
     
@@ -350,7 +348,7 @@ async function generateNewWorld() {
 }
 
 /**
- * ★★★ [新規] ロードしたデータに対し、距離と日数を再計算する関数 ★★★
+ * ロードしたデータに対し、距離と日数を再計算する関数
  */
 async function recalculateDistances(worldData) {
     await addLogMessage("集落間の距離を再計算しています...");
@@ -417,7 +415,7 @@ async function loadExistingWorld() {
                  .map(n => getIndex(n.col, n.row));
             });
 
-            // ★★★ [新規] 距離と日数を再計算する関数を呼び出す ★★★
+            // 距離と日数を再計算する関数を呼び出す
             await recalculateDistances(worldData);
 
             await addLogMessage("世界を描画しています...");
