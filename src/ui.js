@@ -858,10 +858,10 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const contourLayer = createLayer('contour', true);                          // 等高線
     const territoryOverlayLayer = createLayer('territory-overlay', false);      // 領地
     const hexBorderLayer = createLayer('hex-border', true);                     // ヘックスの境界線
-    const highlightOverlayLayer = createLayer('highlight-overlay');             // クリック時のハイライト
-    const settlementLayer = createLayer('settlement');                          // 集落シンボル
     const roadLayer = createLayer('road');                                      // 道路網
     const borderLayer = createLayer('border');                                  // 国境線
+    const highlightOverlayLayer = createLayer('highlight-overlay');             // クリック時のハイライト
+    const settlementLayer = createLayer('settlement');                          // 集落シンボル
     // --- 情報オーバーレイ ---
     const ridgeWaterSystemLayer = createLayer('ridge-water-system', false);     // 稜線・水系図
     const populationOverlayLayer = createLayer('population-overlay', false);    // 人口分布
