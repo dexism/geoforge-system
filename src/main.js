@@ -7,8 +7,8 @@ import * as config from './config.js';
 import { generatePhysicalMap, generateClimateAndVegetation } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes } from './civilizationGenerator.js'; 
 import { simulateEconomy, calculateTerritoryAggregates } from './economySimulator.js';
-import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations } from './ui.js';
-import { generateTradeRoutes, generateFeederRoads } from './roadGenerator.js';
+import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
+import { generateTradeRoutes, generateFeederRoads, calculateRoadDistance, calculateTravelDays } from './roadGenerator.js';
 import { getIndex } from './utils.js';
 
 // GASのデプロイで取得したウェブアプリのURL
@@ -75,6 +75,8 @@ function updateButtonStates(currentStep) {
 function resetWorld() {
     // D3.jsで描画された古いSVG要素を全て削除
     d3.select('#hexmap').selectAll('*').remove();
+
+    resetUI();
     
     // グローバルな状態管理変数を初期化
     worldData = {
@@ -161,18 +163,89 @@ async function runStep4_Nations() {
     const cities = allHexes.filter(h => h.properties.settlement === '都市' || h.properties.settlement === '首都' || h.properties.settlement === '領都');
     const capitals = cities.filter(h => h.properties.settlement === '首都');
 
-    // ★★★ [ここから手順の追加/移動] ★★★
-    
-    // ① 全都市間の交易路を探索し、移動日数も計算
-    await addLogMessage("都市間の全交易路を探索し、MST敷設を開始しています...");
-    const { roadPaths: tradeRoutePaths, routeData: tradeRouteData } = await generateTradeRoutes(cities, allHexes, addLogMessage);
-    let allRoadPaths = tradeRoutePaths; // 交易路は全て描画対象
+    // ① 全都市間の交易路の"候補"をすべて探索
+    await addLogMessage("都市間の全交易路の可能性を探索しています...");
+    const { routeData: allTradeRoutes } = await generateTradeRoutes(cities, allHexes, addLogMessage);
 
     // ② 交易路の日数に基づき、首都の初期領土（領都）を決定
     await addLogMessage("交易路網に基づき、首都の初期領土を割り当てています...");
-    // assignTerritoriesByTradeRoutes が必要 (civilizationGenerator.js で export すること)
-    const { regionalCapitals } = assignTerritoriesByTradeRoutes(cities, capitals, tradeRouteData, allHexes);
+    const { regionalCapitals } = assignTerritoriesByTradeRoutes(cities, capitals, allTradeRoutes, allHexes);
+
+    regionalCapitals.forEach(rc => {
+        const capitalId = rc.properties.parentHexId;
+        const regionalCapitalId = getIndex(rc.col, rc.row);
+        
+        // 対応する交易路データを再検索
+        const route = allTradeRoutes.find(r => 
+            (r.fromId === regionalCapitalId && r.toId === capitalId) ||
+            (r.fromId === capitalId && r.toId === regionalCapitalId)
+        );
+
+        if (route) {
+            // 道路レベル5 (交易路) として距離と日数を計算
+            const distance = calculateRoadDistance(route.path, 5, allHexes);
+            const travelDays = calculateTravelDays(route.path, 5, allHexes);
+            
+            // 計算結果をプロパティに保存
+            rc.properties.distanceToParent = distance;
+            rc.properties.travelDaysToParent = travelDays;
+        }
+    });
     
+    // ③ 階層的な道路網を生成
+    // ★★★ [ここから交易路の選別ロジックを全面改訂] ★★★
+    
+    const finalTradeRoutes = [];
+    const guaranteedRoutes = new Set(); // 接続が保証されたルートのキーを保存
+
+    // 手順2: 領都から直上の首都までのルートを必ず確保する
+    regionalCapitals.forEach(rc => {
+        const capitalId = rc.properties.parentHexId;
+        const regionalCapitalId = getIndex(rc.col, rc.row);
+        
+        const route = allTradeRoutes.find(r => 
+            (r.fromId === regionalCapitalId && r.toId === capitalId) ||
+            (r.fromId === capitalId && r.toId === regionalCapitalId)
+        );
+        if (route) {
+            finalTradeRoutes.push(route);
+            const routeKey = Math.min(route.fromId, route.toId) + '-' + Math.max(route.fromId, route.toId);
+            guaranteedRoutes.add(routeKey);
+        }
+    });
+
+    // 手順3: それ以外の交易路は、30日以上かかるものを削除する
+    allTradeRoutes.forEach(route => {
+        const routeKey = Math.min(route.fromId, route.toId) + '-' + Math.max(route.fromId, route.toId);
+        // 保証済みのルートではなく、かつ30日未満のルートのみを追加
+        if (!guaranteedRoutes.has(routeKey) && route.travelDays < 30) {
+            finalTradeRoutes.push(route);
+        }
+    });
+
+    await addLogMessage(`交易路を選別し、${finalTradeRoutes.length}本に絞り込みました。`);
+
+    // 最終的に決定した交易路を描画用データに変換
+    const finalTradeRoutePaths = finalTradeRoutes.map(route => {
+        return { path: route.path.map(p => ({x: p.x, y: p.y})), level: 5, nationId: 0 };
+    });
+    // allRoadPaths を、選別後の交易路で初期化する
+    let allRoadPaths = finalTradeRoutePaths;
+
+    // ★★★ [新規] 交易路情報をヘックスのプロパティに書き込む ★★★
+    // これにより、createCostFunctionが既存の交易路を認識できるようになる
+    finalTradeRoutes.forEach(route => {
+        route.path.forEach(pos => {
+            const hex = allHexes[getIndex(pos.x, pos.y)];
+            if (hex && !hex.properties.isWater) {
+                // 既存の道路よりレベルが高い場合のみ上書き
+                if (!hex.properties.roadLevel || hex.properties.roadLevel < 5) {
+                    hex.properties.roadLevel = 5;
+                }
+            }
+        });
+    });
+
     // ③ 階層的な道路網を生成
     await addLogMessage("集落を結ぶ下位道路網を建設しています...");
     const hubs = [...capitals, ...regionalCapitals];
@@ -180,9 +253,11 @@ async function runStep4_Nations() {
     const towns = allHexes.filter(h => h.properties.settlement === '町');
     const villages = allHexes.filter(h => h.properties.settlement === '村');
     
+    // generateFeederRoadsは、更新されたcreateCostFunctionを内部で使うため、自動的に交易路を優先する
     const streetRoads = await generateFeederRoads(streets, hubs, allHexes, '街', addLogMessage);
     allRoadPaths.push(...streetRoads);
 
+    // ... (町道、村道の生成も同様) ...
     const townRoads = await generateFeederRoads(towns, [...hubs, ...streets], allHexes, '町', addLogMessage);
     allRoadPaths.push(...townRoads);
 
@@ -254,6 +329,41 @@ async function generateNewWorld() {
     loadingOverlay.style.display = 'none';
 }
 
+/**
+ * ★★★ [新規] ロードしたデータに対し、距離と日数を再計算する関数 ★★★
+ */
+async function recalculateDistances(worldData) {
+    await addLogMessage("集落間の距離を再計算しています...");
+    const { allHexes, roadPaths } = worldData;
+    if (!allHexes || !roadPaths) return;
+
+    const settlementsWithParent = allHexes.filter(h => h.properties.parentHexId !== null);
+
+    for (const s of settlementsWithParent) {
+        const parentHex = allHexes[s.properties.parentHexId];
+        if (!parentHex) continue;
+
+        // この集落と親を結ぶ道路を roadPaths から探す
+        const settlementId = getIndex(s.col, s.row);
+        const parentId = s.properties.parentHexId;
+
+        let targetRoad = roadPaths.find(road => {
+            const startId = getIndex(road.path[0].x, road.path[0].y);
+            const endId = getIndex(road.path[road.path.length - 1].x, road.path[road.path.length - 1].y);
+            return (startId === settlementId && endId === parentId) || (startId === parentId && endId === settlementId);
+        });
+        
+        // もし道路が見つかったら、距離と日数を計算してセット
+        if (targetRoad) {
+            const roadLevel = targetRoad.level;
+            const distance = calculateRoadDistance(targetRoad.path, roadLevel, allHexes);
+            const travelDays = calculateTravelDays(targetRoad.path, roadLevel, allHexes);
+            s.properties.distanceToParent = distance;
+            s.properties.travelDaysToParent = travelDays;
+        }
+    }
+}
+
 async function loadExistingWorld() {
     if (!GAS_WEB_APP_URL.startsWith('https://script.google.com')) {
         await addLogMessage('[設定注意] GASのURLが設定されていません。新規生成のみ行います。');
@@ -286,6 +396,9 @@ async function loadExistingWorld() {
                 ].filter(n => n.col >= 0 && n.col < config.COLS && n.row >= 0 && n.row < config.ROWS)
                  .map(n => getIndex(n.col, n.row));
             });
+
+            // ★★★ [新規] 距離と日数を再計算する関数を呼び出す ★★★
+            await recalculateDistances(worldData);
 
             await addLogMessage("世界を描画しています...");
             await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage);

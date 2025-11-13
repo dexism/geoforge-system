@@ -24,6 +24,12 @@ let infoWindow;
 let infoContent;
 let childrenMap = new Map();
 const nationColor = d3.scaleOrdinal(d3.schemeTableau10); // 国家ごとの色を固定するためのカラースケール
+// ★★★ [新規] ミニマップ関連の変数を追加 ★★★
+let minimapContainer;
+let minimapSvg;
+let minimapViewport;
+let minimapScaleX;
+let minimapScaleY;
 
 // ================================================================
 // ■ ヘルパー関数 (モジュールスコープ)
@@ -622,12 +628,86 @@ function updateVisibleHexes(transform) {
         );
 }
 
+/**
+ * ★★★ [新規] ミニマップ上のビューポート矩形を更新する関数 ★★★
+ * @param {d3.ZoomTransform} transform - 現在のズーム情報
+ */
+function updateMinimapViewport(transform) {
+    if (!minimapViewport || !svg) return;
+
+    // メインビューのサイズを取得
+    const svgNode = svg.node();
+    const svgWidth = svgNode.clientWidth;
+    const svgHeight = svgNode.clientHeight;
+    
+    // 現在の表示範囲の左上と右下の座標を、メインマップの座標系で計算
+    const [topLeftX, topLeftY] = transform.invert([0, 0]);
+    const [bottomRightX, bottomRightY] = transform.invert([svgWidth, svgHeight]);
+
+    // ミニマップ座標系に変換
+    const minimapX = topLeftX * minimapScaleX;
+    const minimapY = topLeftY * minimapScaleY;
+    const minimapWidth = (bottomRightX - topLeftX) * minimapScaleX;
+    const minimapHeight = (bottomRightY - topLeftY) * minimapScaleY;
+
+    // ビューポート矩形の属性を更新
+    minimapViewport
+        .attr('x', minimapX)
+        .attr('y', minimapY)
+        .attr('width', minimapWidth)
+        .attr('height', minimapHeight);
+}
+
 export async function setupUI(allHexes, roadPaths, addLogMessage) {
     allHexesData = allHexes;
     // --- 1. 初期設定とDOM要素の取得 ---
     // ★★★ [修正] グローバル変数を使用するように変更 ★★★
     svg = d3.select('#hexmap');
     const g = svg.append('g');
+
+    // ★★★ [ここからミニマップ関連の初期化を追加] ★★★
+    minimapContainer = d3.select('body').append('div').attr('id', 'minimap-container');
+    minimapSvg = minimapContainer.append('svg').attr('id', 'minimap-svg');
+    
+    // ミニマップ用の地形レイヤーを追加
+    const minimapTerrain = minimapSvg.append('g');
+    
+    // メインマップ全体のサイズを計算
+    const hexWidth = 2 * config.r;
+    const hexHeight = Math.sqrt(3) * config.r;
+    const mapTotalWidth = (config.COLS * hexWidth * 3/4 + hexWidth/4);
+    const mapTotalHeight = (config.ROWS * hexHeight + hexHeight/2);
+
+    // スケールを設定 (マップ全体が200x200のSVGに収まるように)
+    minimapScaleX = 200 / mapTotalWidth;
+    minimapScaleY = 200 / mapTotalHeight;
+    const scale = Math.min(minimapScaleX, minimapScaleY);
+
+    // ミニマップに簡易的な地形を描画
+    minimapTerrain.selectAll('.minimap-hex')
+        .data(allHexes)
+        .enter()
+        .append('rect')
+            .attr('x', d => (d.col * (hexWidth * 3 / 4)) * scale)
+            .attr('y', d => (d.row * hexHeight + (d.col % 2 === 0 ? 0 : hexHeight / 2)) * scale)
+            .attr('width', hexWidth * scale)
+            .attr('height', hexHeight * scale)
+            .attr('fill', d => {
+                if (d.properties.isWater) return '#004'; // 海洋
+                if (d.properties.elevation >= 2000) return '#222'; // 山岳
+                if (d.properties.settlement === '首都') return '#f0f'; // 首都
+                if (d.properties.settlement === '都市' || d.properties.settlement === '領都') return '#f004'; // 領都
+                if (d.properties.settlement === '街') return '#f804'; // 街
+                if (d.properties.settlement === '町') return '#ff04'; // 町
+                if (d.properties.settlement === '村') return '#0f04'; // 村
+                return '#000'; // 平地・森林
+            });
+
+    // ビューポート矩形を初期状態で追加
+    minimapViewport = minimapSvg.append('rect').attr('id', 'minimap-viewport');
+
+    // ミニマップを表示
+    minimapContainer.style('display', 'block');
 
     const hexOverlapScale = 1.01; // 隙間を埋めるための拡大率を定義。1%拡大
     
@@ -640,8 +720,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // --- 2. 描画用データの事前計算 ---
     // ★★★ [修正] グローバル変数を使用するように変更 ★★★
     hexes = []; // データをリセット
-    const hexWidth = 2 * config.r;
-    const hexHeight = Math.sqrt(3) * config.r;
+    // const hexWidth = 2 * config.r;
+    // const hexHeight = Math.sqrt(3) * config.r;
 
     for (let row = 0; row < config.ROWS; row++) {
         for (let col = 0; col < config.COLS; col++) {
@@ -796,7 +876,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         await new Promise(resolve => setTimeout(resolve, 0));
     }
 
-    await addLogMessage("等高線: 計算完了。パスを生成中...");
+    await addLogMessage("等高線のパスを生成中...");
     const maxElevation = d3.max(hexes, h => h.properties.elevation);
     const thresholds = d3.range(200, maxElevation, 200);
     const contours = d3.contours().size([gridWidth, gridHeight]).thresholds(thresholds)(elevationValues);
@@ -943,6 +1023,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             g.attr('transform', event.transform);
             // ★★★ [新規] 現在のズーム状態を保存 ★★★
             currentTransform = event.transform;
+            updateMinimapViewport(event.transform);
         })
         .on('end', (event) => {
             // ズーム終了時に、もともと表示すべきレイヤーを再表示する
@@ -1180,4 +1261,14 @@ export async function redrawRoadsAndNations(allHexes, roadPaths) {
     // ★★★ [修正] updateVisibleHexesを呼び出して、表示を完全に再構築する ★★★
     if (svg) updateVisibleHexes(currentTransform);
     console.log("道路・国家が更新され、再描画されました。");
+}
+
+/**
+ * ★★★ [新規] UIの状態をリセットする関数 ★★★
+ */
+export function resetUI() {
+    if (minimapContainer) {
+        minimapContainer.remove(); // 古いミニマップを削除
+        minimapContainer = null;
+    }
 }

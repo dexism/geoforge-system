@@ -49,6 +49,12 @@ const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
 
     if (pB.isWater) return Infinity;
 
+    // ★★★ [新規] 既存の交易路上はコストを大幅に下げる ★★★
+    // hexに roadLevel プロパティを追加しておく必要がある（後述）
+    if (pB.roadLevel === 5) {
+        return 0.2; // 通常のコストよりはるかに低い固定値を返す
+    }
+
     let cost = 1;
     // 河川コスト
     cost += pB.flow > 2 ? pB.flow * 3 : 0;
@@ -349,6 +355,11 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                 const result = findAStarPath({ start: { x: lower.col, y: lower.row }, goal: { x: closestUpper.col, y: closestUpper.row }, getNeighbors, heuristic, cost: costFunc });
                 
                 if (result) {
+                    const distance = calculateRoadDistance(result.path, roadLevel, allHexes);
+                    const travelDays = calculateTravelDays(result.path, roadLevel, allHexes);
+                    lower.properties.distanceToParent = distance;
+                    lower.properties.travelDaysToParent = travelDays;
+
                     roadPaths.push({ path: result.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: lower.properties.nationId });
                     lower.properties.parentHexId = getIndex(closestUpper.col, closestUpper.row);
                     processedLower.add(getIndex(lower.col, lower.row));
@@ -433,6 +444,11 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
             const nationId = route.to.properties.nationId;
             route.from.properties.nationId = nationId;
             route.from.properties.parentHexId = getIndex(route.to.col, route.to.row);
+
+            const distance = calculateRoadDistance(route.path, roadLevel, allHexes);
+            // travelDays は既に計算済みなので再利用
+            route.from.properties.distanceToParent = distance;
+            route.from.properties.travelDaysToParent = route.travelDays;
             
             route.path.forEach(pos => {
                 const hex = allHexes[getIndex(pos.x, pos.y)];
@@ -502,9 +518,18 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                         const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
                         const result = findAStarPath({ start: { x: connectionPoint.col, y: connectionPoint.row }, goal: { x: closestUpper.col, y: closestUpper.row }, getNeighbors, heuristic, cost: costFunc });
                         if(result) {
-                             result.path.forEach(pos => allHexes[getIndex(pos.x, pos.y)].properties.nationId = connectionNationId);
-                             roadPaths.push({ path: result.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: connectionNationId });
-                             lower.properties.parentHexId = getIndex(closestUpper.col, closestUpper.row);
+                            // ★★★ [ここから修正] 距離と日数を計算・保存 ★★★
+                            // 辺境集落から最終的な親までの完全な経路
+                            const fullPath = [...pathToConnection, ...result.path.slice(1)];
+                            const distance = calculateRoadDistance(fullPath, roadLevel, allHexes);
+                            const travelDays = calculateTravelDays(fullPath, roadLevel, allHexes);
+                            lower.properties.distanceToParent = distance;
+                            lower.properties.travelDaysToParent = travelDays;
+                            // ★★★ [修正ここまで] ★★★
+
+                            result.path.forEach(pos => allHexes[getIndex(pos.x, pos.y)].properties.nationId = connectionNationId);
+                            roadPaths.push({ path: result.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: connectionNationId });
+                            lower.properties.parentHexId = getIndex(closestUpper.col, closestUpper.row);
                         }
                     }
                 }
@@ -514,3 +539,5 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
 
     return roadPaths;
 }
+
+export { calculateRoadDistance, calculateTravelDays };
