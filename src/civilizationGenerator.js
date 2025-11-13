@@ -295,47 +295,9 @@ export async function generateCivilization(allHexes, addLogMessage) {
 }
 
 export { defineNations, assignTerritoriesByTradeRoutes };
-/*
-    // 手順2-1: 全都市間の交易路を探索し、移動日数も計算
-    await addLogMessage("都市間の全交易路の可能性を探索しています...");
-    const { roadPaths: tradeRoutePaths, routeData: tradeRouteData } = await generateTradeRoutes(cities, allHexes, addLogMessage);
-    let allRoadPaths = tradeRoutePaths; // 交易路は全て描画対象
-
-    // 手順2-2: 交易路の日数に基づき、首都の初期領土（領都）を決定
-    await addLogMessage("交易路網に基づき、首都の初期領土を割り当てています...");
-    const { regionalCapitals } = assignTerritoriesByTradeRoutes(cities, capitals, tradeRouteData, allHexes);
-    
-    // 手順3以降: 階層的な道路網を生成
-    await addLogMessage("集落を結ぶ下位道路網を建設しています...");
-    const hubs = [...capitals, ...regionalCapitals];
-    const streets = allHexes.filter(h => h.properties.settlement === '街');
-    const towns = allHexes.filter(h => h.properties.settlement === '町');
-    const villages = allHexes.filter(h => h.properties.settlement === '村');
-    
-    // 新しい generateFeederRoads (後述) を呼び出す
-    const streetRoads = await generateFeederRoads(streets, hubs, allHexes, '街', addLogMessage);
-    allRoadPaths.push(...streetRoads);
-
-    const townRoads = await generateFeederRoads(towns, [...hubs, ...streets], allHexes, '町', addLogMessage);
-    allRoadPaths.push(...townRoads);
-
-    const villageRoads = await generateFeederRoads(villages, [...hubs, ...streets, ...towns], allHexes, '村', addLogMessage);
-    allRoadPaths.push(...villageRoads);
-    
-    const totalPopulation = allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
-    await addLogMessage(`文明が生まれました... 総人口: ${totalPopulation.toLocaleString()}人`);
-
-    return { allHexes, roadPaths: allRoadPaths };
-*/
 
 export async function determineTerritories(allHexes, addLogMessage) {
     await addLogMessage("国家の最終的な領土を確定させています...");
-
-    allHexes.forEach(h => {
-        if (h.properties.population === 0) {
-            h.properties.nationId = 0; 
-        }
-    });
 
     const queue = allHexes.filter(h => h.properties.nationId > 0);
     const visited = new Set(queue.map(h => getIndex(h.col, h.row)));
@@ -344,6 +306,7 @@ export async function determineTerritories(allHexes, addLogMessage) {
     while (head < queue.length) {
         const currentHex = queue[head++];
         
+        // territoryId の設定ロジックは変更なし
         if (currentHex.properties.territoryId === null) {
             let hub = currentHex;
             let visitedLoop = new Set();
@@ -356,10 +319,13 @@ export async function determineTerritories(allHexes, addLogMessage) {
             currentHex.properties.territoryId = getIndex(hub.col, hub.row);
         }
 
+        // 近隣の「未所属」かつ「人口あり」のヘックスのみを自国領土に広げる
         currentHex.neighbors.forEach(neighborIndex => {
             if (!visited.has(neighborIndex)) {
                 visited.add(neighborIndex);
                 const neighborHex = allHexes[neighborIndex];
+                
+                // 条件を「人口が0より大きく、かつ未所属」に戻す
                 if (neighborHex.properties.population > 0 && neighborHex.properties.nationId === 0 && !neighborHex.properties.isWater) {
                     neighborHex.properties.nationId = currentHex.properties.nationId;
                     neighborHex.properties.territoryId = currentHex.properties.territoryId;

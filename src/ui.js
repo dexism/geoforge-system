@@ -200,6 +200,7 @@ function drawRoads(roadPaths) {
     const roadPathData = [];
     const roadSegmentGrid = new Map();
 
+    // ★★★ [修正] roadPathData に nationId を追加 ★★★
     [...roadPaths].sort((a, b) => b.level - a.level).forEach(road => {
         if (road.path.length < 2) return;
         const pathHexes = road.path.map(p => hexes[getIndex(p.x, p.y)]);
@@ -218,7 +219,8 @@ function drawRoads(roadPaths) {
             const segmentKey = Math.min(fromIndex, toIndex) + '-' + Math.max(fromIndex, toIndex);
             if (!roadSegmentGrid.has(segmentKey)) {
                 roadSegmentGrid.set(segmentKey, true);
-                roadPathData.push({ path: path, level: road.level });
+                // ★★★ [修正] nationIdを渡す ★★★
+                roadPathData.push({ path: path, level: road.level, nationId: road.nationId });
             }
         }
     });
@@ -228,7 +230,14 @@ function drawRoads(roadPaths) {
         .append('path')
             .attr('class', 'road-segment')
             .attr('d', d => d.path)
-            .attr('stroke', d => ({ 5: '#a0f', 4: '#f00', 3: '#f00', 2: '#f00', 1: '#800' }[d.level] || '#000'))
+            // ★★★ [ここから修正] 国籍に応じて色を変える ★★★
+            .attr('stroke', d => ({ 
+                5: '#a0f', // 交易路 (紫)
+                4: '#f00', // 街道 (赤)
+                3: '#f00', // 町道 (赤)
+                2: '#f00', // 村道 (赤)
+                1: '#800'  // その他 (暗赤)
+            }[d.level] || '#000'))
             .attr('stroke-width', d => ({ 5: 6.0, 4: 4.0, 3: 2.0, 2: 1.0, 1: 1.0 }[d.level] || 1))
             .attr('stroke-dasharray', d => ({ 5: '6, 6', 4: '4, 4', 3: '2, 2', 2: '1, 1', 1: '1, 2' }[d.level] || '2, 2'))
         .style('pointer-events', 'none')
@@ -463,17 +472,38 @@ function updateVisibleHexes(transform) {
     const visibleLandHexes = visibleHexes.filter(d => !d.properties.isWater);
     
     // 4c. 植生オーバーレイヤー
-    if (layers['vegetation-overlay'].visible) {
-        layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex')
-            .data(visibleLandHexes, d => d.index)
-            .join(
-                enter => enter.append('polygon').attr('class', 'veg-overlay-hex').attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' ')).attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`).attr('fill', d => config.TERRAIN_COLORS[d.properties.vegetation] || 'transparent').style('fill-opacity', 0.6).style('pointer-events', 'none'),
-                update => update,
-                exit => exit.remove()
-            );
-    } else {
-        layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex').remove();
-    }
+        if (layers['vegetation-overlay'].visible) {
+            layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex')
+                .data(visibleLandHexes, d => d.index)
+                .join(
+                    enter => enter.append('polygon')
+                        .attr('class', 'veg-overlay-hex')
+                        .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+                        .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
+                        // ★★★ [ここから修正] 表示ルールのみを変更する ★★★
+                        .attr('fill', d => {
+                            const p = d.properties;
+                            let displayVeg = p.vegetation; // まずはデータ上の優勢植生を取得
+
+                            // もし優勢植生が森林系なら、優勢度チェックを行う
+                            if (displayVeg === '森林' || displayVeg === '針葉樹林') {
+                                // landUse.forest が 15%未満なら、表示上は「草原」として扱う
+                                if (p.landUse.forest < 0.15) {
+                                    displayVeg = '草原';
+                                }
+                            }
+                            // 最終的に表示する植生の色を返す
+                            return config.TERRAIN_COLORS[displayVeg] || 'transparent';
+                        })
+                        // ★★★ [修正ここまで] ★★★
+                        .style('fill-opacity', 0.6)
+                        .style('pointer-events', 'none'),
+                    update => update, // updateのロジックも必要であれば追記
+                    exit => exit.remove()
+                );
+        } else {
+            layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex').remove();
+        }
     
     // 4d. 積雪レイヤー
     if (layers.snow.visible) {
@@ -1212,12 +1242,11 @@ function updateHexesData(updatedAllHexes) {
 
     updatedAllHexes.forEach((h, index) => {
         if (hexes[index]) {
-            // 新しいプロパティで上書きし、シェーディング値も再計算
-            hexes[index].properties = { 
-                ...hexes[index].properties, // 既存のプロパティを維持しつつ
-                ...h.properties,            // 新しいプロパティで上書き
-                shadingValue: calculateShading(h, updatedAllHexes) 
-            };
+            // ★★★ [ここを修正] プロパティをマージするのではなく、完全に上書きする ★★★
+            // これにより、roadGeneratorで変更された nationId が確実に反映される
+            hexes[index].properties = h.properties;
+            // 描画用のシェーディング値のみ、追加で計算する
+            hexes[index].properties.shadingValue = calculateShading(h, updatedAllHexes);
         }
     });
 }

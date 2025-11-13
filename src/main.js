@@ -208,6 +208,8 @@ async function runStep4_Nations() {
             (r.fromId === capitalId && r.toId === regionalCapitalId)
         );
         if (route) {
+            // ★★★ [新規] ルートデータ自体に国籍情報を付与 ★★★
+            route.nationId = rc.properties.nationId;
             finalTradeRoutes.push(route);
             const routeKey = Math.min(route.fromId, route.toId) + '-' + Math.max(route.fromId, route.toId);
             guaranteedRoutes.add(routeKey);
@@ -218,7 +220,9 @@ async function runStep4_Nations() {
     allTradeRoutes.forEach(route => {
         const routeKey = Math.min(route.fromId, route.toId) + '-' + Math.max(route.fromId, route.toId);
         // 保証済みのルートではなく、かつ30日未満のルートのみを追加
-        if (!guaranteedRoutes.has(routeKey) && route.travelDays < 30) {
+        if (!guaranteedRoutes.has(routeKey) && route.travelDays < config.MAX_TRADE_ROUTE_DAYS) {
+            // ★★★ [新規] 未所属の交易路として国籍ID:0 を設定 ★★★
+            route.nationId = 0; // 中立的な交易路
             finalTradeRoutes.push(route);
         }
     });
@@ -226,24 +230,29 @@ async function runStep4_Nations() {
     await addLogMessage(`交易路を選別し、${finalTradeRoutes.length}本に絞り込みました。`);
 
     // 最終的に決定した交易路を描画用データに変換
+    // ★★★ [修正] ルートデータに付与した国籍を描画用オブジェクトに渡す ★★★
     const finalTradeRoutePaths = finalTradeRoutes.map(route => {
-        return { path: route.path.map(p => ({x: p.x, y: p.y})), level: 5, nationId: 0 };
+        return { path: route.path.map(p => ({x: p.x, y: p.y})), level: 5, nationId: route.nationId };
     });
-    // allRoadPaths を、選別後の交易路で初期化する
     let allRoadPaths = finalTradeRoutePaths;
 
-    // ★★★ [新規] 交易路情報をヘックスのプロパティに書き込む ★★★
-    // これにより、createCostFunctionが既存の交易路を認識できるようになる
+    // ★★★ [修正] 交易路情報をヘックスのプロパティに書き込む処理を強化 ★★★
     finalTradeRoutes.forEach(route => {
-        route.path.forEach(pos => {
-            const hex = allHexes[getIndex(pos.x, pos.y)];
-            if (hex && !hex.properties.isWater) {
-                // 既存の道路よりレベルが高い場合のみ上書き
-                if (!hex.properties.roadLevel || hex.properties.roadLevel < 5) {
-                    hex.properties.roadLevel = 5;
+        // ルートに国籍が設定されている場合のみ、ヘックスの国籍を上書き
+        if (route.nationId > 0) {
+            route.path.forEach(pos => {
+                const hex = allHexes[getIndex(pos.x, pos.y)];
+                if (hex && !hex.properties.isWater) {
+                    // ヘックス自体の国籍も道路の国籍に染める
+                    hex.properties.nationId = route.nationId;
+
+                    // 道路レベルを設定
+                    if (!hex.properties.roadLevel || hex.properties.roadLevel < 5) {
+                        hex.properties.roadLevel = 5;
+                    }
                 }
-            }
-        });
+            });
+        }
     });
 
     // ③ 階層的な道路網を生成
