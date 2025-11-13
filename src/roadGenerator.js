@@ -88,6 +88,51 @@ const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
 };
 
 /**
+ * ★★★ [新規] 各首都間を結ぶ「通商路」を生成する関数 ★★★
+ * @param {Array<object>} capitals - 首都のリスト
+ * @param {Array<object>} allHexes - 全ヘックスデータ
+ * @param {Function} addLogMessage - ログ出力用関数
+ * @returns {Array<object>} - 生成された通商路の経路データ
+ */
+export async function generateMainTradeRoutes(capitals, allHexes, addLogMessage) {
+    if (capitals.length < 2) return [];
+
+    await addLogMessage("国家間の主要幹線（通商路）を探索しています...");
+    const mainRoutes = [];
+    
+    // この時点では既存の道路はないため、国籍ボーナスなしのコスト関数を使用
+    const costFunc = createCostFunction(allHexes, null);
+    const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
+    const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
+
+    // 全ての首都のペアに対してA*探索を実行
+    for (let i = 0; i < capitals.length; i++) {
+        for (let j = i + 1; j < capitals.length; j++) {
+            const capital1 = capitals[i];
+            const capital2 = capitals[j];
+            const result = findAStarPath({ 
+                start: { x: capital1.col, y: capital1.row }, 
+                goal: { x: capital2.col, y: capital2.row }, 
+                getNeighbors, 
+                heuristic, 
+                cost: costFunc 
+            });
+
+            if (result) {
+                // 通商路は特定の国に所属しない（中立）ため、nationId は 0 とする
+                mainRoutes.push({
+                    path: result.path,
+                    level: 6, // 道路レベル6を通商路とする
+                    nationId: 0
+                });
+            }
+        }
+    }
+    
+    return mainRoutes;
+}
+
+/**
  * ★★★ [改訂] 全ての都市間に交易路を敷設し、移動日数も計算する ★★★
  */
 export async function generateTradeRoutes(cities, allHexes, addLogMessage) {

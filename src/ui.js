@@ -232,14 +232,29 @@ function drawRoads(roadPaths) {
             .attr('d', d => d.path)
             // ★★★ [ここから修正] 国籍に応じて色を変える ★★★
             .attr('stroke', d => ({ 
+                6: '#0ff', // 通商路
                 5: '#a0f', // 交易路 (紫)
                 4: '#f00', // 街道 (赤)
                 3: '#f00', // 町道 (赤)
                 2: '#f00', // 村道 (赤)
                 1: '#800'  // その他 (暗赤)
             }[d.level] || '#000'))
-            .attr('stroke-width', d => ({ 5: 6.0, 4: 4.0, 3: 2.0, 2: 1.0, 1: 1.0 }[d.level] || 1))
-            .attr('stroke-dasharray', d => ({ 5: '6, 6', 4: '4, 4', 3: '2, 2', 2: '1, 1', 1: '1, 2' }[d.level] || '2, 2'))
+            .attr('stroke-width', d => ({ 
+                6: 8.0, 
+                5: 6.0, 
+                4: 4.0, 
+                3: 2.0, 
+                2: 1.0, 
+                1: 1.0 
+            }[d.level] || 1))
+            .attr('stroke-dasharray', d => ({ 
+                6: '8, 8', 
+                5: '6, 6', 
+                4: '4, 4', 
+                3: '2, 2', 
+                2: '1, 1', 
+                1: '1, 2' 
+            }[d.level] || '2, 2'))
         .style('pointer-events', 'none')
         .style('fill', 'none');
 }

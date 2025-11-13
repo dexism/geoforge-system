@@ -165,8 +165,9 @@ export const TERRAIN_MULTIPLIERS = {
     RIVER_BONUS: 0.3 
 };
 export const ROAD_MULTIPLIERS = { 
-    5: 0.8,  // 交易路 
-    4: 0.9,  // 街道
+    6: 0.80,  // 通商路
+    5: 0.85,  // 交易路 
+    4: 0.90,  // 街道
     3: 0.95, // 町道
     2: 1.0,  // 村道
     1: 1.0 
@@ -175,6 +176,7 @@ export const WAGON_PARAMS = {
     BASE_SPEED_KMH: 3.5, // 基本移動速度 (km/h)
     OPERATING_HOURS_PER_DAY: 7.0, // 1日の稼働時間 (時間)
     ROAD_SPEED_MULTIPLIERS: { 
+        6: 1.30, // 通商路
         5: 1.25, // 交易路
         4: 1.15, // 街道
         3: 1.05, // 町道

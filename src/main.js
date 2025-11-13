@@ -8,7 +8,7 @@ import { generatePhysicalMap, generateClimateAndVegetation } from './continentGe
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes } from './civilizationGenerator.js'; 
 import { simulateEconomy, calculateTerritoryAggregates } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
-import { generateTradeRoutes, generateFeederRoads, calculateRoadDistance, calculateTravelDays } from './roadGenerator.js';
+import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays } from './roadGenerator.js';
 import { getIndex } from './utils.js';
 
 // GASのデプロイで取得したウェブアプリのURL
@@ -163,11 +163,28 @@ async function runStep4_Nations() {
     const cities = allHexes.filter(h => h.properties.settlement === '都市' || h.properties.settlement === '首都' || h.properties.settlement === '領都');
     const capitals = cities.filter(h => h.properties.settlement === '首都');
 
-    // ① 全都市間の交易路の"候補"をすべて探索
-    await addLogMessage("都市間の全交易路の可能性を探索しています...");
+    // STEP 0: 各首都間を結ぶ「通商路」を最優先で確定する
+    const mainTradeRoutePaths = await generateMainTradeRoutes(capitals, allHexes, addLogMessage);
+    let allRoadPaths = mainTradeRoutePaths; // 最終的な道路リストをまず通商路で初期化
+
+    // 通商路の情報をヘックスに書き込み、後のA*探索でコストが下がるようにする
+    mainTradeRoutePaths.forEach(route => {
+        route.path.forEach(pos => {
+            const hex = allHexes[getIndex(pos.x, pos.y)];
+            if (hex && !hex.properties.isWater) {
+                if (!hex.properties.roadLevel || hex.properties.roadLevel < 6) {
+                    hex.properties.roadLevel = 6;
+                }
+            }
+        });
+    });
+
+    // STEP 1: 全都市間の「交易路」の候補を探索
+    await addLogMessage("都市間の交易路の可能性を探索しています...");
+    // generateTradeRoutesは、内部のコスト関数が通商路を優先するため、より効率的なルートを見つける
     const { routeData: allTradeRoutes } = await generateTradeRoutes(cities, allHexes, addLogMessage);
 
-    // ② 交易路の日数に基づき、首都の初期領土（領都）を決定
+    // STEP 2: 領都の決定
     await addLogMessage("交易路網に基づき、首都の初期領土を割り当てています...");
     const { regionalCapitals } = assignTerritoriesByTradeRoutes(cities, capitals, allTradeRoutes, allHexes);
 
@@ -192,11 +209,9 @@ async function runStep4_Nations() {
         }
     });
     
-    // ③ 階層的な道路網を生成
-    // ★★★ [ここから交易路の選別ロジックを全面改訂] ★★★
-    
+    // STEP 3: 交易路の選別
     const finalTradeRoutes = [];
-    const guaranteedRoutes = new Set(); // 接続が保証されたルートのキーを保存
+    const guaranteedRoutes = new Set();
 
     // 手順2: 領都から直上の首都までのルートを必ず確保する
     regionalCapitals.forEach(rc => {
@@ -229,33 +244,29 @@ async function runStep4_Nations() {
 
     await addLogMessage(`交易路を選別し、${finalTradeRoutes.length}本に絞り込みました。`);
 
-    // 最終的に決定した交易路を描画用データに変換
-    // ★★★ [修正] ルートデータに付与した国籍を描画用オブジェクトに渡す ★★★
+    // 選別された交易路を描画用データに変換し、allRoadPaths に追加
     const finalTradeRoutePaths = finalTradeRoutes.map(route => {
         return { path: route.path.map(p => ({x: p.x, y: p.y})), level: 5, nationId: route.nationId };
     });
-    let allRoadPaths = finalTradeRoutePaths;
+    allRoadPaths.push(...finalTradeRoutePaths);
 
-    // ★★★ [修正] 交易路情報をヘックスのプロパティに書き込む処理を強化 ★★★
+    // 交易路の情報をヘックスに書き込む (通商路を上書きしないように)
     finalTradeRoutes.forEach(route => {
-        // ルートに国籍が設定されている場合のみ、ヘックスの国籍を上書き
-        if (route.nationId > 0) {
-            route.path.forEach(pos => {
-                const hex = allHexes[getIndex(pos.x, pos.y)];
-                if (hex && !hex.properties.isWater) {
-                    // ヘックス自体の国籍も道路の国籍に染める
-                    hex.properties.nationId = route.nationId;
-
-                    // 道路レベルを設定
-                    if (!hex.properties.roadLevel || hex.properties.roadLevel < 5) {
-                        hex.properties.roadLevel = 5;
-                    }
+        route.path.forEach(pos => {
+            const hex = allHexes[getIndex(pos.x, pos.y)];
+            if (hex && !hex.properties.isWater) {
+                if (!hex.properties.roadLevel || hex.properties.roadLevel < 5) {
+                    hex.properties.roadLevel = 5;
                 }
-            });
-        }
+                // ヘックスの国籍も更新
+                if (route.nationId > 0) {
+                    hex.properties.nationId = route.nationId;
+                }
+            }
+        });
     });
 
-    // ③ 階層的な道路網を生成
+    // STEP 4: 階層的な下位道路の生成
     await addLogMessage("集落を結ぶ下位道路網を建設しています...");
     const hubs = [...capitals, ...regionalCapitals];
     const streets = allHexes.filter(h => h.properties.settlement === '街');
