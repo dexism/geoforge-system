@@ -793,41 +793,245 @@
                         <p>あなたのキャラクターは、ギルドに登録するにあたり、自らの才能の方向性を最初のスキル習得によって示します。</p>
                         
                         <h4>スキルベクトルとは？</h4>
+                        
+                        <div class="info-card">
+                            <dl>
+                                <dt>横軸：役割 (Role) = WHAT (何をするか)</dt>
+                                <dd><strong>アクティブ (Active):</strong> 外の世界へ積極的に<strong>働きかける</strong>役割。探索・実行・戦闘などが含まれる。</dd>
+                                <dd><strong>パッシブ (Passive):</strong> 拠点でじっくりと<strong>価値を生み出す</strong>役割。分析・準備・製作などが含まれる。</dd>
+                                <dt>縦軸：解決手段 (Approach) = HOW (どうやるか)</dt>
+                                <dd><strong>知力 (Intellect):</strong> <strong>知識や思考</strong>によって物事を解決するアプローチ。</dd>
+                                <dd><strong>体力 (Physical):</strong> <strong>身体や技術</strong>によって物事を解決するアプローチ。</dd>
+                            </dl>
+                        </div>
+
                         <p>このゲームの全てのスキルには、「体力/知力」と「アクティブ/パッシブ」という2軸4象限のポイントが設定されています。あなたが取得したスキルのポイントを合算した<strong>「合成ベクトル」</strong>が、あなたの現在の<strong>「ポジション（役割）」</strong>を示します。</p>
                         
                         <div class="quadrant-diagram">
                             <table>
                                 <tr>
                                     <td></td>
-                                    <td class="quadrant-label-x">パッシブ<br>(Passive)</td>
+                                    <td class="quadrant-label-x">パッシブ<br></td>
                                     <td></td>
-                                    <td class="quadrant-label-x">アクティブ<br>(Active)</td>
+                                    <td class="quadrant-label-x">アクティブ<br></td>
                                 </tr>
                                 <tr>
-                                    <td class="quadrant-label-y">知力<br>(Intellect)</td>
-                                    <td class="quadrant q2">策士オラクル<br>(Oracle)</td>
+                                    <td class="quadrant-label-y">知力<br></td>
+                                    <td class="quadrant q2">策士<br>オラクル</td>
                                     <td>↑</td>
-                                    <td class="quadrant q1">千手のトリックスター<br>(Trickster)</td>
+                                    <td class="quadrant q1">千手の<br>トリックスター</td>
                                 </tr>
                                 <tr>
                                     <td></td>
                                     <td>←</td>
-                                    <td class="center-quadrant">器用貧乏フレックス<br>(Flex)</td>
+                                    <td class="center-quadrant">器用貧乏<br>フレックス</td>
                                     <td>→</td>
                                 </tr>
                                 <tr>
-                                    <td class="quadrant-label-y">体力<br>(Physical)</td>
-                                    <td class="quadrant q3">挑発ヴァンガード<br>(Vanguard)</td>
+                                    <td class="quadrant-label-y">体力<br></td>
+                                    <td class="quadrant q3">挑発<br>ヴァンガード</td>
                                     <td>↓</td>
-                                    <td class="quadrant q4">脳筋ストライカー<br>(Striker)</td>
+                                    <td class="quadrant q4">脳筋<br>ストライカー</td>
                                 </tr>
                             </table>
                         </div>
 
-                        <p>キャラクター作成時、あなたはいくつかの初期スキルを選択します。その結果、あなたの合成ベクトルがどの象限に最も強く傾いているかで、あなたの最初のポジションが決まります。（全ての象限にバランス良く振られている場合、あなたのポジションは中央の<strong>フレックス (Flex)</strong> となります）</p>
-                        <p>最初のセッションでは、あなたのポジションに関わらず「Eランクの新人」と呼ばれますが、このポジションは、あなたがどのような活躍を期待されているかを示す、最初の道しるべとなるでしょう。</p>
-                        <p>以下に、各ポジションの代表的な戦闘スタイルを紹介します。</p>
+                        <!-- ▼▼▼ ここから説明を追記 ▼▼▼ -->
+                        <div class="explanation-box">
+                            <h4>ポジションの決まり方：スキル選択があなたを形作る</h4>
+                            <p>キャラクター作成時、あなたは「ポジションを選ぶ」のではありません。以下の<strong>「初期スキルリスト」</strong>から、あなたのキャラクターが持っていそうなスキルをいくつか<strong>「選択」</strong>します。</p>
+                            <p>例えば、「〈剛腕〉と〈強打〉を選んだ」場合、あなたのスキルベクトルは【体力+2, アクティブ+3】となり、あなたは「脳筋ストライカー」のポジションになります。一方、「〈観察眼〉と〈文献調査〉を選んだ」なら、ベクトルは【知力+3, パッシブ+3】となり、「策士オラクル」となります。</p>
+                            <p><strong>あなたの選択したスキルが、あなたのポジションを自動的に決定するのです。</strong> 最初のセッションでは「Eランクの新人」と呼ばれますが、このポジションは、あなたがどのような活躍を期待されているかを示す、最初の道しるべとなるでしょう。</p>
+                        </div>
+                        <!-- ▲▲▲ ここまで説明を追記 ▲▲▲ -->
 
+                        <h4>初期スキルリスト</h4>
+                        
+                        <h5>【体力を主軸とするスキル】</h5>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>レベル</th>
+                                        <th>スキル名</th>
+                                        <th>説明</th>
+                                        <th>ベクトルポイント</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>1</td>
+                                        <td><strong>〈剛腕〉</strong></td>
+                                        <td>重いものを少しの間だけ持ち上げたり、腕力で脅しをかけたりする。</td>
+                                        <td>体力+1, アクティブ+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>1</td>
+                                        <td><strong>〈健脚〉</strong></td>
+                                        <td>長距離を疲れにくく歩ける。荷物を背負っての移動に有利。</td>
+                                        <td>体力+1, パッシブ+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td><strong>〈受け身〉</strong></td>
+                                        <td>高い所から落ちたり、吹き飛ばされたりした際のダメージを軽減する。</td>
+                                        <td>体力+2, パッシブ+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td><strong>〈ラッシュ〉</strong></td>
+                                        <td>短時間に素早い連続攻撃を繰り出す。</td>
+                                        <td>体力+2, アクティブ+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>3</td>
+                                        <td><strong>〈不屈〉</strong></td>
+                                        <td>致命的な一撃を受けても、気力で耐えることができる。</td>
+                                        <td>体力+3, パッシブ+1</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h5>【知力を主軸とするスキル】</h5>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>レベル</th>
+                                        <th>スキル名</th>
+                                        <th>説明</th>
+                                        <th>ベクトルポイント</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>1</td>
+                                        <td><strong>〈観察眼〉</strong></td>
+                                        <td>状況や相手を注意深く観察し、違和感や特徴に気づく。</td>
+                                        <td>知力+1, パッシブ+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>1</td>
+                                        <td><strong>〈ハッタリ〉</strong></td>
+                                        <td>根拠がなくても、自信満々に言い放って相手を言いくるめる。</td>
+                                        <td>知力+1, アクティブ+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td><strong>〈鑑定〉</strong></td>
+                                        <td>道具や骨董品の価値や来歴を、知識を基に見抜く。</td>
+                                        <td>知力+2, パッシブ+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td><strong>〈尋問〉</strong></td>
+                                        <td>相手の矛盾を突き、巧みに誘導して情報を引き出す。</td>
+                                        <td>知力+2, アクティブ+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>3</td>
+                                        <td><strong>〈博識〉</strong></td>
+                                        <td>特定の分野（歴史、地理など）において、専門家レベルの知識を持つ。</td>
+                                        <td>知力+3, パッシブ+1</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h5>【アクティブを主軸とするスキル】</h5>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>レベル</th>
+                                        <th>スキル名</th>
+                                        <th>説明</th>
+                                        <th>ベクトルポイント</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>1</td>
+                                        <td><strong>〈忍び足〉</strong></td>
+                                        <td>物音を立てずに移動する。</td>
+                                        <td>アクティブ+1, 体力+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>1</td>
+                                        <td><strong>〈聞き込み〉</strong></td>
+                                        <td>街の人々から自然に噂話などを聞き出す。</td>
+                                        <td>アクティブ+1, 知力+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td><strong>〈探索〉</strong></td>
+                                        <td>隠された通路やアイテム、痕跡などを積極的に探し出す。</td>
+                                        <td>アクティブ+2, 知力+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td><strong>〈強打〉</strong></td>
+                                        <td>渾身の力を込めて、強力な一撃を放つ。</td>
+                                        <td>アクティブ+2, 体力+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>3</td>
+                                        <td><strong>〈突破〉</strong></td>
+                                        <td>敵の包囲網や障害物を、力と勢いで強引に突き破る。</td>
+                                        <td>アクティブ+3, 体力+1</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h5>【パッシブを主軸とするスキル】</h5>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>レベル</th>
+                                        <th>スキル名</th>
+                                        <th>説明</th>
+                                        <th>ベクトルポイント</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>1</td>
+                                        <td><strong>〈警戒〉</strong></td>
+                                        <td>奇襲や危険の兆候をいち早く察知する。</td>
+                                        <td>パッシブ+1, 知力+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>1</td>
+                                        <td><strong>〈応急手当〉</strong></td>
+                                        <td>簡単な傷の手当を行い、出血を止めたりする。</td>
+                                        <td>パッシブ+1, 体力+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td><strong>〈盾防御〉</strong></td>
+                                        <td>盾を使って攻撃を確実に受け止め、ダメージを無効化または軽減する。</td>
+                                        <td>パッシブ+2, 体力+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>2</td>
+                                        <td><strong>〈文献調査〉</strong></td>
+                                        <td>書物や記録を調べ、必要な情報を効率よく見つけ出す。</td>
+                                        <td>パッシ-ブ+2, 知力+1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>3</td>
+                                        <td><strong>〈準備万端〉</strong></td>
+                                        <td>行動前に周到な準備を行うことで、判定にボーナスを得たり、便利なアイテムを用意しておいたりできる。</td>
+                                        <td>パッシブ+3, 知力+1</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <p>以下に、各ポジションの代表的な戦闘スタイルを紹介します。</p>
                         <!-- 5つの戦闘スタイルの詳細 -->
                         <div class="style-card striker">
                             <h4>【体力 × アクティブ】 脳筋ストライカー</h4>
@@ -840,16 +1044,16 @@
                         </div>
                         <div class="style-card vanguard">
                             <h4>【体力 × パッシブ】 挑発ヴァンガード</h4>
-                            <p><strong>信条:</strong> 「俺に任せろ、指一本触れさせん」</p>
+                            <p><strong>信条:</strong> 「ここは任せろ、一歩も通さん」</p>
                             <p><strong>役割と戦術:</strong> パーティの「盾」。敵の攻撃を一身に引き受ける防波堤。仲間を確実に守り、安全な攻撃機会を作り出すことに全てを捧げる。</p>
                             <p><strong>得意な状況:</strong> 狭い通路での防衛戦、重要人物の護衛、強力な単体の敵の足止め。</p>
-                            <p><strong>苦手な状況:</strong> 四方八方からの集中攻撃、防御を無視する魔法や毒、素早く後衛を狙う敵。</p>
+                            <p><strong>苦手な状況:</strong> 四方八方からの集中攻撃、防御を無視する毒、素早く後衛を狙う敵。</p>
                             <p><strong>プレイヤー体験:</strong> 【守護神の安心感】自らがいることで仲間が安全に戦える、パーティの生命線を担うという頼もしさと自己犠牲の満足感。</p>
                             <p><strong>成長の道筋:</strong> 《護衛》, 《騎士》</p>
                         </div>
                         <div class="style-card trickster">
                             <h4>【知力 × アクティブ】 千手のトリックスター</h4>
-                            <p><strong>信条:</strong> 「戦場にあるもの全てが俺の手札だ」</p>
+                            <p><strong>信条:</strong> 「ここにある全ては俺の手札だ」</p>
                             <p><strong>役割と戦術:</strong> パーティの「奇策」。地形、道具、情報など、利用できるものは何でも利用して戦況をかき乱す。無限の手数と常識にとらわれない発想力が武器。</p>
                             <p><strong>得意な状況:</strong> 利用できるオブジェクトが多い場所、準備時間がある奇襲、交渉や陽動が有効な場面。</p>
                             <p><strong>苦手な状況:</strong> 何もないだだっ広い場所でのガチンコ勝負、単純な腕力や耐久力が求められる場面。</p>
@@ -858,7 +1062,7 @@
                         </div>
                         <div class="style-card oracle">
                             <h4>【知力 × パッシブ】 策士オラクル</h4>
-                            <p><strong>信条:</strong> 「動かずして戦況を支配し、無から勝利を紡ぎ出す」</p>
+                            <p><strong>信条:</strong> 「動かずして動かし、無から勝利を紡ぎ出す」</p>
                             <p><strong>役割と戦術:</strong> パーティの「頭脳」。徹底的な事前調査で敵の弱点を割り出し、完璧な作戦を立案することで、戦わずして勝利の道を確定させる。</p>
                             <p><strong>得意な状況:</strong> 十分な情報と準備時間がある計画的な戦闘、謎解きやギミックの解読。</p>
                             <p><strong>苦手な状況:</strong> 予期せぬ奇襲、情報が一切ない遭遇戦、計画が崩れた際の即興での対応。</p>
