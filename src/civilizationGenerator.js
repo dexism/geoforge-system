@@ -28,7 +28,7 @@ function generatePopulation(allHexes) {
         const p = h.properties;
         let score = 0;
 
-        // ★★★ [ロジック変更] いったん全ての陸地でスコアを計算する ★★★
+        // いったん全ての陸地でスコアを計算する
         if (!p.isWater) {
             score += p.agriPotential * 30;
             score += p.fishingPotential * 20;
@@ -43,7 +43,7 @@ function generatePopulation(allHexes) {
             score += p.miningPotential * 5;
             score += p.forestPotential * 5;
 
-            // ★★★ [新規] 特定の植生タイプに対して厳しいペナルティを課す ★★★
+            // 特定の植生タイプに対して厳しいペナルティを課す
             // スコアを乗算で減らすことで、元のスコアが高いほどペナルティの影響が大きくなる
             switch (p.vegetation) {
                 case '高山':
@@ -80,13 +80,12 @@ function generatePopulation(allHexes) {
                 const populationFactor = Math.pow(effectiveHabitability, config.POPULATION_PARAMS.POPULATION_CURVE);
                 const calculatedPopulation = Math.floor(populationFactor * config.POPULATION_PARAMS.MAX_POPULATION_PER_HEX);
                 
-                // ★★★ [ここから修正] 10人以下のヘックスは人口0とする ★★★
+                // 10人以下のヘックスは人口0とする
                 if (calculatedPopulation <= 10) {
                     p.population = 0;
                 } else {
                     p.population = calculatedPopulation;
                 }
-                // ★★★ [ここまで修正] ★★★
 
             } else {
                 p.population = 0;
@@ -114,12 +113,13 @@ function classifySettlements(allHexes) {
 }
 
 /**
- * ★★★ [改訂] K-Meansの結果から国家と首都を定義し、領都を首都に直轄させる ★★★
+ * ★★★ [改訂] 指定された数の首都を定義する関数 ★★★
+ * K-Meansは使用せず、地理的バランスと人口に基づいて首都を選定する。
+ * @param {Array<object>} allCities - 全ての「都市」ランクの集落リスト
+ * @param {number} numNations - 生成する国家の数
+ * @returns {object} - capitals: 首都オブジェクトの配列
  */
 function defineNations(allCities, numNations) {
-    const capitals = [];
-    const regionalCapitals = [];
-    
     // 1. マップを3x3の9地域に分割し、各地域の代表都市（最も人口が多い都市）を選出
     const regionBests = new Array(9).fill(null);
     const regionWidth = config.COLS / 3;
@@ -139,42 +139,72 @@ function defineNations(allCities, numNations) {
     const capitalCandidates = regionBests.filter(c => c !== null);
     capitalCandidates.sort((a, b) => b.properties.population - a.properties.population);
     
-    const finalCapitals = capitalCandidates.slice(0, numNations);
+    const capitals = capitalCandidates.slice(0, numNations);
 
     // 3. 首都を正式に定義
-    finalCapitals.forEach((capital, index) => {
+    capitals.forEach((capital, index) => {
         const nationId = index + 1;
         capital.properties.nationId = nationId;
         capital.properties.settlement = '首都';
-        capitals.push(capital);
     });
 
-    // 4. 首都以外の全都市を、最も近い首都の国家に所属させ「領都」とする
+    return { capitals };
+}
+
+/**
+ * ★★★ [新規] 交易路の移動日数に基づき、首都の初期領土（領都）を割り当てる関数 ★★★
+ * @param {Array<object>} allCities - 全ての都市
+ * @param {Array<object>} capitals - 首都のリスト
+ * @param {Array<object>} tradeRouteData - 全都市間の経路データ
+ * @param {Array<object>} allHexes - 全ヘックスデータ
+ * @returns {object} - regionalCapitals: 領都になった都市のリスト
+ */
+function assignTerritoriesByTradeRoutes(allCities, capitals, tradeRouteData, allHexes) {
+    const regionalCapitals = [];
+    const capitalIds = new Set(capitals.map(c => getIndex(c.col, c.row)));
+
     allCities.forEach(city => {
-        // 既に首都になっている都市はスキップ
-        if (city.properties.settlement === '首都') return;
+        const cityIndex = getIndex(city.col, city.row);
+        if (capitalIds.has(cityIndex)) return; // 首都自身はスキップ
 
         let closestCapital = null;
-        let minDistance = Infinity;
+        let minDays = Infinity;
+        let connectingRoute = null;
+
         capitals.forEach(capital => {
-            const dist = getDistance(city, capital);
-            if (dist < minDistance) {
-                minDistance = dist;
+            const capitalIndex = getIndex(capital.col, capital.row);
+            const route = tradeRouteData.find(r => 
+                (r.fromId === cityIndex && r.toId === capitalIndex) ||
+                (r.fromId === capitalIndex && r.toId === cityIndex)
+            );
+            if (route && route.travelDays < minDays) {
+                minDays = route.travelDays;
                 closestCapital = capital;
+                connectingRoute = route;
             }
         });
 
         if (closestCapital) {
+            // 2-2: 都市を最も近い首都の「領都」とし、国籍を設定
             city.properties.nationId = closestCapital.properties.nationId;
             city.properties.settlement = '領都';
             city.properties.parentHexId = getIndex(closestCapital.col, closestCapital.row);
             regionalCapitals.push(city);
+
+            // 2-2: 使用する交易路上のヘックスも領土とする
+            if (connectingRoute) {
+                connectingRoute.path.forEach(pos => {
+                    const hex = allHexes[getIndex(pos.x, pos.y)];
+                    if (hex && hex.properties.nationId === 0) {
+                        hex.properties.nationId = closestCapital.properties.nationId;
+                    }
+                });
+            }
         }
     });
 
-    return { capitals, regionalCapitals };
+    return { regionalCapitals };
 }
-
 
 // propagateNationId は変更ありません
 function propagateNationId(allHexes, hubs) {
@@ -220,7 +250,7 @@ export async function generateCivilization(allHexes, addLogMessage) {
     await addLogMessage("人口分布から都市や村を形成しています...");
     classifySettlements(allHexes);
 
-    // ★★★ [ここから新規] 集落数の集計とログ出力 ★★★
+    // 集落数の集計とログ出力
     const settlementCounts = {
         '都市': 0,
         '街': 0,
@@ -242,7 +272,7 @@ export async function generateCivilization(allHexes, addLogMessage) {
 
     const cities = allHexes.filter(h => h.properties.settlement === '都市');
 
-    // ★★★ [修正] configの値をローカル変数にコピーして使用する ★★★
+    // configの値をローカル変数にコピーして使用する
     let numNations = config.NUM_NATIONS; 
 
     if (cities.length < numNations) {
@@ -254,23 +284,35 @@ export async function generateCivilization(allHexes, addLogMessage) {
          return { allHexes, roadPaths: [] };
     }
 
-    // ★★★ [変更] K-Meansを廃止し、新しい国家定義関数を呼び出す ★★★
+    // 手順1-2: 首都を定義
     await addLogMessage("地理的バランスを考慮して国家を配置しています...");
-    // ★★★ [修正] ローカル変数を関数に渡す ★★★
-    const { capitals, regionalCapitals } = defineNations(cities, numNations);
-    await addLogMessage(`世界の${numNations}大国を定義しました。`); // ログもローカル変数を使用
+    const { capitals } = defineNations(cities, numNations);
+    await addLogMessage(`世界の${numNations}大国（首都）を定義しました。`);
 
-    // ③ 都市間の交易路を生成
-    await addLogMessage("集落を結ぶ道路網を建設しています...");
-    const { roadPaths: tradeRoutePaths } = await generateTradeRoutes(cities, allHexes, addLogMessage);
-    let allRoadPaths = tradeRoutePaths;
+    await addLogMessage("集落の初期配置が完了しました。");
+    // この時点で roadPaths は空で返す
+    return { allHexes, roadPaths: [] };
+}
+
+export { defineNations, assignTerritoriesByTradeRoutes };
+/*
+    // 手順2-1: 全都市間の交易路を探索し、移動日数も計算
+    await addLogMessage("都市間の全交易路の可能性を探索しています...");
+    const { roadPaths: tradeRoutePaths, routeData: tradeRouteData } = await generateTradeRoutes(cities, allHexes, addLogMessage);
+    let allRoadPaths = tradeRoutePaths; // 交易路は全て描画対象
+
+    // 手順2-2: 交易路の日数に基づき、首都の初期領土（領都）を決定
+    await addLogMessage("交易路網に基づき、首都の初期領土を割り当てています...");
+    const { regionalCapitals } = assignTerritoriesByTradeRoutes(cities, capitals, tradeRouteData, allHexes);
     
-    // ⑪～⑬ 下位集落の所属決定とインフラ整備
+    // 手順3以降: 階層的な道路網を生成
+    await addLogMessage("集落を結ぶ下位道路網を建設しています...");
     const hubs = [...capitals, ...regionalCapitals];
     const streets = allHexes.filter(h => h.properties.settlement === '街');
     const towns = allHexes.filter(h => h.properties.settlement === '町');
     const villages = allHexes.filter(h => h.properties.settlement === '村');
     
+    // 新しい generateFeederRoads (後述) を呼び出す
     const streetRoads = await generateFeederRoads(streets, hubs, allHexes, '街', addLogMessage);
     allRoadPaths.push(...streetRoads);
 
@@ -284,7 +326,7 @@ export async function generateCivilization(allHexes, addLogMessage) {
     await addLogMessage(`文明が生まれました... 総人口: ${totalPopulation.toLocaleString()}人`);
 
     return { allHexes, roadPaths: allRoadPaths };
-}
+*/
 
 export async function determineTerritories(allHexes, addLogMessage) {
     await addLogMessage("国家の最終的な領土を確定させています...");

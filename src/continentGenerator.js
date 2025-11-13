@@ -7,19 +7,30 @@ import * as config from './config.js';
 import { getIndex } from './utils.js';
 import * as d3 from 'd3'; // d3-scaleをスケール計算に利用
 
-// --- ノイズジェネレーターの初期化 ---
-const continentNoise = createNoise2D();
-const mountainNoise = createNoise2D();
-const hillNoise = createNoise2D();
-const detailNoise = createNoise2D();
-const manaNoise = createNoise2D();
-const climateNoise = createNoise2D(); 
-const forestPotentialNoise = createNoise2D();
-const grasslandPotentialNoise = createNoise2D();
-const miningPotentialNoise = createNoise2D();
-const precipitationNoise = createNoise2D();
-const seasonalityNoise = createNoise2D();
+// ★★★ [ここから修正] ノイズ変数を let で宣言のみ行う ★★★
+let continentNoise, mountainNoise, hillNoise, detailNoise, manaNoise, 
+    climateNoise, forestPotentialNoise, grasslandPotentialNoise, 
+    miningPotentialNoise, precipitationNoise, seasonalityNoise;
 
+/**
+ * ★★★ [新規] 全てのノイズ関数を新しいシードで再初期化する関数 ★★★
+ */
+function initializeNoiseFunctions() {
+    // Math.random をシード"関数"として使用する
+    const seedFn = Math.random;
+    
+    continentNoise = createNoise2D(seedFn);
+    mountainNoise = createNoise2D(seedFn);
+    hillNoise = createNoise2D(seedFn);
+    detailNoise = createNoise2D(seedFn);
+    manaNoise = createNoise2D(seedFn);
+    climateNoise = createNoise2D(seedFn); 
+    forestPotentialNoise = createNoise2D(seedFn);
+    grasslandPotentialNoise = createNoise2D(seedFn);
+    miningPotentialNoise = createNoise2D(seedFn);
+    precipitationNoise = createNoise2D(seedFn);
+    seasonalityNoise = createNoise2D(seedFn);
+}
 
 /**
  * 安定した手法で自然な地形を生成する
@@ -53,15 +64,28 @@ function generateBaseProperties(col, row) {
     // --- 2. 陸地に地形の起伏を追加 ---
     let elevation = 0;
     if (!isWater) {
+        // 1. 海岸線に近いほど、標高全体を抑制する係数を計算する
+        // landStrengthがSEA_LEVELに近いほど0.0に、1.0に近づくほど1.0になる係数
+        // これにより、内陸に行くほど本来の標高に近づく
+        const coastalDampeningFactor = d3.scaleLinear()
+            .domain([config.SEA_LEVEL, config.SEA_LEVEL + 0.2]) // 海岸線から0.2の範囲で効果を適用
+            .range([0.1, 1.0]) // 海岸線ギリギリでは標高を10%まで抑え、徐々に本来の高さへ
+            .clamp(true)(landStrength);
+
+        // 2. 各地形ノイズを計算
         let mountain = (mountainNoise(nx * config.MOUNTAIN_NOISE_FREQ, ny * config.MOUNTAIN_NOISE_FREQ) + 1) / 2;
         mountain = Math.pow(mountain, config.MOUNTAIN_DISTRIBUTION_POWER);
         mountain *= Math.pow(landStrength, config.MOUNTAIN_SHAPE_POWER);
         mountain *= config.MOUNTAIN_HEIGHT_MAX;
+
         let hills = (hillNoise(nx * config.HILL_NOISE_FREQ, ny * config.HILL_NOISE_FREQ) + 1) / 2;
         hills *= config.HILL_HEIGHT_MAX;
+
         let details = (detailNoise(nx * config.DETAIL_NOISE_FREQ, ny * config.DETAIL_NOISE_FREQ) + 1) / 2;
         details *= config.DETAIL_HEIGHT_MAX;
-        elevation = mountain + hills + details;
+        
+        // 3. 計算した標高に、海岸線抑制係数を乗算する
+        elevation = (mountain + hills + details) * coastalDampeningFactor;
     }
 
     // --- 3. 気温と標高を計算 ---
@@ -152,7 +176,7 @@ function generateBaseProperties(col, row) {
 }
 
 /**
- * ★★★ [新規] 第1.5パス：山脈や海岸線に応じて降水量を補正する ★★★
+ * 第1.5パス：山脈や海岸線に応じて降水量を補正する
  * @param {Array<object>} allHexes - 全ヘックスのデータ
  */
 function applyGeographicPrecipitationEffects(allHexes) {
@@ -237,7 +261,40 @@ function generateWaterSystems(allHexes) {
 }
 
 /**
- * ★★★ [新規] 第2.5パス：稜線を生成する ★★★
+ * 第2.2パス：陸地の最低標高を10mに補正する
+ * @param {Array<object>} allHexes - 全ヘックスのデータ
+ */
+function adjustLandElevation(allHexes) {
+    const MIN_ELEVATION_TARGET = 10;
+    
+    // 補正対象となるヘックス（陸地 または 湖沼）をリストアップ
+    const targetHexes = allHexes.filter(h => !h.properties.isWater || (h.properties.isWater && h.properties.elevation > 0));
+    
+    if (targetHexes.length === 0) {
+        return; // 補正対象がなければ何もしない
+    }
+
+    // 1. 対象ヘックスの中から、現在の最低標高を見つける
+    let minElevation = Infinity;
+    targetHexes.forEach(h => {
+        if (h.properties.elevation < minElevation) {
+            minElevation = h.properties.elevation;
+        }
+    });
+
+    // 2. 最低標高が目標値より低い場合、全体の底上げ量を計算
+    if (minElevation < MIN_ELEVATION_TARGET) {
+        const elevationToAdd = MIN_ELEVATION_TARGET - minElevation;
+
+        // 3. 全ての対象ヘックスの標高に、計算した底上げ量を加算する
+        targetHexes.forEach(h => {
+            h.properties.elevation += elevationToAdd;
+        });
+    }
+}
+
+/**
+ * 第2.5パス：稜線を生成する
  * @param {Array<object>} allHexes - 全ヘックスのデータ
  */
 function generateRidgeLines(allHexes) {
@@ -334,15 +391,43 @@ function calculateFinalProperties(allHexes) {
         } else {
             // --- ステップ1: 特別な植生（湿地・密林）を優先的に判定 ---
             
-            // a. 湿地の判定
-            // 条件: 標高が低く、かつ川の流れが一定以上ある
-            const isMarshCondition = 
-                elevation < config.PRECIPITATION_PARAMS.MARSH_MAX_ELEVATION && 
-                properties.flow >= config.PRECIPITATION_PARAMS.MARSH_MIN_FLOW;
+            // 湿地生成ロジック
+            let isWetland = false;
+            const wp = config.PRECIPITATION_PARAMS.WETLAND_PARAMS;
 
-            if (isMarshCondition) {
+            // --- a. 湿地の判定 ---
+            if (elevation < wp.MAX_ELEVATION) {
+                // 条件1: 地形の平坦度を評価
+                const neighborElevations = h.neighbors.map(nIndex => allHexes[nIndex].properties.elevation);
+                const maxNeighborElev = Math.max(...neighborElevations);
+                const minNeighborElev = Math.min(...neighborElevations);
+                const elevationRange = maxNeighborElev - minNeighborElev;
+                // 平坦であるほどスコアが高くなる (0.0 to 1.0)
+                const flatnessScore = Math.max(0, 1.0 - (elevationRange / wp.FLATNESS_THRESHOLD));
+
+                // 条件2: 水源の豊富さを評価
+                let waterScore = 0;
+                // 河川からのボーナス
+                waterScore += Math.min(1.0, properties.flow * 0.5); 
+                // 降水量からのボーナス
+                if (properties.precipitation_mm > wp.PRECIP_THRESHOLD_MM) {
+                    waterScore += Math.min(1.0, (properties.precipitation_mm - wp.PRECIP_THRESHOLD_MM) / 1000);
+                }
+                // 沿岸・湖畔からのボーナス
+                if (h.neighbors.some(nIndex => allHexes[nIndex].properties.isWater)) {
+                    waterScore += wp.COASTAL_WATER_BONUS;
+                }
+
+                // 最終判定: (平坦度スコア + 水源スコア) が閾値を超えたか？
+                if (flatnessScore > 0 && (flatnessScore + waterScore) > wp.SCORE_THRESHOLD) {
+                    isWetland = true;
+                }
+            }
+
+            if (isWetland) {
                 properties.vegetation = '湿地';
-            } 
+            }
+
             // b. 密林の判定 (湿地でない場合のみ)
             // 条件: 気温が高く、かつ降水量が非常に多い
             else if (
@@ -364,7 +449,9 @@ function calculateFinalProperties(allHexes) {
 
                 // 1. 川による森林へのボーナスを計算
                 // 川の流れ(flow)が強いほどボーナスが大きくなるが、効果が過剰にならないよう上限を設ける
-                const riverBonusToForest = 1.0 + Math.min(2.0, Math.sqrt(properties.flow) * 0.5);
+                // const riverBonusToForest = 1.0 + Math.min(2.0, Math.sqrt(properties.flow) * 0.5);
+                // ★★★ [変更] ボーナスを乗算ではなく加算で使うように変更 (0.0 ～ 0.4程度) ★★★
+                const riverBonusToForest = Math.min(0.4, Math.sqrt(properties.flow) * 0.1);
 
                 // 2. 各ポテンシャルを計算。森林ポテンシャルに川のボーナスを乗算する
                 potentials.river = Math.sqrt(properties.flow) * 2;
@@ -376,7 +463,10 @@ function calculateFinalProperties(allHexes) {
                 const forestTempFactor = Math.max(0, 1 - Math.abs(temperature - 15) / 20);
                 const forestPrecipFactor = Math.max(0, properties.precipitation - 0.05);
                 // 元の森林ポテンシャル計算式に、川からのボーナスを掛け合わせる
-                potentials.forest = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 5 * riverBonusToForest;
+                // potentials.forest = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 5 * riverBonusToForest;
+                // ★★★ [変更] 基本倍率を引き下げ、川のボーナスは最後に加算する ★★★
+                let baseForestPotential = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 2.0;
+                potentials.forest = baseForestPotential + riverBonusToForest;
 
                 const grasslandTempFactor = Math.max(0, 1 - Math.abs(temperature - 18) / 25);
                 const grasslandPrecipFactor = 1 - Math.abs(properties.precipitation - 0.3) * 2;
@@ -397,7 +487,6 @@ function calculateFinalProperties(allHexes) {
                 }
 
                 // 5. 従来の vegetation プロパティ（最も優勢な地目）を決定
-                // ★★★ [ここからロジックを全面的に改訂] ★★★
                 // 気候帯ラベルへの直接依存を廃止し、気温・降水量・標高の組み合わせで植生を決定する
                 let dominantVeg = '荒れ地'; // デフォルトは荒れ地
                 const precip_mm = properties.precipitation_mm;
@@ -412,7 +501,8 @@ function calculateFinalProperties(allHexes) {
                 else {
                     // 【a. 寒冷地 (Cold Zone)】
                     if (temperature < config.TEMP_ZONES.COLD) {
-                        if (precip_mm < 200) {
+                        // config.js の値を参照
+                        if (precip_mm < config.VEGETATION_PARAMS.CONIFEROUS_FOREST_MIN_PRECIP_MM) {
                             dominantVeg = '荒れ地'; // 寒冷な荒れ地（ツンドラに近い）
                         } else {
                             dominantVeg = '針葉樹林'; // タイガ
@@ -420,12 +510,12 @@ function calculateFinalProperties(allHexes) {
                     } 
                     // 【b. 温帯 (Temperate Zone)】
                     else if (temperature < config.TEMP_ZONES.TEMPERATE) {
-                        if (precip_mm < 150) {
+                        if (precip_mm < 200) {
                             dominantVeg = '砂漠';
                         } else if (precip_mm < 350) {
                             // 砂漠の周辺に荒れ地を生成
                             dominantVeg = '荒れ地'; 
-                        } else if (precip_mm < 600) {
+                        } else if (precip_mm < config.VEGETATION_PARAMS.TEMPERATE_FOREST_MIN_PRECIP_MM) { // config.js の値を参照
                             dominantVeg = '草原'; // ステップ気候に相当
                         } else {
                             dominantVeg = '森林'; // 温暖湿潤気候の森林
@@ -433,11 +523,11 @@ function calculateFinalProperties(allHexes) {
                     }
                     // 【c. 熱帯・亜熱帯 (Hot Zone)】
                     else {
-                        if (precip_mm < 200) {
+                        if (precip_mm < 250) {
                             dominantVeg = '砂漠';
                         } else if (precip_mm < 500) {
                             dominantVeg = '荒れ地';
-                        } else if (precip_mm < 1500) {
+                        } else if (precip_mm < config.VEGETATION_PARAMS.TROPICAL_FOREST_MIN_PRECIP_MM) { // config.js の値を参照
                             // 熱帯の草原（サバンナ）
                             dominantVeg = '草原'; 
                         } else {
@@ -511,17 +601,20 @@ function calculateFinalProperties(allHexes) {
 
 
 /**
- * 大陸生成のメイン関数 (main.js から呼び出される)
+ * ★★★ [改訂] ステップ1: 物理的な大陸と水系を生成する ★★★
  * @param {Function} addLogMessage - ログ出力用の関数
  * @returns {Array<object>} - 生成された全ヘックスのデータ
  */
-export async function generateContinent(addLogMessage) {
-    
+export async function generatePhysicalMap(addLogMessage) {
+    // 処理の開始時にノイズ関数を再初期化する
+    initializeNoiseFunctions();
+
     // パス1：全ヘックスの基本プロパティを生成
     await addLogMessage("地面の起伏を生成しています...");
     const allHexes = [];
     for (let row = 0; row < config.ROWS; row++) {
         for (let col = 0; col < config.COLS; col++) {
+            // この時点では植生などは仮計算
             allHexes.push({ 
                 col, 
                 row, 
@@ -542,21 +635,44 @@ export async function generateContinent(addLogMessage) {
          .map(n => getIndex(n.col, n.row));
     });
 
-    // パス1.5：降水量の地理的補正を適用
-    await addLogMessage("風と地形による降水量を計算しています...");
-    applyGeographicPrecipitationEffects(allHexes);
-
     // パス2：水系を生成
     await addLogMessage("水系と河川を配置しています...");
     generateWaterSystems(allHexes);
+
+    // パス2.2：陸地の最低標高を補正
+    await addLogMessage("沿岸の地形を最終調整しています...");
+    adjustLandElevation(allHexes);
+
+    return allHexes;
+}
+
+/**
+ * ★★★ [新規] ステップ2: 気候と植生を生成する ★★★
+ * @param {Array<object>} allHexes - 物理マップデータ
+ * @param {Function} addLogMessage - ログ出力用の関数
+ * @returns {Array<object>} - 気候・植生情報が追加された全ヘックスデータ
+ */
+export async function generateClimateAndVegetation(allHexes, addLogMessage) {
+    // パス1.5：降水量の地理的補正を適用
+    await addLogMessage("風と地形による降水量を計算しています...");
+    applyGeographicPrecipitationEffects(allHexes);
 
     // パス2.5：稜線を生成
     await addLogMessage("山系の稜線を計算しています...");
     generateRidgeLines(allHexes);
 
-    // パス3：最終的なプロパティを計算
-    await addLogMessage("気候と植生を計算しています...");
+    // パス3：最終的なプロパティ（植生など）を計算
+    await addLogMessage("気候と植生を最終決定しています...");
     calculateFinalProperties(allHexes);
 
     return allHexes;
 }
+
+
+// ★★★ [修正] main.jsから呼び出すために、個別の関数をエクスポートする ★★★
+export {
+    applyGeographicPrecipitationEffects,
+    generateWaterSystems,
+    generateRidgeLines,
+    calculateFinalProperties
+};

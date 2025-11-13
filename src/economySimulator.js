@@ -84,7 +84,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 }
 
 /**
- * ★★★ [改訂] 主要都市の庇護下にある領土の各種データを集計する関数 ★★★
+ * 主要都市の庇護下にある領土の各種データを集計する関数
  * @param {Array<object>} allHexes - 経済シミュレーション後の全ヘックスデータ
  * @param {Function} addLogMessage - ログ出力用の関数
  * @returns {Array<object>} - 集計データが追加された全ヘックスデータ

@@ -31,7 +31,7 @@ export function getDistance(h1, h2) {
 }
 
 /**
- * ★★★ [新規] プログレスバーの表示用文字列を生成する汎用関数 ★★★
+ * プログレスバーの表示用文字列を生成する汎用関数
  * @param {object} params - パラメータオブジェクト
  * @param {number} params.current - 現在の処理数
  * @param {number} params.total - 全体の処理数

@@ -65,6 +65,7 @@ button.active:hover {
     /* flex: 0 0 var(--sidebar-width); */
     flex: 0 0 auto;
     padding: 1rem;
+    box-sizing: border-box;
     background-color: var(--sidebar-bg);
     border-right: 1px solid #999;
     height: 100dvh;
@@ -135,6 +136,55 @@ button.active:hover {
     background-color: var(--primary-color);
     border-color: var(--primary-color);
     color: #fff;
+}
+
+/* ================================================================
+   強制再生成ボタンのスタイル
+   ================================================================ */
+/* 強制再生成ボタンのスタイル */
+#force-regenerate-btn {
+    background-color: #a00; /* 暗めの赤 */
+    border-color: #c00;
+    color: #fff;
+}
+#force-regenerate-btn:hover {
+    background-color: #c00; /* ホバー時に少し明るい赤に */
+    border-color: #e00;
+}
+
+/* ================================================================
+   分割生成ボタンのスタイル
+   ================================================================ */
+.generation-controls {
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid #334;
+}
+
+.generation-controls .note {
+    font-size: 13px;
+    color: #999;
+    padding: 5px 0;
+}
+
+/* 無効化されたボタンの見た目 */
+.generation-controls button[disabled] {
+    /* 背景色を暗くし、半透明にする */
+    background-color: #223; 
+    opacity: 0.5;
+    /* クリックできないことを明示 */
+    cursor: not-allowed; 
+    /* 文字の色も少し灰色に */
+    color: #889; 
+    /* マウスオーバーしても変化させない */
+    transition: none; 
+    border: 1px solid #445;
+}
+
+/* 無効化されたボタンへのホバー効果を打ち消す */
+.generation-controls button[disabled]:hover {
+    background-color: #223;
+    opacity: 0.5;
 }
 
 /* ================================================================
@@ -234,7 +284,8 @@ button.active:hover {
   left: 0;
   width: 100vw;
   height: 100dvh;
-  background-color: rgba(10, 20, 40, 0.95);
+  /* background-color: rgba(10, 20, 40, 0.95); */
+  background-color: #113d;
   z-index: 100;
   display: flex;
   justify-content: center;
@@ -430,17 +481,9 @@ text-align: right;
     pointer-events: none; /* クリックイベントを透過させる */
 }
 
-/* 強制再生成ボタンのスタイル */
-#force-regenerate-btn {
-    background-color: #a00; /* 暗めの赤 */
-    border-color: #c00;
-    color: #fff;
-}
-#force-regenerate-btn:hover {
-    background-color: #c00; /* ホバー時に少し明るい赤に */
-    border-color: #e00;
-}
-
+/* ================================================================
+   プログレスバーのスタイル
+   ================================================================ */
 /* プログレスバーのスタイル */
 .progress-bar-container {
     width: 50%;
