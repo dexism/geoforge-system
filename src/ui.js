@@ -232,11 +232,11 @@ function drawRoads(roadPaths) {
             .attr('d', d => d.path)
             // 国籍に応じて色を変える
             .attr('stroke', d => ({ 
-                6: '#0cf', // 通商路
-                5: '#c0f', // 交易路 (紫)
-                4: '#f00', // 街道 (赤)
-                3: '#f00', // 町道 (赤)
-                2: '#f00', // 村道 (赤)
+                6: '#f0f', // 通商路
+                5: '#f00', // 交易路 (紫)
+                4: '#f80', // 街道 (赤)
+                3: '#ff0', // 町道 (赤)
+                2: '#0f0', // 村道 (赤)
                 1: '#800'  // その他 (暗赤)
             }[d.level] || '#000'))
             .attr('stroke-width', d => ({ 
@@ -571,7 +571,7 @@ function updateVisibleHexes(transform) {
                     '町': '#ff0',
                     '村': '#0f0'
                 }[d.properties.settlement]))
-                .style('fill-opacity', 0.8)
+                .style('fill-opacity', 0.9)
                 .style('pointer-events', 'none'),
             update => update,
             exit => exit.remove()
@@ -588,7 +588,7 @@ function updateVisibleHexes(transform) {
         'mining-overlay': { data: visibleHexes, fill: d => config.miningColor(d.properties.miningPotential), opacity: 0.7 },
         'fishing-overlay': { data: visibleHexes, fill: d => config.fishingColor(d.properties.fishingPotential), opacity: 0.7 },
         'population-overlay': { data: visibleHexes.filter(d => d.properties.population > 0), fill: d => config.populationColor(d.properties.population), opacity: 0.9 },
-        'territory-overlay': { data: visibleHexes, fill: d => d.properties.nationId === 0 ? '#ffff' : nationColor(d.properties.nationId), opacity: 0.5 }
+        'territory-overlay': { data: visibleHexes, fill: d => d.properties.nationId === 0 ? '#fff0' : nationColor(d.properties.nationId), opacity: 0.5 }
     };
 
     for (const [layerName, { data, fill, opacity }] of Object.entries(overlayDefinitions)) {
@@ -627,13 +627,24 @@ function updateVisibleHexes(transform) {
     const hexLabelGroups = layers.labels.group.selectAll('.hex-label-group')
         .data(visibleHexes, d => d.index)
         .join(enter => enter.append('g').attr('class', 'hex-label-group'));
-    
-    hexLabelGroups.append('text') // 座標
+
+    // 座標と標高を2行で表示するための<text>コンテナ
+    const coordinateLabel = hexLabelGroups.append('text')
         .attr('class', 'hex-label')
-        .attr('x', d => d.cx).attr('y', d => d.cy + hexHeight * 0.4)
+        .attr('x', d => d.cx)
+        .attr('y', d => d.cy + hexHeight * 0.28) // 少し上に調整
         .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
+        .attr('dominant-baseline', 'middle');
+
+    // 1行目: 座標
+    coordinateLabel.append('tspan')
         .text(d => `${String(d.x).padStart(3, '0')} ${String(d.y).padStart(3, '0')}`);
+
+    // 2行目: 標高
+    coordinateLabel.append('tspan')
+        .attr('x', d => d.cx) // X座標を親と同じ位置にリセット
+        .attr('dy', '1.0em')  // 1.2文字分だけ下にずらす (改行)
+        .text(d => `H ${Math.round(d.properties.elevation)}`);
     
     if (layers.settlement.visible) {
         hexLabelGroups.filter(d => d.properties.settlement)
@@ -645,12 +656,12 @@ function updateVisibleHexes(transform) {
     }
 
     hexLabelGroups.append('text').attr('class', 'property-label') // 魔力ランク
-        .attr('x', d => d.cx - config.r * 0.7).attr('y', d => d.cy)
+        .attr('x', d => d.cx - config.r * 0.75).attr('y', d => d.cy)
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
         .text(d => d.properties.manaRank);
     hexLabelGroups.append('text').attr('class', 'property-label') // 資源
-        .attr('x', d => d.cx + config.r * 0.7).attr('y', d => d.cy)
+        .attr('x', d => d.cx + config.r * 0.75).attr('y', d => d.cy)
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
         .text(d => d.properties.resourceRank);
@@ -672,11 +683,6 @@ function updateVisibleHexes(transform) {
                 newHexes.on('click', (event, d) => {
                     const highlightLayer = layers['highlight-overlay'].group;
                     highlightLayer.selectAll('*').remove();
-                    highlightLayer.append('polygon').attr('points', d.points.map(p => p.join(',')).join(' '))
-                        .attr('fill', 'none')
-                        .attr('stroke', 'cyan')
-                        .attr('stroke-width', 5)
-                        .style('pointer-events', 'none');
                     const p = d.properties;
                     if (['首都', '都市', '領都', '街', '町', '村'].includes(p.settlement)) {
                         if (p.parentHexId !== null) {
@@ -723,6 +729,12 @@ function updateVisibleHexes(transform) {
                             });
                         }
                     }
+                    highlightLayer.append('polygon').attr('points', d.points.map(p => p.join(',')).join(' '))
+                        .attr('fill', 'none')
+                        .attr('stroke', 'cyan')
+                        .attr('stroke-width', 5)
+                        .style('pointer-events', 'none');
+
                     infoContent.textContent = getInfoText(d);
                     infoWindow.classList.remove('hidden');
                     event.stopPropagation();
@@ -917,6 +929,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const riverLayer = createLayer('river');                                    // 河川
     const shadingLayer = createLayer('shading');                                // レリーフ (陰影)
     const contourLayer = createLayer('contour', true);                          // 等高線
+    const ridgeWaterSystemLayer = createLayer('ridge-water-system', false);     // 稜線・水系図
+
     const territoryOverlayLayer = createLayer('territory-overlay', false);      // 領地
     const hexBorderLayer = createLayer('hex-border', true);                     // ヘックスの境界線
     const roadLayer = createLayer('road');                                      // 道路網
@@ -924,7 +938,6 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const highlightOverlayLayer = createLayer('highlight-overlay');             // クリック時のハイライト
     const settlementLayer = createLayer('settlement');                          // 集落シンボル
     // --- 情報オーバーレイ ---
-    const ridgeWaterSystemLayer = createLayer('ridge-water-system', false);     // 稜線・水系図
     const populationOverlayLayer = createLayer('population-overlay', false);    // 人口分布
     const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false); // 気候帯
     const tempOverlayLayer = createLayer('temp-overlay', false);                // 気温

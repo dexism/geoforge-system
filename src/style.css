@@ -48,19 +48,24 @@ button.active:hover {
 .container {
     width: 100vw;
     height: 100dvh;
+    perspective: 2000px; 
 }
 .main-content {
-    width: 120%;
-    height: 130%;
-
-    perspective: 2000px; 
-    perspective-origin: center center;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transform: rotateX(30deg);
+    /* rotate: x 30deg; */
+    /* transform: scale(1.00); */
 }
 
 #hexmap {
-    rotate: x 30deg;
+    width: 120%;
+    height: 130%;
     translate: -10% -18%;
-    /* transform: scale(1.00); */
+}
+.hex-group {
+    transition: transform 0.1s linear;
 }
 
 /* ================================================================
@@ -372,21 +377,22 @@ button.active:hover {
     fill: #222;
     paint-order: stroke;
     stroke: #fff;
-    stroke-width: 0.3px;
+    stroke-width: 0.5px;
     stroke-linecap: butt;
     stroke-linejoin: miter;
 }
 
 /* 居住区ラベル (都, 街) */
 .settlement-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 900;
     stroke-width: 0.6px;
 }
 
-/* 座標ラベル (E00-N00) */
+/* 座標ラベル (000 000) */
+/* 標高ラベル (H 000) */
 .hex-label {
-    fill: #444;
+    fill: #333;
     font-weight: 900;
 }
 
