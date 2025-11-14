@@ -177,7 +177,7 @@ function generateBaseProperties(col, row) {
     else if (properties.manaValue > 0.4) properties.manaRank = 'B';
     else if (properties.manaValue > 0.1) properties.manaRank = 'C';
     else properties.manaRank = 'D';
-    const resourceSymbols = ['木', '石', '鉄', '金', '晶'];
+    const resourceSymbols = ['石', '鉄', '金', '晶'];
     properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
     
     return properties;
@@ -566,6 +566,18 @@ function calculateFinalProperties(allHexes) {
                 .clamp(true)(properties.precipitation_mm);
             agriPotential += precipFactor * 0.2;
         }
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // 【ここから修正】標高によるペナルティを追加
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // 500mまではペナルティなし、そこから2500mにかけて適性が徐々に減少し、最終的に90%減となる
+        const elevationFactor = d3.scaleLinear()
+            .domain([500, 2500])      // 標高500mからペナルティ開始、2500mで最大化
+            .range([1.0, 0.1])      // 標高500mで効率100%、2500mで効率10%
+            .clamp(true)(properties.elevation);
+        
+        // これまで計算した適性に、標高係数を乗算する
+        agriPotential *= elevationFactor;
+        
         properties.agriPotential = Math.min(1.0, agriPotential);
 
         properties.forestPotential = properties.landUse.forest || 0;

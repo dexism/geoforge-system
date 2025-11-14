@@ -399,27 +399,38 @@ function getInfoText(d) {
                 `林業適性： ${(p.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
                 `鉱業適性： ${(p.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
                 `漁業適性： ${(p.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%\n` + 
-                `狩猟適性： ${(p.huntingPotential * 100).toFixed(0).padStart(3, ' ')}%`;
+                `狩猟適性： ${(p.huntingPotential * 100).toFixed(0).padStart(3, ' ')}%\n` + 
+                `牧畜適性： ${(p.pastoralPotential * 100).toFixed(0).padStart(3, ' ')}%\n` + 
+                `家畜適性： ${(p.livestockPotential * 100).toFixed(0).padStart(3, ' ')}%`;
     
     // --- 食料需給情報の追加 (経済シミュレーション後にのみ表示) ---
     if (p.production) {
         const surplusKeys = Object.keys(p.surplus || {});
         const shortageKeys = Object.keys(p.shortage || {});
-        if (Object.keys(p.production).length > 0 || surplusKeys.length > 0 || shortageKeys.length > 0) {
-            text += `\n--- 食料需給 (t/年) ---`;
-            const productionText = Object.entries(p.production).map(([crop, amount]) => `${crop} ${Math.round(amount).toLocaleString()}`).join('t\n　　　') + 't';
-            if(Object.keys(p.production).length > 0) text += `\n生産：${productionText}`;
-            if (surplusKeys.length > 0) text += `\n余剰：${surplusKeys.map(key => `${key} ${p.surplus[key]}`).join('t\n　　　')}t`;
-            if (shortageKeys.length > 0) text += `\n不足：${shortageKeys.map(key => `${key} ${p.shortage[key]}`).join('t\n　　　')}t`;
+        if (Object.keys(p.production).length > 0) { // 生産物が何かあればセクションを表示
+            text += `\n--- 産業生産 (t/年) ---`; // セクション名を変更
+            // 生産物をフィルタリングして表示 (0より大きいもののみ)
+            const productionText = Object.entries(p.production)
+                .filter(([, amount]) => amount > 0.1)
+                .map(([item, amount]) => `${item} ${Math.round(amount).toLocaleString()}`)
+                .join('t\n　　　') + 't';
+            text += `\n生産：${productionText}`;
+
+            // 全体の食料収支を表示
+            if (p.surplus['食料']) {
+                text += `\n食料収支：+${p.surplus['食料']}t の余剰`;
+            } else if (p.shortage['食料']) {
+                text += `\n食料収支：${p.shortage['食料']}t の不足`;
+            }
         }
     }
     
     // --- 主要都市の場合、支配領域の集計情報を追加 (経済シミュレーション後にのみ表示) ---
-    if (p.territoryData && ['首都', '都市', '領都'].includes(p.settlement)) {
+    if (p.territoryData && ['首都', '都市', '領都', '街', '町'].includes(p.settlement)) {
         const data = p.territoryData;
-        text += `\n--- 庇護下領域 集計 ---`;
+        text += `\n--- 領地集計 ---`;
         const settlementCountText = Object.entries(data.settlementCounts).filter(([, count]) => count > 0).map(([type, count]) => { const shortName = { '都市': '都', '領都': '領', '街': '街', '町': '町', '村': '村' }[type]; return `${shortName}${count}`; }).join(', ');
-        if(settlementCountText) text += `\n直轄地　： ${settlementCountText}`;
+        if(settlementCountText) text += `\n直轄集落： ${settlementCountText}`;
         text += `\n合計人口： ${data.population.toLocaleString()}人`;
         text += `\n合計農地： ${Math.round(data.cultivatedArea).toLocaleString()}ha`;
         const totalProductionText = Object.entries(data.production).map(([crop, amount]) => `${crop} ${Math.round(amount).toLocaleString()}t`).join('\n　　　　　');
@@ -621,6 +632,8 @@ function updateVisibleHexes(transform) {
         'mining-overlay': { data: visibleHexes, fill: d => config.miningColor(d.properties.miningPotential), opacity: 0.7 },
         'fishing-overlay': { data: visibleHexes, fill: d => config.fishingColor(d.properties.fishingPotential), opacity: 0.7 },
         'hunting-overlay': { data: visibleHexes, fill: d => config.huntingColor(d.properties.huntingPotential), opacity: 0.7 },
+        'pastoral-overlay': { data: visibleHexes, fill: d => config.pastoralColor(d.properties.pastoralPotential), opacity: 0.7 }, 
+        'livestock-overlay': { data: visibleHexes, fill: d => config.livestockColor(d.properties.livestockPotential), opacity: 0.7 }, 
         'monster-overlay': { data: visibleHexes.filter(d => d.properties.monsterRank), fill: d => config.MONSTER_COLORS[d.properties.monsterRank], opacity: 0.5 },
         'population-overlay': { data: visibleHexes.filter(d => d.properties.population > 0), fill: d => config.populationColor(d.properties.population), opacity: 0.9 },
         'territory-overlay': { data: visibleHexes, fill: d => d.properties.nationId === 0 ? '#fff0' : nationColor(d.properties.nationId), opacity: 0.5 }
@@ -1032,6 +1045,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const miningOverlayLayer = createLayer('mining-overlay', false);            // 鉱業適性
     const fishingOverlayLayer = createLayer('fishing-overlay', false);          // 漁業適性
     const huntingOverlayLayer = createLayer('hunting-overlay', false);          // 狩猟適性
+    const pastoralOverlayLayer = createLayer('pastoral-overlay', false);        // 牧畜適性
+    const livestockOverlayLayer = createLayer('livestock-overlay', false);      // 家畜適性
     // --- UI操作用 ---
     const labelLayer = createLayer('labels');                                   // ラベル (集落名など)
     const interactionLayer = createLayer('interaction');                        // クリックイベントを受け取る透明レイヤー
@@ -1360,7 +1375,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     });
 
     // 6d. 資源カテゴリのボタン
-    const resourceButtons = ['#toggleManaLayer', '#toggleAgriLayer', '#toggleForestLayer', '#toggleMiningLayer', '#toggleFishingLayer', '#toggleHuntingLayer'];
+    const resourceButtons = ['#toggleManaLayer', '#toggleAgriLayer', '#toggleForestLayer', '#toggleMiningLayer', '#toggleFishingLayer', '#toggleHuntingLayer', '#togglePastoralLayer', '#toggleLivestockLayer'];
     resourceButtons.forEach(selector => {
         d3.select(selector).on('click', function() {
             const layerName = selector.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();

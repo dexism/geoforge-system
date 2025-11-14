@@ -123,7 +123,7 @@ export const POPULATION_PARAMS = {
     MAX_POPULATION_PER_HEX: 50000,
 
     // 人口の集中度合いを調整する指数。値が大きいほど、ごく一部の好立地に人口が集中する。
-    POPULATION_CURVE: 11.0,
+    POPULATION_CURVE: 9.0,
 };
 export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面積(ha)
     '小麦': { yield: 0.60, type: '畑作', cultivation_ha_per_person: 1.5 },
@@ -131,14 +131,63 @@ export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面
     '雑穀': { yield: 0.65, type: '畑作', cultivation_ha_per_person: 1.5 },
     '稲':   { yield: 1.35, type: '水田', cultivation_ha_per_person: 0.8 },
 };
-export const SETTLEMENT_PARAMS = { // 労働力率, 1人当たり消費量(t), インフラ係数, 基本頭数制限率, 頭数制限ボーナス
-    '首都': { labor_rate: 0.20, consumption_t_per_person: 0.32, infra_coeff: 1.20, head_cap_base: 0.30, head_cap_bonus: 0.15 },
-    '都市': { labor_rate: 0.30, consumption_t_per_person: 0.28, infra_coeff: 1.10, head_cap_base: 0.25, head_cap_bonus: 0.10 },
-    '領都': { labor_rate: 0.45, consumption_t_per_person: 0.24, infra_coeff: 1.05, head_cap_base: 0.30, head_cap_bonus: 0.05 },
-    '街':   { labor_rate: 0.55, consumption_t_per_person: 0.22, infra_coeff: 1.00, head_cap_base: 0.35, head_cap_bonus: 0.0 },
-    '町':   { labor_rate: 0.70, consumption_t_per_person: 0.21, infra_coeff: 0.95, head_cap_base: 0.40, head_cap_bonus: 0.0 },
-    '村':   { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.90, head_cap_base: 0.60, head_cap_bonus: 0.0 },
-    '散居': { labor_rate: 0.80, consumption_t_per_person: 0.20, infra_coeff: 0.85, head_cap_base: 0.50, head_cap_bonus: 0.0 }
+export const SETTLEMENT_PARAMS = { // 労働力率, 消費量, インフラ係数, 頭数制限, ボーナス, ★狩人率
+    '首都': { 
+        labor_rate: 0.20, 
+        consumption_t_per_person: 0.32, 
+        infra_coeff: 1.20, 
+        head_cap_base: 0.30, 
+        head_cap_bonus: 0.15, 
+        hunter_rate: 0.001 
+    },
+    '都市': { 
+        labor_rate: 0.30, 
+        consumption_t_per_person: 0.28, 
+        infra_coeff: 1.10, 
+        head_cap_base: 0.25, 
+        head_cap_bonus: 0.10, 
+        hunter_rate: 0.005 
+    },
+    '領都': { 
+        labor_rate: 0.45, 
+        consumption_t_per_person: 0.24, 
+        infra_coeff: 1.05, 
+        head_cap_base: 0.30, 
+        head_cap_bonus: 0.05, 
+        hunter_rate: 0.01 
+    },
+    '街':   { 
+        labor_rate: 0.55, 
+        consumption_t_per_person: 0.22, 
+        infra_coeff: 1.00, 
+        head_cap_base: 0.35, 
+        head_cap_bonus: 0.0,  
+        hunter_rate: 0.03 
+    },
+    '町':   { 
+        labor_rate: 0.70, 
+        consumption_t_per_person: 0.21, 
+        infra_coeff: 0.95, 
+        head_cap_base: 0.40, 
+        head_cap_bonus: 0.0,  
+        hunter_rate: 0.06 
+    },
+    '村':   { 
+        labor_rate: 0.80, 
+        consumption_t_per_person: 0.20, 
+        infra_coeff: 0.90, 
+        head_cap_base: 0.60, 
+        head_cap_bonus: 0.0,  
+        hunter_rate: 0.10 
+    },
+    '散居': { 
+        labor_rate: 0.80, 
+        consumption_t_per_person: 0.20, 
+        infra_coeff: 0.85, 
+        head_cap_base: 0.50, 
+        head_cap_bonus: 0.0,  
+        hunter_rate: 0.15 
+    }
 };
 
 // ================================================================
@@ -193,6 +242,13 @@ export const WAGON_PARAMS = {
         '平地': 1.0 
     },
     SNOW_SPEED_MULTIPLIER: 0.7
+};
+export const HUNTING_PARAMS = {
+    // 最高の環境(huntingPotential=1.0)で、狩人1人が年間に得られる肉の基本量 (トン)
+    BASE_HUNTING_YIELD_T_PER_HUNTER: 0.8,
+    
+    // 最高の環境(huntingPotential=1.0)で、1ヘクタールあたり年間に持続的に供給される肉の最大量 (トン)
+    MAX_HUNTING_YIELD_T_PER_HA: 0.001,
 };
 
 // ================================================================
@@ -276,4 +332,39 @@ export const MONSTER_COLORS = {
     'B': '#ff8800', // Bランク (オレンジ)
     'C': '#ffff00', // Cランク (黄)
     'D': '#aaaaaa'  // Dランク (灰)
+};
+
+export const pastoralColor = d3.scaleSequential(d3.interpolateBrBG).domain([0, 1]);
+export const livestockColor = d3.scaleSequential(d3.interpolatePuRd).domain([0, 1]);
+
+// config.js の末尾あたりに追加
+
+// ================================================================
+// ■ 7. 生産シミュレーションパラメータ
+// ================================================================
+export const PRODUCTION_PARAMS = {
+    // --- 1人あたりの年間基本生産量 (適性1.0の場合) ---
+    YIELD_PER_WORKER: {
+        FISHING: 2.0,   // 漁師1人あたりの漁獲量 (トン)
+        FORESTRY: 25,   // 林業従事者1人あたりの木材産出量 (立方メートル)
+        MINING: 1.5,    // 鉱夫1人あたりの鉱石産出量 (トン)
+        PASTORAL_MEAT: 0.2, // 牧畜従事者1人あたりの食肉生産量 (トン)
+        PASTORAL_DAIRY: 1.0,  // 牧畜従事者1人あたりの乳製品生産量 (トン)
+        LIVESTOCK_MEAT: 0.4,  // 家畜飼育者1人あたりの食肉生産量 (トン)
+    },
+
+    // --- 1haあたりの年間最大生産量 (土地の限界) ---
+    MAX_YIELD_PER_HA: {
+        FISHING: 0.005, // (沿岸・河川面積に対する値)
+        FORESTRY: 0.5,
+        MINING: 0.002,
+    },
+
+    // --- 加工品の変換率 ---
+    PROCESSING_RATES: {
+        // 穀物1トンから醸造できる酒の量 (キロリットル)
+        GRAIN_TO_ALCOHOL: 0.5,
+        // 果物1トンから醸造できる酒の量 (キロリットル)
+        FRUIT_TO_ALCOHOL: 0.7,
+    }
 };

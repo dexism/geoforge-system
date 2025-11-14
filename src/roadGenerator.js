@@ -482,7 +482,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
     }
 
     // --- フェーズ2: 候補の中から、移動日数が少なく衝突のないルートを確定 ---
-    await addLogMessage(`${type}道：最適な道路を敷設中...`);
+    // await addLogMessage(`${type}道：最適な道路を敷設中...`);
     potentialRoutes.sort((a, b) => a.travelDays - b.travelDays); // 仕様3-5: 移動日数が少ない順にソート
     
     for (const route of potentialRoutes) {

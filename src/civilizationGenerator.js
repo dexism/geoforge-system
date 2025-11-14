@@ -489,3 +489,52 @@ export function generateHuntingPotential(allHexes) {
     });
     return allHexes;
 }
+
+/**
+ * 牧畜・家畜適正を計算する関数
+ * @param {Array<object>} allHexes - 狩猟適正計算後の全ヘックスデータ
+ * @returns {Array<object>} - pastoralPotentialとlivestockPotentialプロパティが追加されたヘックスデータ
+ */
+export function generateLivestockPotential(allHexes) {
+    allHexes.forEach(h => {
+        const p = h.properties;
+        let pastoralPotential = 0;
+        let livestockPotential = 0;
+
+        if (!p.isWater) {
+            // --- A. 牧畜適正 (Pastoral Potential) の計算 ---
+            let pastoralScore = 0;
+            // プラス要素
+            if (p.vegetation === '草原') pastoralScore += 0.8;
+            if (p.terrainType === '平地' || p.terrainType === '丘陵') pastoralScore += 0.2;
+            if (p.flow > 0 || h.neighbors.some(nIndex => allHexes[nIndex].properties.isWater && allHexes[nIndex].properties.elevation > 0)) {
+                pastoralScore += 0.1;
+            }
+            // マイナス要素
+            pastoralScore -= p.huntingPotential * 1.2; // 狩猟適正が高いと大幅マイナス
+            if (['森林', '密林', '針葉樹林', '湿地', '砂漠', '高山'].includes(p.vegetation)) pastoralScore -= 1.0;
+            pastoralScore -= p.agriPotential * 0.3; // 農地とも競合
+            if (p.population > 100) pastoralScore -= 0.2;
+
+            pastoralPotential = Math.max(0.0, Math.min(1.0, pastoralScore));
+
+            // --- B. 家畜適正 (Livestock Potential) の計算 ---
+            let livestockScore = 0;
+            // プラス要素
+            livestockScore += p.agriPotential * 0.9; // 農業適性が高いほど餌が豊富
+            if (p.flow > 0 || h.neighbors.some(nIndex => allHexes[nIndex].properties.isWater && allHexes[nIndex].properties.elevation > 0)) {
+                livestockScore += 0.1;
+            }
+            // マイナス要素
+            livestockScore -= p.huntingPotential * 0.3; // 捕食者の影響は牧畜より小さい
+            if (p.vegetation === '砂漠' || p.vegetation === '高山') livestockScore -= 1.0;
+            if (p.temperature < -5) livestockScore -= 0.5; // 寒すぎると飼育が困難
+
+            livestockPotential = Math.max(0.0, Math.min(1.0, livestockScore));
+        }
+
+        p.pastoralPotential = pastoralPotential;
+        p.livestockPotential = livestockPotential;
+    });
+    return allHexes;
+}

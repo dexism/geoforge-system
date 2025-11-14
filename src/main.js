@@ -5,7 +5,7 @@
 import * as d3 from 'd3';
 import * as config from './config.js';
 import { generatePhysicalMap, generateClimateAndVegetation } from './continentGenerator.js';
-import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential } from './civilizationGenerator.js'; 
+import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js'; 
 import { simulateEconomy, calculateTerritoryAggregates } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays } from './roadGenerator.js';
@@ -144,9 +144,12 @@ async function runStep3_Settlements() {
     await addLogMessage("生態系（魔物）の分布を計算しています...");
     worldData.allHexes = generateMonsterDistribution(worldData.allHexes);
 
-    // ★★★ ここから追加 ★★★
     await addLogMessage("狩猟のポテンシャルを評価しています...");
     worldData.allHexes = generateHuntingPotential(worldData.allHexes);
+
+    // ★★★ ここから追加 ★★★
+    await addLogMessage("畜産のポテンシャルを評価しています...");
+    worldData.allHexes = generateLivestockPotential(worldData.allHexes);
     // ★★★ 追加ここまで ★★★
 
     await addLogMessage("集落と人口分布を再描画しています...");

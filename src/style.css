@@ -418,6 +418,8 @@ button.active:hover {
     z-index: 20; /* UIボタンより手前に表示 */
     box-shadow: 0 4px 12px #0008;
     font-size: 14px;
+    box-sizing: border-box;
+    overflow: hidden;
     
     /* 表示・非表示のアニメーション */
     transition: opacity 0.2s ease-out, transform 0.2s ease-out;
@@ -464,6 +466,7 @@ button.active:hover {
     /* \n などの改行を正しく表示するための設定 */
     white-space: pre-wrap;
     line-height: 1.6;
+    box-sizing: border-box;
 }
 
 /* ================================================================
