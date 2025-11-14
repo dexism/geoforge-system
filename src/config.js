@@ -256,10 +256,11 @@ export const precipColor = d3.scaleLog()
         "#808"  // 紫 (～2500mm+)
     ])
     .clamp(true); // domainの範囲外の値は、範囲の端の色を適用する
-export const agriColor = d3.scaleSequential(d3.interpolateGreens).domain([0, 1]);
-export const forestColor = d3.scaleSequential(d3.interpolateYlGn).domain([0, 1]);
-export const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 1]);
-export const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]);
+export const agriColor = d3.scaleSequential(d3.interpolateGreens).domain([0, 1]);     // 農業適性
+export const forestColor = d3.scaleSequential(d3.interpolateYlGn).domain([0, 1]);     // 林業適性
+export const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 1]);  // 鉱業適性
+export const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]); // 漁業適性
+export const huntingColor = d3.scaleSequential(d3.interpolateYlOrBr).domain([0, 1]);  // 狩猟適性
 export const populationColor = d3.scaleLog().domain([1, 150000]).range(["black", "red"]).clamp(true);
 
 // 白地図の配色

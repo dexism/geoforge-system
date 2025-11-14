@@ -395,10 +395,11 @@ function getInfoText(d) {
                 `資源　　： ${p.resourceRank}\n` +
                 `魔物分布： ${(p.monsterRank ? p.monsterRank + 'ランク' : '観測されず')}\n` +
                 `--- 資源ポテンシャル ---\n` +
-                `農業適正： ${(p.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-                `林業適正： ${(p.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-                `鉱業適正： ${(p.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-                `漁業適正： ${(p.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%`;
+                `農業適性： ${(p.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+                `林業適性： ${(p.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+                `鉱業適性： ${(p.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+                `漁業適性： ${(p.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%\n` + 
+                `狩猟適性： ${(p.huntingPotential * 100).toFixed(0).padStart(3, ' ')}%`;
     
     // --- 食料需給情報の追加 (経済シミュレーション後にのみ表示) ---
     if (p.production) {
@@ -619,6 +620,7 @@ function updateVisibleHexes(transform) {
         'forest-overlay': { data: visibleHexes, fill: d => config.forestColor(d.properties.forestPotential), opacity: 0.7 },
         'mining-overlay': { data: visibleHexes, fill: d => config.miningColor(d.properties.miningPotential), opacity: 0.7 },
         'fishing-overlay': { data: visibleHexes, fill: d => config.fishingColor(d.properties.fishingPotential), opacity: 0.7 },
+        'hunting-overlay': { data: visibleHexes, fill: d => config.huntingColor(d.properties.huntingPotential), opacity: 0.7 },
         'monster-overlay': { data: visibleHexes.filter(d => d.properties.monsterRank), fill: d => config.MONSTER_COLORS[d.properties.monsterRank], opacity: 0.5 },
         'population-overlay': { data: visibleHexes.filter(d => d.properties.population > 0), fill: d => config.populationColor(d.properties.population), opacity: 0.9 },
         'territory-overlay': { data: visibleHexes, fill: d => d.properties.nationId === 0 ? '#fff0' : nationColor(d.properties.nationId), opacity: 0.5 }
@@ -1029,6 +1031,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const forestOverlayLayer = createLayer('forest-overlay', false);            // 林業適性
     const miningOverlayLayer = createLayer('mining-overlay', false);            // 鉱業適性
     const fishingOverlayLayer = createLayer('fishing-overlay', false);          // 漁業適性
+    const huntingOverlayLayer = createLayer('hunting-overlay', false);          // 狩猟適性
     // --- UI操作用 ---
     const labelLayer = createLayer('labels');                                   // ラベル (集落名など)
     const interactionLayer = createLayer('interaction');                        // クリックイベントを受け取る透明レイヤー
@@ -1357,7 +1360,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     });
 
     // 6d. 資源カテゴリのボタン
-    const resourceButtons = ['#toggleManaLayer', '#toggleAgriLayer', '#toggleForestLayer', '#toggleMiningLayer', '#toggleFishingLayer'];
+    const resourceButtons = ['#toggleManaLayer', '#toggleAgriLayer', '#toggleForestLayer', '#toggleMiningLayer', '#toggleFishingLayer', '#toggleHuntingLayer'];
     resourceButtons.forEach(selector => {
         d3.select(selector).on('click', function() {
             const layerName = selector.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();

@@ -570,7 +570,7 @@ function calculateFinalProperties(allHexes) {
 
         properties.forestPotential = properties.landUse.forest || 0;
 
-        // 鉱業適正の計算ロジック
+        // 鉱業適性の計算ロジック
         let miningPotential = 0;
         if (!isWater) {
             // 1. ノイズ関数から-1.0～1.0の範囲で「鉱脈の素」となる値を取得
@@ -603,6 +603,67 @@ function calculateFinalProperties(allHexes) {
             fishingPotential += properties.landUse.river * 0.5;
         }
         properties.fishingPotential = Math.min(1.0, fishingPotential);
+
+        // ★★★ ここから狩猟適性の計算を追加 ★★★
+        let huntingPotential = 0;
+        if (!isWater) {
+            // [基準1] 基本スコア
+            let baseScore = 0;
+            switch (properties.vegetation) {
+                case '森林':
+                case '密林':
+                case '針葉樹林':
+                    baseScore = 0.6;
+                    break;
+                case '草原':
+                    baseScore = 0.3;
+                    break;
+                case '湿地':
+                    baseScore = 0.2;
+                    break;
+                case '荒れ地':
+                    baseScore = 0.1;
+                    break;
+            }
+            // 地形タイプによる補正
+            if (properties.terrainType === '丘陵' || properties.terrainType === '山地') {
+                baseScore = Math.max(baseScore, 0.5);
+            }
+            if (properties.terrainType === '山岳' || properties.vegetation === '砂漠') {
+                baseScore = 0; // 過酷な環境では基本スコアを0に
+            }
+
+            huntingPotential = baseScore;
+
+            // [基準2] ボーナス要素
+            if (properties.monsterRank) {
+                switch (properties.monsterRank) {
+                    case 'S':
+                    case 'A':
+                    case 'B':
+                        huntingPotential += 0.4;
+                        break;
+                    case 'C':
+                    case 'D':
+                        huntingPotential += 0.2;
+                        break;
+                }
+            }
+            if (properties.flow > 0 || h.neighbors.some(nIndex => allHexes[nIndex].properties.vegetation === '湖沼')) {
+                huntingPotential += 0.1;
+            }
+
+            // [基準3] ペナルティ要素
+            if (properties.population > 0) {
+                // 人口が5000人でポテンシャルが-1.0されるような、急なカーブのペナルティ
+                const populationPenalty = Math.pow(Math.min(5000, properties.population) / 5000, 2);
+                huntingPotential -= populationPenalty;
+            }
+            huntingPotential -= properties.agriPotential * 0.2; // 農地ペナルティ
+        }
+        // 最終的な値を 0.0 ～ 1.0 の範囲に収める
+        properties.huntingPotential = Math.max(0.0, Math.min(1.0, huntingPotential));
+        // ★★★ 狩猟適性の計算ここまで ★★★
     });
 }
 

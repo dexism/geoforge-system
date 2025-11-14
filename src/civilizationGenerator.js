@@ -434,3 +434,58 @@ export function generateMonsterDistribution(allHexes) {
 
     return allHexes;
 }
+
+/**
+ * 狩猟適性を計算する関数
+ * @param {Array<object>} allHexes - 魔物分布計算後の全ヘックスデータ
+ * @returns {Array<object>} - huntingPotentialプロパティが追加されたヘックスデータ
+ */
+export function generateHuntingPotential(allHexes) {
+    allHexes.forEach(h => {
+        const p = h.properties;
+        let huntingPotential = 0;
+
+        if (!p.isWater) {
+            // [基準1] 基本スコア
+            let baseScore = 0;
+            switch (p.vegetation) {
+                case '森林': case '密林': case '針葉樹林':
+                    baseScore = 0.6; break;
+                case '草原':
+                    baseScore = 0.3; break;
+                case '湿地':
+                    baseScore = 0.2; break;
+                case '荒れ地':
+                    baseScore = 0.1; break;
+            }
+            if (p.terrainType === '丘陵' || p.terrainType === '山地') {
+                baseScore = Math.max(baseScore, 0.5);
+            }
+            if (p.terrainType === '山岳' || p.vegetation === '砂漠' || p.vegetation === '高山') {
+                baseScore = 0;
+            }
+            huntingPotential = baseScore;
+
+            // [基準2] ボーナス要素
+            if (p.monsterRank) {
+                switch (p.monsterRank) {
+                    case 'S': case 'A': case 'B': huntingPotential += 0.4; break;
+                    case 'C': case 'D': huntingPotential += 0.2; break;
+                }
+            }
+            if (p.flow > 0 || h.neighbors.some(nIndex => allHexes[nIndex].properties.isWater && allHexes[nIndex].properties.elevation > 0)) {
+                huntingPotential += 0.1;
+            }
+
+            // [基準3] ペナルティ要素
+            if (p.population > 0) {
+                const populationPenalty = Math.pow(Math.min(5000, p.population) / 5000, 2);
+                huntingPotential -= populationPenalty;
+            }
+            huntingPotential -= p.agriPotential * 0.2;
+        }
+
+        p.huntingPotential = Math.max(0.0, Math.min(1.0, huntingPotential));
+    });
+    return allHexes;
+}

@@ -535,6 +535,37 @@ button.active:hover {
     fill: none; /* 塗りつぶしを無効化 */
 }
 
+/* ================================
+   スクロールバーのカスタムスタイル
+================================ */
+
+/* モダンブラウザ向け (Firefoxなど) */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #555 transparent;
+}
+
+/* Webkit系ブラウザ向け (Chrome, Safari, Edgeなど) */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background-color: transparent;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #555;
+    border-radius: 4px;
+    border: 2px solid #333;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary-color);
+}
+
 /* ================================================================
    ミニマップ スタイル
    ================================================================ */
