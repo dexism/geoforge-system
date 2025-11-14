@@ -9,7 +9,7 @@
     <script src="//accaii.com/geoforge/script.js" async></script><noscript><img src="//accaii.com/geoforge/script?guid=on"></noscript>
     <div id="loading-overlay">
         <div class="loading-content">
-        <h1 id="loading-title">GeoForge SYSTEM v1.18.44<br>世界を創造しています！</h1>
+        <h1 id="loading-title">GeoForge SYSTEM v1.18.45<br>世界を創造しています！</h1>
         <div id="progress-bar-container" class="progress-bar-container" style="display: none;">
             <div id="progress-bar" class="progress-bar"></div>
         </div>
@@ -24,6 +24,24 @@
 
     <div class="container">
         <aside class="sidebar">
+            <details id="overall-info-container" open>
+                <summary>全体情報</summary>
+                <div id="info-global-stats">
+                    <div class="info-line">
+                        <span>総人口</span>
+                        <span id="info-total-population">---</span>
+                    </div>
+                    <div class="info-line">
+                        <span>国家数</span>
+                        <span id="info-nation-count">---</span>
+                    </div>
+                    <div id="info-settlement-summary" class="info-line">
+                        <!-- ここに集落概要が入る -->
+                    </div>
+                </div>
+                <!-- 国家ごとの詳細情報がここに入る -->
+                <div id="info-nations-details"></div>
+            </details>
             <h3>表示切替</h3>
 
             <!-- 1. 基本地図 (択一) -->
@@ -104,8 +122,6 @@
             <svg id="hexmap"></svg>
         </main>
     </div>
-    
-    <div id="population-display"></div>
 
     <div id="info-window" class="hidden">
         <div class="info-window-header">

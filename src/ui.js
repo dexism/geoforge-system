@@ -62,6 +62,102 @@ function getSharedEdgeMidpoint(hex1, hex2) {
 }
 
 /**
+ * サイドバーの全体情報パネルを更新する
+ * @param {Array<object>} allHexes - 全てのヘックスデータ
+ */
+function updateOverallInfo(allHexes) {
+    if (!allHexes || allHexes.length === 0) return;
+
+    // --- DOM要素の取得 ---
+    const popEl = document.getElementById('info-total-population');
+    const nationCountEl = document.getElementById('info-nation-count');
+    const settlementSummaryEl = document.getElementById('info-settlement-summary');
+    const nationsDetailsEl = document.getElementById('info-nations-details');
+    nationsDetailsEl.innerHTML = ''; // 事前にクリア
+
+    // --- 集計用データ構造の初期化 ---
+    const globalStats = {
+        population: 0,
+        nations: new Set(),
+        settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
+    };
+    const nationStats = new Map();
+
+    // --- STEP 1: 全ヘックスを走査し、データ集計 ---
+    allHexes.forEach(h => {
+        const p = h.properties;
+        globalStats.population += p.population || 0;
+        if (p.settlement && globalStats.settlements[p.settlement] !== undefined) {
+            globalStats.settlements[p.settlement]++;
+        }
+
+        if (p.nationId > 0) {
+            globalStats.nations.add(p.nationId);
+            // 国家別の集計
+            if (!nationStats.has(p.nationId)) {
+                nationStats.set(p.nationId, {
+                    name: config.NATION_NAMES[p.nationId - 1] || `国家${p.nationId}`,
+                    population: 0,
+                    capital: null,
+                    settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
+                });
+            }
+            const currentNation = nationStats.get(p.nationId);
+            currentNation.population += p.population || 0;
+            if (p.settlement && currentNation.settlements[p.settlement] !== undefined) {
+                currentNation.settlements[p.settlement]++;
+                if (p.settlement === '首都') {
+                    currentNation.capital = h; // 首都のヘックス情報を保存
+                }
+            }
+        }
+    });
+
+    // --- STEP 2: グローバル情報の描画 ---
+    popEl.textContent = `${globalStats.population.toLocaleString()}人`;
+    nationCountEl.textContent = `${globalStats.nations.size}カ国`;
+
+    const summaryText = [
+        `首${globalStats.settlements['首都']}`,
+        `領${globalStats.settlements['領都']}`,
+        `街${globalStats.settlements['街']}`,
+        `町${globalStats.settlements['町']}`,
+        `村${globalStats.settlements['村']}`
+    ].join(' ');
+    settlementSummaryEl.textContent = summaryText;
+
+    // --- STEP 3: 国家別情報の描画 ---
+    const sortedNations = Array.from(nationStats.values()).sort((a, b) => a.name.localeCompare(b.name));
+    
+    let nationsHtml = '';
+    sortedNations.forEach(nation => {
+        const capitalCoords = nation.capital ? `(E${String(nation.capital.col).padStart(3, '0')}-N${String((config.ROWS-1)-nation.capital.row).padStart(3, '0')})` : '';
+        const nationSettlementSummary = [
+            `首${nation.settlements['首都']}`,
+            `領${nation.settlements['領都']}`,
+            `街${nation.settlements['街']}`,
+            `町${nation.settlements['町']}`,
+            `村${nation.settlements['村']}`
+        ].join(' ');
+
+        nationsHtml += `
+            <div class="nation-info-block">
+                <h5>${nation.name} <span>${capitalCoords}</span></h5>
+                <div class="info-line">
+                    <span>人口</span>
+                    <span>${nation.population.toLocaleString()}人</span>
+                </div>
+                <div class="info-line" style="justify-content: flex-start; font-size: 13px;">
+                    <span>${nationSettlementSummary}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    nationsDetailsEl.innerHTML = nationsHtml;
+}
+
+/**
  * 汎用的なレイヤー切り替え関数。
  * @param {string} layerName - 操作対象となるレイヤー名
  * @param {HTMLElement} buttonElement - クリックされたボタン要素
@@ -348,12 +444,12 @@ function getInfoText(d) {
                 }
                 detailsText = `${distanceStr}${travelDaysStr}`;
             }
-            superiorText = `${superiorHex.properties.settlement} (E${superiorHex.col}-N${(config.ROWS-1)-superiorHex.row})${detailsText}`;
+            superiorText = `${superiorHex.properties.settlement} (E${String(superiorHex.col).padStart(3, '0')}-N${String((config.ROWS-1)-superiorHex.row).padStart(3, '0')})${detailsText}`;
         }
     } else if (p.territoryId != null && getIndex(d.x, (config.ROWS - 1) - d.y) !== p.territoryId) {
         const territoryHub = allHexesData[p.territoryId]; 
          if (territoryHub) {
-            superiorText = `[中枢] ${territoryHub.properties.settlement} (E${territoryHub.col}-N${(config.ROWS-1)-territoryHub.row})`;
+            superiorText = `[中枢] ${territoryHub.properties.settlement} (E${String(territoryHub.col).padStart(3, '0')}-N${String((config.ROWS-1)-territoryHub.row).padStart(3, '0')})`;
         }
     }
 
@@ -379,14 +475,14 @@ function getInfoText(d) {
     const habitability = p.habitability ?? 0;
     
     // --- 全ての情報を結合して最終的なテキストを生成 ---
-    let text = `座標　　：E${String(d.x).padStart(2, '0')}-N${String(d.y).padStart(2, '0')}\n` +
+    let text =  `座標　　：E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}\n` +
                 `所属国家：${nationName}\n` +
                 `直轄上位：${superiorText}\n`+
                 `土地利用： ${landUseText}\n` +
                 `人口　　： ${population.toLocaleString()}人\n` +
                 `農地面積： ${Math.round(cultivatedArea).toLocaleString()} ha\n` +
                 `居住適性： ${habitability.toFixed(1)}\n` +
-                `--- 土地詳細 ---\n` +
+                `\n--- 土地詳細 ---\n` +
                 `気候帯　： ${p.climateZone}\n` +
                 `標高　　： ${Math.round(p.elevation)}m\n` +
                 `気温　　： ${p.temperature.toFixed(1)}℃\n` +
@@ -394,7 +490,7 @@ function getInfoText(d) {
                 `魔力　　： ${p.manaRank}\n` +
                 `資源　　： ${p.resourceRank}\n` +
                 `魔物分布： ${(p.monsterRank ? p.monsterRank + 'ランク' : '観測されず')}\n` +
-                `--- 資源ポテンシャル ---\n` +
+                `\n--- 資源ポテンシャル ---\n` +
                 `農業適性： ${(p.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
                 `林業適性： ${(p.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
                 `鉱業適性： ${(p.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
@@ -408,7 +504,7 @@ function getInfoText(d) {
         const surplusKeys = Object.keys(p.surplus || {});
         const shortageKeys = Object.keys(p.shortage || {});
         if (Object.keys(p.production).length > 0) { // 生産物が何かあればセクションを表示
-            text += `\n--- 産業生産 (t/年) ---`; // セクション名を変更
+            text += `\n\n--- 産業生産 (t/年) ---`; // セクション名を変更
             // 生産物をフィルタリングして表示 (0より大きいもののみ)
             const productionText = Object.entries(p.production)
                 .filter(([, amount]) => amount > 0.1)
@@ -428,7 +524,7 @@ function getInfoText(d) {
     // --- 主要都市の場合、支配領域の集計情報を追加 (経済シミュレーション後にのみ表示) ---
     if (p.territoryData && ['首都', '都市', '領都', '街', '町'].includes(p.settlement)) {
         const data = p.territoryData;
-        text += `\n--- 領地集計 ---`;
+        text += `\n\n--- 領地集計 ---`;
         const settlementCountText = Object.entries(data.settlementCounts).filter(([, count]) => count > 0).map(([type, count]) => { const shortName = { '都市': '都', '領都': '領', '街': '街', '町': '町', '村': '村' }[type]; return `${shortName}${count}`; }).join(', ');
         if(settlementCountText) text += `\n直轄集落： ${settlementCountText}`;
         text += `\n合計人口： ${data.population.toLocaleString()}人`;
@@ -1398,9 +1494,11 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         
         // 適用されたtransformを基に、初回の表示要素を描画する
         updateVisibleHexes(initialTransform);
+        updateOverallInfo(allHexes);
     } else {
         // フォールバックとして、現在のtransformで初回描画
         updateVisibleHexes(d3.zoomTransform(svg.node()));
+        updateOverallInfo(allHexes);
     }
 }
 
@@ -1459,6 +1557,7 @@ export async function redrawClimate(allHexes) {
 export async function redrawSettlements(allHexes) {
     updateHexesData(allHexes);
     updateChildrenMap(allHexes);
+    updateOverallInfo(allHexes);
     // ★★★ [修正] updateVisibleHexesを呼び出して、表示を完全に再構築する ★★★
     if (svg) updateVisibleHexes(currentTransform);
     console.log("集落が更新され、再描画されました。");
@@ -1472,6 +1571,7 @@ export async function redrawSettlements(allHexes) {
 export async function redrawRoadsAndNations(allHexes, roadPaths) {
     updateHexesData(allHexes);
     updateChildrenMap(allHexes);
+    updateOverallInfo(allHexes);
 
     // 静的レイヤーを新しいデータで再描画
     drawRoads(roadPaths);

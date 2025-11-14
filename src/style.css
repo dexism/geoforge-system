@@ -93,7 +93,8 @@ button.active:hover {
 }
 .sidebar h3 { 
     margin-top: 0; 
-    margin-left: 50px;
+    /* margin-left: 50px; */
+    text-align: center;
     font-size: 18px;
 }
 .sidebar ul { 
@@ -153,9 +154,68 @@ button.active:hover {
 }
 
 /* ================================================================
+   全体情報パネル スタイル
+   ================================================================ */
+#overall-info-container {
+    padding: 5px 2px;
+    background-color: #0003;
+    border-radius: 5px;
+    margin: 32px 0 20px 0;
+}
+#overall-info-container summary {
+    padding-bottom: 5px;
+    border-bottom: 2px solid #667;
+}
+#info-global-stats {
+    margin-top: 10px;
+}
+.info-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    margin-bottom: 6px;
+    padding: 0 5px;
+}
+.info-line span:last-child {
+    font-weight: bold;
+    color: #fff;
+}
+#info-settlement-summary {
+    font-weight: bold;
+    font-size: 13px;
+    color: #fff;
+    justify-content: flex-start; /* 左寄せにする */
+    gap: 8px; /* 各項目の間にスペース */
+}
+
+/* 国家ごとの詳細スタイル */
+#info-nations-details {
+    margin-top: 15px;
+}
+.nation-info-block {
+    padding-top: 10px;
+    margin-top: 10px;
+    border-top: 1px solid #445;
+}
+.nation-info-block h5 {
+    display: flex;              /* ★★★ Flexboxを有効化 ★★★ */
+    justify-content: space-between; /* ★★★ 両端揃え ★★★ */
+    align-items: baseline;      /* ★★★ 文字のベースラインを揃える ★★★ */
+    margin: 0 5px 8px 5px;      /* marginを調整 */
+    font-size: 15px;
+    color: var(--primary-color);
+    font-weight: bold;          /* h5なので太字を明示 */
+}
+/* 座標を表示するspan要素のスタイル */
+.nation-info-block h5 span {
+    font-size: 12px;
+    color: #ccc;
+    font-weight: normal;
+}
+
+/* ================================================================
    強制再生成ボタンのスタイル
    ================================================================ */
-/* 強制再生成ボタンのスタイル */
 #force-regenerate-btn {
     background-color: #a00; /* 暗めの赤 */
     border-color: #c00;
@@ -574,7 +634,7 @@ button.active:hover {
    ================================================================ */
 #minimap-container {
     position: absolute;
-    top: 60px;
+    top: 10px;
     right: 10px;
     width: 200px;
     height: 200px;

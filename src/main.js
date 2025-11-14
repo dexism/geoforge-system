@@ -16,7 +16,6 @@ const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyS8buNL8u2DK9L
 
 const loadingOverlay = document.getElementById('loading-overlay');
 const logContainer = document.getElementById('loading-log');
-const populationDisplay = document.getElementById('population-display');
 const progressBarContainer = document.getElementById('progress-bar-container');
 
 // 分割生成のための状態管理変数
@@ -86,7 +85,6 @@ function resetWorld() {
     uiInitialized = false;
 
     // UI要素を初期状態に戻す
-    populationDisplay.style.display = 'none';
     updateButtonStates(0); // ボタンの状態もリセット
 }
 
@@ -155,8 +153,6 @@ async function runStep3_Settlements() {
     await addLogMessage("集落と人口分布を再描画しています...");
     await redrawSettlements(worldData.allHexes);
     
-    const totalPopulation = worldData.allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
-    populationDisplay.textContent = `総人口: ${totalPopulation.toLocaleString()}人`;
     populationDisplay.style.display = 'block';
 
     updateButtonStates(3);
@@ -433,8 +429,6 @@ async function loadExistingWorld() {
             await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage);
             uiInitialized = true;
 
-            const totalPopulation = worldData.allHexes.reduce((sum, h) => sum + (h.properties.population || 0), 0);
-            populationDisplay.textContent = `総人口: ${totalPopulation.toLocaleString()}人`;
             populationDisplay.style.display = 'block';
             
             updateButtonStates(4); // 読み込み完了時は全ステップ完了済み
