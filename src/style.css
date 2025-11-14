@@ -6,34 +6,34 @@
 }
 
 html, body {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  background-color: #235;
-  font-family: sans-serif;
-  font-size: 1.0rem;
-  color: var(--text-color);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #235;
+    font-family: sans-serif;
+    font-size: 1.0rem;
+    color: var(--text-color);
 }
 
 svg {
-  display: block; /* For main-content to fill height */
-  width: 100%;
-  height: 100%;
+    display: block; /* For main-content to fill height */
+    width: 100%;
+    height: 100%;
 }
 
 button {
-  font-size: 20px;
-  font-weight: bold;
-  cursor: pointer;
-  width: 100%;
-  padding: 8px 12px;
-  background-color: #445;
-  color: var(--text-color);
-  border: 1px solid #667;
-  border-radius: 4px;
-  text-align: left;
-  margin-bottom: 5px;
-  transition: background-color 0.2s, border-color 0.2s;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    width: 100%;
+    padding: 8px 12px;
+    background-color: #445;
+    color: var(--text-color);
+    border: 1px solid #667;
+    border-radius: 4px;
+    text-align: left;
+    margin-bottom: 5px;
+    transition: background-color 0.2s, border-color 0.2s;
 }
 button.active {
     background-color: var(--primary-color);
@@ -50,8 +50,17 @@ button.active:hover {
     height: 100dvh;
 }
 .main-content {
-    width: 100%;
-    height: 100dvh;
+    width: 120%;
+    height: 130%;
+
+    perspective: 2000px; 
+    perspective-origin: center center;
+}
+
+#hexmap {
+    rotate: x 30deg;
+    translate: -10% -18%;
+    /* transform: scale(1.00); */
 }
 
 /* ================================================================
