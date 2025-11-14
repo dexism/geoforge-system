@@ -17,6 +17,7 @@ const layers = {};
 let legendContainer = null;
 
 let hexes = []; // 描画用データ（座標などを含む）
+let roadPathsData = [];
 let svg;        // SVG要素
 let currentTransform = d3.zoomIdentity; // 現在のズーム状態
 let allHexesData = [];
@@ -685,16 +686,6 @@ function updateVisibleHexes(transform) {
                     highlightLayer.selectAll('*').remove();
                     const p = d.properties;
                     if (['首都', '都市', '領都', '街', '町', '村'].includes(p.settlement)) {
-                        if (p.parentHexId !== null) {
-                            const superiorHex = hexes[p.parentHexId];
-                            if (superiorHex) {
-                                highlightLayer.append('polygon')
-                                    .attr('points', superiorHex.points.map(pt => pt.join(',')).join(' '))
-                                    .attr('fill', '#0ff')
-                                    .style('fill-opacity', 1.0)
-                                    .style('pointer-events', 'none');
-                            }
-                        }
                         const findAllDescendants = (startIndex) => {
                             const descendants = [];
                             const queue = [{ index: startIndex, depth: 0 }];
@@ -718,7 +709,7 @@ function updateVisibleHexes(transform) {
                         if (descendants.length > 0) {
                             const maxDepth = Math.max(0, ...descendants.map(item => item.depth));
                             const colorScale = d3.scaleLinear().domain([2, Math.max(2, maxDepth)])
-                                .range(['#660000', 'black']).interpolate(d3.interpolateRgb);
+                                .range(['#600', 'black']).interpolate(d3.interpolateRgb);
                             descendants.forEach(item => {
                                 let color = (item.depth === 1) ? 'red' : colorScale(item.depth);
                                 highlightLayer.append('polygon')
@@ -727,6 +718,63 @@ function updateVisibleHexes(transform) {
                                     .style('fill-opacity', 0.8)
                                     .style('pointer-events', 'none');
                             });
+                        }
+
+                        if (p.parentHexId !== null) {
+                            const superiorHex = hexes[p.parentHexId];
+                            if (superiorHex) {
+                                highlightLayer.append('polygon')
+                                    .attr('points', superiorHex.points.map(pt => pt.join(',')).join(' '))
+                                    .attr('fill', '#0ff')
+                                    .style('fill-opacity', 1.0)
+                                    .style('pointer-events', 'none');
+                                
+                                // ★★★ ここから経路描画ロジックを追加 ★★★
+                                const childIndex = d.index;
+                                const parentIndex = superiorHex.index;
+
+                                // 該当する道路を検索
+                                const targetRoad = roadPathsData.find(road => {
+                                    if (road.path.length < 2) return false;
+                                    const startNodeIndex = getIndex(road.path[0].x, road.path[0].y);
+                                    const endNodeIndex = getIndex(road.path[road.path.length - 1].x, road.path[road.path.length - 1].y);
+                                    return (startNodeIndex === childIndex && endNodeIndex === parentIndex) || (startNodeIndex === parentIndex && endNodeIndex === childIndex);
+                                });
+
+                                if (targetRoad) {
+                                    const pathSegments = [];
+                                    const pathHexes = targetRoad.path.map(pos => hexes[getIndex(pos.x, pos.y)]);
+
+                                    for (let i = 0; i < pathHexes.length; i++) {
+                                        const currentHex = pathHexes[i];
+                                        if (!currentHex) continue;
+                                        const prevHex = i > 0 ? pathHexes[i - 1] : null;
+                                        const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
+                                        
+                                        const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
+                                        const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
+                                        const controlPoint = [currentHex.cx, currentHex.cy];
+
+                                        if (!startPoint || !endPoint || (startPoint[0] === endPoint[0] && startPoint[1] === endPoint[1])) continue;
+
+                                        const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                                        pathSegments.push({ path: pathString });
+                                    }
+
+                                    // 経路をハイライトレイヤーに描画
+                                    highlightLayer.selectAll('.connection-path')
+                                        .data(pathSegments)
+                                        .enter()
+                                        .append('path')
+                                        .attr('class', 'connection-path')
+                                        .attr('d', segment => segment.path)
+                                        .attr('stroke', 'cyan')
+                                        .attr('stroke-width', 4) // 常に4px
+                                        .attr('fill', 'none')
+                                        .style('pointer-events', 'none');
+                                }
+                                // ★★★ 経路描画ロジックここまで ★★★
+                            }
                         }
                     }
                     highlightLayer.append('polygon').attr('points', d.points.map(p => p.join(',')).join(' '))
@@ -781,6 +829,7 @@ function updateMinimapViewport(transform) {
 
 export async function setupUI(allHexes, roadPaths, addLogMessage) {
     allHexesData = allHexes;
+    roadPathsData = roadPaths;
     // --- 1. 初期設定とDOM要素の取得 ---
     // グローバル変数を使用するように変更
     svg = d3.select('#hexmap');
