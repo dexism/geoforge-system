@@ -338,3 +338,99 @@ export async function determineTerritories(allHexes, addLogMessage) {
     await addLogMessage("領土の割り当てが完了しました。");
     return allHexes;
 }
+
+/**
+ * 魔物の分布を計算して各ヘックスにランクを割り当てる関数 (割合ベースの新ロジック)
+ * @param {Array<object>} allHexes - 全てのヘックスデータ
+ * @returns {Array<object>} - monsterRankプロパティが追加されたヘックスデータ
+ */
+export function generateMonsterDistribution(allHexes) {
+    // --- STEP 1: 事前準備 ---
+    
+    // 全てのヘックスのmonsterRankを一旦リセット
+    allHexes.forEach(h => h.properties.monsterRank = null);
+
+    // Cランク判定のため、人口が100人以上いる「文明圏」のヘックスインデックスをセットに格納
+    const civilizedHexIndexes = new Set();
+    allHexes.forEach((h, index) => {
+        if (h.properties.population >= 100) {
+            civilizedHexIndexes.add(index);
+            h.neighbors.forEach(nIndex => civilizedHexIndexes.add(nIndex));
+        }
+    });
+
+    // 魔物の割り当て対象となる陸地ヘックスのリストを作成
+    let candidateHexes = allHexes.filter(h => !h.properties.isWater);
+
+    // --- STEP 2: Sランク（伝説級）の決定 ---
+    // Sランクの候補地（深い森 or 高山）をフィルタリング
+    const sRankCandidates = candidateHexes.filter(h => {
+        const p = h.properties;
+        return p.vegetation === '密林' || p.elevation > 3000;
+    });
+
+    // 候補地を魔力の高さでソートし、上位4ヶ所をSランクに決定
+    sRankCandidates.sort((a, b) => b.properties.manaValue - a.properties.manaValue);
+    const sRankHexes = sRankCandidates.slice(0, 4);
+    sRankHexes.forEach(h => h.properties.monsterRank = 'S');
+
+    // Sランクになったヘックスを以降の候補から除外
+    const sRankIndexes = new Set(sRankHexes.map(h => getIndex(h.col, h.row)));
+    candidateHexes = candidateHexes.filter(h => !sRankIndexes.has(getIndex(h.col, h.row)));
+
+    // --- STEP 3: A, B, C, Dランクの割り当て ---
+    // 各ランクの割り当て処理を関数化
+    const assignRank = (rank, criteria, sortLogic, percentage) => {
+        if (candidateHexes.length === 0) return;
+
+        // 目標数を計算
+        const targetCount = Math.floor(allHexes.filter(h => !h.properties.isWater).length * percentage);
+        
+        // 条件に合う候補をフィルタリング
+        let rankCandidates = candidateHexes.filter(criteria);
+        
+        // ソートロジックを適用
+        if (sortLogic) {
+            rankCandidates.sort(sortLogic);
+        }
+        
+        // 目標数だけヘックスを取得
+        const assignedHexes = rankCandidates.slice(0, targetCount);
+        assignedHexes.forEach(h => h.properties.monsterRank = rank);
+        
+        // 割り当て済みのヘックスを候補から除外
+        const assignedIndexes = new Set(assignedHexes.map(h => getIndex(h.col, h.row)));
+        candidateHexes = candidateHexes.filter(h => !assignedIndexes.has(getIndex(h.col, h.row)));
+    };
+
+    // Aランク (10%): 魔力の濃い深い森 or 高山
+    assignRank('A',
+        h => (h.properties.vegetation === '密林' || h.properties.elevation > 3000) && h.properties.manaValue > 0.7,
+        (a, b) => b.properties.manaValue - a.properties.manaValue,
+        0.10
+    );
+
+    // Bランク (10%): 深い森 or 高い山
+    assignRank('B',
+        h => ['密林', '針葉樹林'].includes(h.properties.vegetation) || h.properties.elevation > 2000,
+        (a, b) => b.properties.elevation - a.properties.elevation,
+        0.10
+    );
+
+    // Cランク (30%): 人里離れた場所
+    assignRank('C',
+        h => !civilizedHexIndexes.has(getIndex(h.col, h.row)),
+        () => Math.random() - 0.5, // ランダムにシャッフル
+        0.30
+    );
+
+    // Dランク (50%): 残りのうち、人口が少ない場所
+    // 割合指定ではなく、残りの候補全てを対象とする
+    candidateHexes.forEach(h => {
+        if (h.properties.population < 500) {
+            h.properties.monsterRank = 'D';
+        }
+    });
+
+    return allHexes;
+}

@@ -5,7 +5,7 @@
 import * as d3 from 'd3';
 import * as config from './config.js';
 import { generatePhysicalMap, generateClimateAndVegetation } from './continentGenerator.js';
-import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes } from './civilizationGenerator.js'; 
+import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution } from './civilizationGenerator.js'; 
 import { simulateEconomy, calculateTerritoryAggregates } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays } from './roadGenerator.js';
@@ -140,6 +140,9 @@ async function runStep3_Settlements() {
     const civResult = await generateCivilization(worldData.allHexes, addLogMessage);
     worldData.allHexes = civResult.allHexes;
     worldData.roadPaths = civResult.roadPaths; // この時点ではまだ空に近い
+
+    await addLogMessage("生態系（魔物）の分布を計算しています...");
+    worldData.allHexes = generateMonsterDistribution(worldData.allHexes);
 
     await addLogMessage("集落と人口分布を再描画しています...");
     await redrawSettlements(worldData.allHexes);

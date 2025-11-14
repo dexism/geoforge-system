@@ -155,6 +155,33 @@ function createPopulationLegend() {
 }
 
 /**
+ * 魔物分布の凡例を生成する
+ */
+function createMonsterLegend() {
+    let itemsHtml = '';
+    // 各ランクの説明を追加
+    const rankDescriptions = {
+        'S': '伝説級',
+        'A': '高脅威',
+        'B': '危険',
+        'C': '要注意',
+        'D': '低脅威'
+    };
+
+    // config.jsから色情報を取得して凡例項目を生成
+    for (const [rank, color] of Object.entries(config.MONSTER_COLORS)) {
+        const description = rankDescriptions[rank] || '';
+        itemsHtml += `
+            <div class="legend-item">
+                <div class="legend-color-box" style="background-color: ${color};"></div>
+                <span>${rank}ランク: ${description}</span>
+            </div>
+        `;
+    }
+    return `<h4>魔物分布凡例</h4>${itemsHtml}`;
+}
+
+/**
  * 表示する凡例を更新する
  * @param {string|null} layerName 表示したい凡例のレイヤー名、または非表示にする場合はnull
  */
@@ -174,6 +201,9 @@ function updateLegend(layerName) {
             break;
         case 'population-overlay':
             legendHtml = createPopulationLegend();
+            break;
+        case 'monster-overlay': 
+            legendHtml = createMonsterLegend();
             break;
         default:
             legendHtml = ''; // 対応する凡例がなければ空にする
@@ -363,6 +393,7 @@ function getInfoText(d) {
                 `降水量　： ${p.precipitation_mm.toFixed(0)}mm/年\n` +
                 `魔力　　： ${p.manaRank}\n` +
                 `資源　　： ${p.resourceRank}\n` +
+                `魔物分布： ${(p.monsterRank ? p.monsterRank + 'ランク' : '観測されず')}\n` +
                 `--- 資源ポテンシャル ---\n` +
                 `農業適正： ${(p.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
                 `林業適正： ${(p.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
@@ -588,6 +619,7 @@ function updateVisibleHexes(transform) {
         'forest-overlay': { data: visibleHexes, fill: d => config.forestColor(d.properties.forestPotential), opacity: 0.7 },
         'mining-overlay': { data: visibleHexes, fill: d => config.miningColor(d.properties.miningPotential), opacity: 0.7 },
         'fishing-overlay': { data: visibleHexes, fill: d => config.fishingColor(d.properties.fishingPotential), opacity: 0.7 },
+        'monster-overlay': { data: visibleHexes.filter(d => d.properties.monsterRank), fill: d => config.MONSTER_COLORS[d.properties.monsterRank], opacity: 0.5 },
         'population-overlay': { data: visibleHexes.filter(d => d.properties.population > 0), fill: d => config.populationColor(d.properties.population), opacity: 0.9 },
         'territory-overlay': { data: visibleHexes, fill: d => d.properties.nationId === 0 ? '#fff0' : nationColor(d.properties.nationId), opacity: 0.5 }
     };
@@ -987,6 +1019,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const highlightOverlayLayer = createLayer('highlight-overlay');             // クリック時のハイライト
     const settlementLayer = createLayer('settlement');                          // 集落シンボル
     // --- 情報オーバーレイ ---
+    const monsterOverlayLayer = createLayer('monster-overlay', false);          // 魔物分布
     const populationOverlayLayer = createLayer('population-overlay', false);    // 人口分布
     const climateZoneOverlayLayer = createLayer('climate-zone-overlay', false); // 気候帯
     const tempOverlayLayer = createLayer('temp-overlay', false);                // 気温
@@ -1285,7 +1318,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         '#toggleTempLayer': 'temp-overlay',
         '#togglePrecipLayer': 'precip-overlay',
         '#toggleClimateZoneLayer': 'climate-zone-overlay',
-        '#togglePopulationLayer': 'population-overlay'
+        '#togglePopulationLayer': 'population-overlay',
+        '#toggleMonsterLayer': 'monster-overlay'
     };
 
     const geoInfoButtonSelectors = Object.keys(geoInfoButtons);

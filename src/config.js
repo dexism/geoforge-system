@@ -267,3 +267,12 @@ export const WHITE_MAP_COLORS = { WATER: '#aaa' };
 export const whiteMapElevationColor = d3.scaleLinear()
     .domain([0, 1000, 2000, 4000, 7000])
     .range(['#fff', '#fff', '#fee', '#edd', '#cbb']).clamp(true);
+
+// 魔物ランクの配色
+export const MONSTER_COLORS = {
+    'S': '#ff00ff', // Sランク (紫)
+    'A': '#ff0000', // Aランク (赤)
+    'B': '#ff8800', // Bランク (オレンジ)
+    'C': '#ffff00', // Cランク (黄)
+    'D': '#aaaaaa'  // Dランク (灰)
+};
