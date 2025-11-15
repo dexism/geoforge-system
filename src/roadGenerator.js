@@ -353,7 +353,7 @@ function calculateTravelDays(path, roadLevel, allHexes) {
 }
 
 /**
- * ⑪～⑬ 下位の道路網を生成する (孤立集落の所属決定ロジック追加版)
+ * ⑪～⑬ 下位の道路網を生成する (孤立集落の所属決定ロジック追加版 - 完全・修正済版)
  * @param {Array<object>} lowerSettlements - 下位の集落リスト
  * @param {Array<object>} upperSettlements - 上位の集落リスト
  * @param {Array<object>} allHexes - 全ヘックスのデータ
@@ -364,12 +364,17 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
     const roadLevelMap = { '街': 4, '町': 3, '村': 2 };
     const roadLevel = roadLevelMap[type];
     const roadPaths = [];
-    if (lowerSettlements.length === 0) return roadPaths; // 下位集落がなければ終了
+    if (lowerSettlements.length === 0) return roadPaths;
 
     const prefixMap = { '街': '街道:', '町': '町道:', '村': '村道:' };
     const prefix = prefixMap[type] || `${type}道:`;
     const progressId = `feeder-road-scan-${type}`;
     await addLogMessage(`${type}道：主要な接続を探索中...`, progressId);
+
+    // --- カウンター変数を正しく宣言 ---
+    let processedCount = 0;
+    const totalCount = lowerSettlements.length;
+    let lastReportedPercent = -1;
 
     const costFunc = createCostFunction(allHexes, null);
     const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
@@ -382,11 +387,9 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         let bestRoute = null;
         let minTravelDays = Infinity;
         
-        // ★★★ 修正点1: 上位集落が存在する場合のみ探索を実行 ★★★
         if (upperSettlements && upperSettlements.length > 0) {
             const sortedUppers = [...upperSettlements].sort((a, b) => getDistance(lower, a) - getDistance(lower, b));
             const targetCandidates = sortedUppers.slice(0, 7);
-
             for (const upper of targetCandidates) {
                 const result = findAStarPath({ 
                     start: { x: lower.col, y: lower.row }, 
@@ -404,7 +407,6 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         }
 
         if (bestRoute) {
-            // (最短経路が見つかった場合の処理は変更なし)
             const fromHex = bestRoute.from;
             const toHex = bestRoute.to;
             const newNationId = toHex.properties.nationId;
@@ -423,6 +425,17 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
         } else {
             unprocessedSettlements.push(lower);
         }
+
+        // --- プログレスバー更新処理 ---
+        processedCount++;
+        if (addLogMessage) {
+            const percent = Math.floor((processedCount / totalCount) * 100);
+            if (percent > lastReportedPercent) {
+                const message = formatProgressBar({ current: processedCount, total: totalCount, prefix: prefix });
+                await addLogMessage(message, progressId);
+                lastReportedPercent = percent;
+            }
+        }
     }
 
     // --- フェーズ3: 孤立集落の所属決定 ---
@@ -434,10 +447,12 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
             let nearestCivilization = null;
             let minDistance = Infinity;
 
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            // 【復活】孤立集落の所属先を探すためのループ
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
             for (let i = 0; i < allHexes.length; i++) {
                 const targetHex = allHexes[i];
                 const p = targetHex.properties;
-                // territoryIdがnullでないことを保証
                 if ((p.settlement || p.roadLevel > 0) && p.territoryId !== null) {
                     const dist = getDistance(lower, targetHex);
                     if (dist < activityRangeHexes && dist < minDistance) {
@@ -446,7 +461,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                     }
                 }
             }
-
+            
             if (!nearestCivilization) continue;
 
             let hub = allHexes[nearestCivilization.properties.territoryId];
@@ -464,7 +479,6 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
             const finalNationId = finalHub.properties.nationId;
             const finalHubIndex = getIndex(finalHub.col, finalHub.row);
 
-            // ★★★ 修正点2: 探索のgoalが存在することを保証 ★★★
             if (nearestCivilization) {
                 const result = findAStarPath({
                     start: { x: lower.col, y: lower.row },
@@ -475,7 +489,6 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                 if (result) {
                     lower.properties.nationId = finalNationId;
                     lower.properties.parentHexId = finalHubIndex;
-
                     const newPath = result.path;
                     newPath.forEach(pos => {
                         const hex = allHexes[getIndex(pos.x, pos.y)];
@@ -491,6 +504,218 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
     }
 
     return roadPaths;
+}
+
+/**
+ * 海上航路用のA*コスト関数を生成する
+ * @param {Array<object>} allHexes - 全ヘックスのデータ
+ * @param {object} ship - 使用する船のスペック (SHIP_TYPESのオブジェクト)
+ * @returns {Function} A*アルゴリズムで使うコスト関数
+ */
+function createSeaCostFunction(allHexes, ship) {
+    // 事前に海岸からの距離を計算しておく
+    const distanceToCoast = new Map();
+    const queue = allHexes.filter(h => h.properties.isWater && h.neighbors.some(n => !allHexes[n].properties.isWater));
+    queue.forEach(h => distanceToCoast.set(getIndex(h.col, h.row), 1));
+    let head = 0;
+    while(head < queue.length) {
+        const current = queue[head++];
+        const dist = distanceToCoast.get(getIndex(current.col, current.row));
+        current.neighbors.forEach(nIdx => {
+            if (allHexes[nIdx].properties.isWater && !distanceToCoast.has(nIdx)) {
+                distanceToCoast.set(nIdx, dist + 1);
+                queue.push(allHexes[nIdx]);
+            }
+        });
+    }
+    
+    return (nodeA, nodeB) => {
+        const hexB = allHexes[getIndex(nodeB.x, nodeB.y)];
+        const pB = hexB.properties;
+
+        // 陸地は通行不可
+        if (!pB.isWater) return Infinity;
+
+        // 船が航行するには浅すぎる海域は通行不可
+        if (Math.abs(pB.elevation) < config.PORT_PARAMS.MIN_NAVIGATION_DEPTH[Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key] === ship)]) {
+            return Infinity;
+        }
+        
+        // 船の離岸可能距離を超えている場合は通行不可
+        const dist = distanceToCoast.get(getIndex(nodeB.x, nodeB.y)) || 0;
+        if (dist * config.HEX_SIZE_KM > ship.max_offshore_km) {
+            return Infinity;
+        }
+
+        let cost = 1;
+
+        // 海の魔物ランクによるコスト増
+        switch (pB.monsterRank) {
+            case 'S': cost *= 100; break;
+            case 'A': cost *= 10; break;
+            case 'B': cost *= 3; break;
+        }
+
+        return cost;
+    };
+}
+
+/**
+ * 航路を生成するメイン関数 (海域グルーping、接続ロジック修正、プログレスバー対応)
+ * @param {Array<object>} allHexes - 全ヘックスデータ
+ * @param {Function} addLogMessage - ログ関数
+ * @returns {Array<object>} - 生成された航路データの配列
+ */
+export async function generateSeaRoutes(allHexes, addLogMessage) {
+    await addLogMessage("海域を特定し、航路の探索準備をしています...");
+
+    // ================================================================
+    // STEP 1: 海域のグルーピング
+    // 陸地で分断された海を別々のグループとして認識する
+    // ================================================================
+    const seaGroupId = new Map(); // 各ヘックスがどの海のグループに属するかを記録
+    let currentGroupId = 0;
+    
+    // 湖沼（標高 > 0）を除いた、標高0以下の「海」ヘックスのみを対象とする
+    const oceanHexes = allHexes.filter(h => h.properties.isWater && h.properties.elevation <= 0);
+
+    for (const startHex of oceanHexes) {
+        const startIndex = getIndex(startHex.col, startHex.row);
+        if (seaGroupId.has(startIndex)) continue; // 既にグループ分け済みならスキップ
+
+        currentGroupId++;
+        const queue = [startHex];
+        seaGroupId.set(startIndex, currentGroupId);
+        let head = 0;
+
+        // 幅優先探索（BFS）で、繋がっている海ヘックスをすべて同じグループIDで塗りつぶす
+        while (head < queue.length) {
+            const current = queue[head++];
+            current.neighbors.forEach(nIdx => {
+                const neighbor = allHexes[nIdx];
+                if (neighbor.properties.isWater && neighbor.properties.elevation <= 0 && !seaGroupId.has(nIdx)) {
+                    seaGroupId.set(nIdx, currentGroupId);
+                    queue.push(neighbor);
+                }
+            });
+        }
+    }
+
+    // ================================================================
+    // STEP 2: 港湾都市の特定と、所属グループの紐付け
+    // ================================================================
+    const portCities = allHexes.filter(h => {
+        const p = h.properties;
+        return ['町', '街', '領都', '都市', '首都'].includes(p.settlement) &&
+               h.neighbors.some(nIdx => seaGroupId.has(nIdx)); // グループ分けされた海に隣接している港のみ
+    });
+
+    if (portCities.length < 2) {
+        await addLogMessage("航路を探索できる港が2つ未満のため、処理をスキップします。");
+        return [];
+    }
+
+    // 各港に、隣接する海のグループIDをプロパティとして追加
+    portCities.forEach(port => {
+        const neighborSeaIndex = port.neighbors.find(nIdx => seaGroupId.has(nIdx));
+        port.seaGroupId = seaGroupId.get(neighborSeaIndex);
+    });
+
+    // ================================================================
+    // STEP 3: グループごとに航路を探索
+    // ================================================================
+    const progressId = 'sea-route-progress';
+    await addLogMessage(`航路の経路探索...`, progressId);
+    
+    const seaRoutes = [];
+    const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
+    const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
+
+    // プログレスバー用に、探索するペアの総数を事前に計算
+    let totalPairs = 0;
+    for (let gid = 1; gid <= currentGroupId; gid++) {
+        const groupPorts = portCities.filter(p => p.seaGroupId === gid);
+        if (groupPorts.length >= 2) {
+            totalPairs += (groupPorts.length * (groupPorts.length - 1)) / 2;
+        }
+    }
+    let processedPairs = 0;
+    let lastReportedPercent = -1;
+
+    // 海域グループごとにループ
+    for (let gid = 1; gid <= currentGroupId; gid++) {
+        const groupPorts = portCities.filter(p => p.seaGroupId === gid);
+        if (groupPorts.length < 2) continue;
+
+        // 同じグループに属する港の間でのみ、ペアを作って探索
+        for (let i = 0; i < groupPorts.length; i++) {
+            for (let j = i + 1; j < groupPorts.length; j++) {
+                const startPort = groupPorts[i];
+                const endPort = groupPorts[j];
+
+                // --- 探索の始点・終点を、港町自身ではなく「隣接する海ヘックス」に設定 ---
+                const startSeaHex = allHexes[startPort.neighbors.find(nIdx => seaGroupId.has(nIdx))];
+                const endSeaHex = allHexes[endPort.neighbors.find(nIdx => seaGroupId.has(nIdx))];
+                if (!startSeaHex || !endSeaHex) {
+                    processedPairs++;
+                    continue;
+                }
+
+                // --- 船の選定 ---
+                const startShipKeys = config.SHIP_AVAILABILITY[startPort.properties.settlement] || [];
+                const endShipKeys = config.SHIP_AVAILABILITY[endPort.properties.settlement] || [];
+                const availableShipKeys = startShipKeys.filter(key => endShipKeys.includes(key));
+                if (availableShipKeys.length === 0) { 
+                    processedPairs++; 
+                    continue; 
+                }
+                const bestShipKey = availableShipKeys[availableShipKeys.length - 1];
+                const bestShip = config.SHIP_TYPES[bestShipKey];
+
+                const seaCostFunc = createSeaCostFunction(allHexes, bestShip);
+                
+                // --- A*探索の実行 ---
+                const result = findAStarPath({
+                    start: { x: startSeaHex.col, y: startSeaHex.row },
+                    goal: { x: endSeaHex.col, y: endSeaHex.row },
+                    getNeighbors, heuristic, cost: seaCostFunc
+                });
+
+                if (result) {
+                    // --- 航路パスを再構築し、フィルタリング ---
+                    // パスの前後に港町自身を追加して、UIが扱いやすい完全な経路にする
+                    const finalPath = [
+                        { x: startPort.col, y: startPort.row },
+                        ...result.path,
+                        { x: endPort.col, y: endPort.row }
+                    ];
+                    const routeDistanceKm = finalPath.length * config.HEX_SIZE_KM;
+
+                    if (routeDistanceKm <= bestShip.range_km) {
+                        const endPortNeighborDepths = endPort.neighbors.map(nIdx => allHexes[nIdx].properties.elevation).filter(elev => elev < 0);
+                        const maxEndPortDepth = Math.abs(Math.min(0, ...endPortNeighborDepths));
+                        if (maxEndPortDepth >= config.PORT_PARAMS.MIN_NAVIGATION_DEPTH[bestShipKey]) {
+                            seaRoutes.push({ path: finalPath, level: 10, shipKey: bestShipKey });
+                        }
+                    }
+                }
+                
+                // --- プログレスバー更新 ---
+                processedPairs++;
+                if (totalPairs > 0) {
+                    const percent = Math.floor((processedPairs / totalPairs) * 100);
+                    if (percent > lastReportedPercent) {
+                        const message = formatProgressBar({ current: processedPairs, total: totalPairs, prefix: "航路探索:" });
+                        await addLogMessage(message, progressId);
+                        lastReportedPercent = percent;
+                    }
+                }
+            }
+        }
+    }
+    
+    await addLogMessage(`航路を${seaRoutes.length}本発見しました。`);
+    return seaRoutes;
 }
 
 export { calculateRoadDistance, calculateTravelDays };

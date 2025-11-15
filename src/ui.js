@@ -338,20 +338,23 @@ function updateLegend(layerName) {
 // ================================================================
 
 /**
- * 道路網レイヤーを再描画する関数
- * @param {Array<object>} roadPaths - 描画対象の道路データ
+ * 道路網と航路レイヤーを再描画する関数
+ * @param {Array<object>} roadPaths - 描画対象の道路・航路データ
  */
 function drawRoads(roadPaths) {
-    // 1. 古い道路をクリア
+    // レイヤーをクリア
     layers.road.group.selectAll('*').remove();
+    layers['sea-route'].group.selectAll('*').remove();
     if (!roadPaths || roadPaths.length === 0) return;
 
-    // 2. 新しい道路データを描画 (setupUIからロジックを移植)
-    const roadPathData = [];
+    // ================================================================
+    // 1. 陸路データの処理と描画
+    // ================================================================
+    const landRoadPathData = [];
     const roadSegmentGrid = new Map();
+    const landRoads = roadPaths.filter(d => d.level < 10);
 
-    // roadPathData に nationId を追加
-    [...roadPaths].sort((a, b) => b.level - a.level).forEach(road => {
+    landRoads.forEach(road => {
         if (road.path.length < 2) return;
         const pathHexes = road.path.map(p => hexes[getIndex(p.x, p.y)]);
         for (let i = 0; i < pathHexes.length; i++) {
@@ -363,48 +366,121 @@ function drawRoads(roadPaths) {
             const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
             const controlPoint = [currentHex.cx, currentHex.cy];
             if (!startPoint || !endPoint || (startPoint[0] === endPoint[0] && startPoint[1] === endPoint[1])) continue;
-            const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+            const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
             const fromIndex = prevHex ? prevHex.index : currentHex.index;
             const toIndex = nextHex ? nextHex.index : currentHex.index;
             const segmentKey = Math.min(fromIndex, toIndex) + '-' + Math.max(fromIndex, toIndex);
             if (!roadSegmentGrid.has(segmentKey)) {
                 roadSegmentGrid.set(segmentKey, true);
-                // ★★★ [修正] nationIdを渡す ★★★
-                roadPathData.push({ path: path, level: road.level, nationId: road.nationId });
+                landRoadPathData.push({ path: pathString, level: road.level, nationId: road.nationId });
             }
         }
     });
 
     layers.road.group.selectAll('.road-segment')
-        .data(roadPathData).enter()
+        .data(landRoadPathData.sort((a,b) => a.level - b.level))
+        .enter()
         .append('path')
-            .attr('class', 'road-segment')
-            .attr('d', d => d.path)
-            // 国籍に応じて色を変える
-            .attr('stroke', d => ({ 
-                6: '#f0f', // 通商路
-                5: '#f00', // 交易路 (紫)
-                4: '#f80', // 街道 (赤)
-                3: '#ff0', // 町道 (赤)
-                2: '#0f0', // 村道 (赤)
-                1: '#800'  // その他 (暗赤)
-            }[d.level] || '#000'))
-            .attr('stroke-width', d => ({ 
-                6: 8.0, 
-                5: 6.0, 
-                4: 4.0, 
-                3: 2.0, 
-                2: 1.0, 
-                1: 1.0 
-            }[d.level] || 1))
-            .attr('stroke-dasharray', d => ({ 
-                6: '8, 8', 
-                5: '6, 6', 
-                4: '4, 4', 
-                3: '2, 2', 
-                2: '1, 1', 
-                1: '1, 2' 
-            }[d.level] || '2, 2'))
+        .attr('class', 'road-segment')
+        .attr('d', d => d.path)
+        .attr('stroke', d => ({ 
+            6: '#f0f', // 通商路
+            5: '#f00', // 交易路
+            4: '#f80', // 街道
+            3: '#ff0', // 町道
+            2: '#0f0', // 村道
+            1: '#800'  // その他
+        }[d.level] || '#000'))
+        .attr('stroke-width', d => ({ 
+            6: 8.0, 
+            5: 6.0, 
+            4: 4.0, 
+            3: 2.0, 
+            2: 1.0, 
+            1: 1.0 
+        }[d.level] || 1))
+        .attr('stroke-dasharray', d => ({ 
+            6: '8, 8', 
+            5: '6, 6', 
+            4: '4, 4', 
+            3: '2, 2', 
+            2: '1, 1', 
+            1: '1, 2' 
+        }[d.level] || '2, 2'))
+        .style('pointer-events', 'none')
+        .style('fill', 'none');
+
+    // ================================================================
+    // 2. 航路データの処理と描画
+    // ================================================================
+    const seaRoutes = roadPaths.filter(d => d.level === 10);
+
+    // 航路の色を定義
+    const seaRouteColors = {
+        'dinghy':             '#0f0', // 小舟・漁船
+        'small_trader':       '#ff0', // 小型商船
+        'coastal_trader':     '#f00', // 沿岸交易船
+        'medium_merchant':    '#a0f', // 中型商船
+        'large_sailing_ship': '#00f'  // 大型帆船
+    };
+
+    // 船のランクを数値化するための順序マップ
+    const shipOrder = {
+        'dinghy': 1,
+        'small_trader': 2,
+        'coastal_trader': 3,
+        'medium_merchant': 4,
+        'large_sailing_ship': 5
+    };
+
+    // 航路のパスデータを生成
+    const seaRoutePathData = [];
+    seaRoutes.forEach(route => {
+        const pathHexes = route.path.map(p => hexes[getIndex(p.x, p.y)]).filter(Boolean);
+        if (pathHexes.length < 2) return;
+
+        // 航路の各ヘックスを通り抜けるセグメントを生成
+        for (let i = 0; i < pathHexes.length; i++) {
+            const currentHex = pathHexes[i];
+            
+            // 港町（陸地）ヘックスは経路の中継点としてのみ使い、その上には線を描画しない
+            if (!currentHex.properties.isWater && i > 0 && i < pathHexes.length - 1) {
+                continue;
+            }
+
+            const prevHex = i > 0 ? pathHexes[i - 1] : null;
+            const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
+
+            // 始点と終点を決定 (辺の中心)
+            const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
+            const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
+            
+            if (!startPoint || !endPoint) continue;
+
+            // 制御点は現在のヘックスの中心
+            const controlPoint = [currentHex.cx, currentHex.cy];
+            
+            // 二次ベジェ曲線のパス文字列を生成
+            const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+
+            seaRoutePathData.push({
+                path: pathString,
+                shipKey: route.shipKey
+            });
+        }
+    });
+
+    // 航路を描画
+    layers['sea-route'].group.selectAll('.sea-route-segment')
+        // ★★★ ソート処理を追加 ★★★
+        .data(seaRoutePathData.sort((a, b) => (shipOrder[a.shipKey] || 0) - (shipOrder[b.shipKey] || 0)))
+        .enter()
+        .append('path')
+        .attr('class', 'sea-route-segment')
+        .attr('d', d => d.path)
+        .attr('stroke', d => seaRouteColors[d.shipKey] || '#fff') // 船のランクに応じて色分け
+        .attr('stroke-width', 2) 
+        .attr('stroke-dasharray', '2, 4') 
         .style('pointer-events', 'none')
         .style('fill', 'none');
 }
@@ -469,8 +545,7 @@ async function drawBeaches(hexes) {
         .attr('y1', d => d[0][1])
         .attr('x2', d => d[1][0])
         .attr('y2', d => d[1][1])
-        .attr('stroke', '#e6d8ad') // 砂浜の色
-        .attr('stroke', '#edb') // 砂浜の色
+        .attr('stroke', config.TERRAIN_COLORS.砂浜) // 砂浜の色
         .attr('stroke-width', 6)   // 幅6px
         .attr('stroke-linecap', 'round') // 線の端を丸くする
         .style('pointer-events', 'none');
@@ -886,39 +961,61 @@ function updateVisibleHexes(transform) {
 
     const getTooltipText = (d) => {
         const p = d.properties;
-        const settlementType = (p.settlement || '未開地').padEnd(2, '　');
-        // 新しい汎用関数を呼び出し、「省略位置」フォーマットを指定
+
+        // --- STEP 1: 新しいヘッダーセクションを生成 ---
+        let headerText = '';
+        
+        const terrain = p.isWater ? '水域' : (p.terrainType || '不明');
+        const vegetation = p.vegetation || 'なし';
+
+        headerText += `地形：${terrain}\n`;
+        headerText += `植生：${vegetation}\n`;
+
+        // 特性リストを動的に生成
+        const features = [];
+        if (p.isAlluvial) features.push('河川');
+        if (p.hasSnow) features.push('積雪');
+        if (p.beachNeighbors && p.beachNeighbors.length > 0) features.push('砂浜');
+        
+        if (features.length > 0) {
+            headerText += `特性：${features.join(', ')}\n`;
+        }
+
+        headerText += '---\n';
+
+        // --- STEP 2: 既存の本文セクションを生成 ---
+        let bodyText = '';
         const locationText = formatLocation(d, 'short'); 
+        const settlementType = (p.settlement || '未開地').padEnd(2, '　');
         const populationText = `人口：${(p.population || 0).toLocaleString()}人`;
-
-        let text = `${settlementType}：${locationText}\n${populationText}`;
-
-        // --- 親集落の階層をたどって表示 ---
+        bodyText += `${settlementType}：${locationText}\n${populationText}`;
+        
+        // 親集落の階層をたどって表示
         if (p.parentHexId !== null) {
-            text += `\n---`;
+            bodyText += `\n---`;
             let currentHex = d;
-            let safety = 0; // 無限ループ防止
+            let safety = 0; 
             while (currentHex && currentHex.properties.parentHexId !== null && safety < 10) {
                 const parentHex = hexes[currentHex.properties.parentHexId];
                 if (!parentHex) break;
                 
-                const parentType = (parentHex.properties.settlement || '').padEnd(2, '　'); // 2文字になるよう空白で埋める
-                // 親の座標は「座標のみ」フォーマットを指定
-                const parentCoords = formatLocation(parentHex, 'coords'); 
-                text += `\n${parentType}：${parentCoords}`; // 括弧で囲む
+                const parentType = (parentHex.properties.settlement || '').padEnd(2, '　');
+                const parentCoords = formatLocation(parentHex, 'short'); 
+                bodyText += `\n${parentType}：${parentCoords}`;
                 
                 currentHex = parentHex;
                 safety++;
             }
         }
         
-        // --- 国家情報を表示 ---
+        // 国家情報を表示
         const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] 
             ? config.NATION_NAMES[p.nationId - 1] 
             : '辺境';
-        text += `\n国家：${nationName}`;
+        bodyText += `\n${nationName}`;
 
-        return text;
+        // --- STEP 3: ヘッダーと本文を結合して返す ---
+        return headerText + bodyText;
     };
 
     layers.interaction.group.selectAll('.interactive-hex')
@@ -1023,6 +1120,49 @@ function updateVisibleHexes(transform) {
                             }
                         }
                     }
+
+                    // --- 3. 航路ハイライトのロジック ---
+                    const clickedIndex = d.index;
+                    // クリックされた港から発着する全ての航路をフィルタリング
+                    const relatedSeaRoutes = roadPathsData.filter(road => {
+                        if (road.level !== 10 || road.path.length < 2) return false;
+                        const startIndex = getIndex(road.path[0].x, road.path[0].y);
+                        const endIndex = getIndex(road.path[road.path.length - 1].x, road.path[road.path.length - 1].y);
+                        return startIndex === clickedIndex || endIndex === clickedIndex;
+                    });
+
+                    if (relatedSeaRoutes.length > 0) {
+                        const seaRouteSegments = [];
+                        relatedSeaRoutes.forEach(route => {
+                            const pathHexes = route.path.map(p => hexes[getIndex(p.x, p.y)]).filter(Boolean);
+                            if (pathHexes.length < 2) return;
+
+                            for (let i = 0; i < pathHexes.length; i++) {
+                                const currentHex = pathHexes[i];
+                                if (!currentHex.properties.isWater && i > 0 && i < pathHexes.length - 1) continue;
+                                const prevHex = i > 0 ? pathHexes[i - 1] : null;
+                                const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
+                                const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
+                                const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
+                                if (!startPoint || !endPoint) continue;
+                                const controlPoint = [currentHex.cx, currentHex.cy];
+                                const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                                seaRouteSegments.push({ path: pathString });
+                            }
+                        });
+
+                        // ハイライトレイヤーに航路を描画
+                        highlightLayer.selectAll('.sea-route-highlight')
+                            .data(seaRouteSegments).enter().append('path')
+                            .attr('class', 'sea-route-highlight')
+                            .attr('d', d => d.path)
+                            .attr('stroke', 'cyan')
+                            .attr('stroke-width', 4)
+                            .attr('fill', 'none')
+                            .style('pointer-events', 'none');
+                    }
+
+                    // --- 4. 共通の処理 (変更なし) ---
                     highlightLayer.append('polygon').attr('points', d.points.map(p => p.join(',')).join(' '))
                         .attr('fill', 'none')
                         .attr('stroke', 'cyan')
@@ -1230,6 +1370,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const territoryOverlayLayer = createLayer('territory-overlay', false);      // 領地
     const hexBorderLayer = createLayer('hex-border', true);                     // ヘックスの境界線
     const roadLayer = createLayer('road');                                      // 道路網
+    const seaRouteLayer = createLayer('sea-route');                             // 海路
     const borderLayer = createLayer('border');                                  // 国境線
     const highlightOverlayLayer = createLayer('highlight-overlay');             // クリック時のハイライト
     const settlementLayer = createLayer('settlement');                          // 集落シンボル

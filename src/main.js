@@ -8,7 +8,7 @@ import { generatePhysicalMap, generateClimateAndVegetation } from './continentGe
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js'; 
 import { simulateEconomy, calculateTerritoryAggregates } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
-import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays } from './roadGenerator.js';
+import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex } from './utils.js';
 
 // GASのデプロイで取得したウェブアプリのURL
@@ -291,6 +291,9 @@ async function runStep4_Nations() {
     const villageRoads = await generateFeederRoads(villages, [...hubs, ...streets, ...towns], allHexes, '村', addLogMessage);
     allRoadPaths.push(...villageRoads);
     
+    const seaRoutePaths = await generateSeaRoutes(worldData.allHexes, addLogMessage);
+    allRoadPaths.push(...seaRoutePaths);
+
     // roadPaths を worldData に保存
     worldData.roadPaths = allRoadPaths;
 

@@ -884,7 +884,7 @@ function generateBeaches(allHexes) {
             beachScore *= randomFactor;
 
             // --- 最終判定 ---
-            if (beachScore > 0.5) {
+            if (beachScore > 0.8) {
                 p.beachNeighbors.push(neighborIndex);
             }
         });
