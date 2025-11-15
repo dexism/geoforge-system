@@ -17,19 +17,19 @@ export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
 // ■ 2. 地形生成パラメータ (v3.2 - 大陸生成パラメータ再調整版)
 // ================================================================
 // --- 大陸の形状と配置 ---
-export const CONTINENT_NOISE_FREQ =        2.0;  // 大陸形状の複雑さ。2.0-3.0が推奨
-export const CONTINENT_FALLOFF_START =     1.40; // マップ中央からx%の距離までは大陸が一切削られない
-export const CONTINENT_FALLOFF_RANGE =     0.20; // そこからx%の距離をかけて海になる
-export const SEA_LEVEL =                   0.10; // 陸地強度がこれより低いと海になる。0.3-0.4が推奨
+export const CONTINENT_NOISE_FREQ =        3.0;  // 大陸形状の複雑さ。2.0-3.0が推奨
+export const CONTINENT_FALLOFF_START =     1.20; // マップ中央からx%の距離までは大陸が一切削られない
+export const CONTINENT_FALLOFF_RANGE =     0.30; // そこからx%の距離をかけて海になる
+export const SEA_LEVEL =                   0.05; // 陸地強度がこれより低いと海になる。0.3-0.4が推奨
 
 // --- 地形バイアス (特定のエリアの傾向を緩やかに操作) ---
-export const EAST_SEA_BIAS_X_START =       0.8;  // マップの東側x%地点から海になりやすくなる
-export const EAST_SEA_BIAS_INTENSITY =     0.2;  // 東側を海にする力の強さ（弱めに設定）
-export const NW_SEA_BIAS_RADIUS =          0.2;  // 北西の角からこの半径内を海になりやすくする
-export const NW_SEA_BIAS_INTENSITY =       0.3;  // 北西を海にする力の強さ（弱めに設定）
+export const EAST_SEA_BIAS_X_START =       0.7;  // マップの東側x%地点から海になりやすくなる
+export const EAST_SEA_BIAS_INTENSITY =     0.5;  // 東側を海にする力の強さ（弱めに設定）
+export const NW_SEA_BIAS_RADIUS =          0.3;  // 北西の角からこの半径内を海になりやすくする
+export const NW_SEA_BIAS_INTENSITY =       0.5;  // 北西を海にする力の強さ（弱めに設定）
 
 // --- 山岳と起伏 ---
-export const MOUNTAIN_NOISE_FREQ =         7.0;  // 山脈の分布を決めるノイズの周波数
+export const MOUNTAIN_NOISE_FREQ =         9.0;  // 山脈の分布を決めるノイズの周波数
 export const MOUNTAIN_DISTRIBUTION_POWER = 2.0;  // 山脈を特定のエリアに集中させる度合い（下げて範囲を広げる）
 export const MOUNTAIN_SHAPE_POWER =        1.0;  // 山の鋭さ
 export const MOUNTAIN_HEIGHT_MAX =         5.0;  // 山の最大標高（スケーリング前の内部値）

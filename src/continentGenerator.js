@@ -18,7 +18,8 @@ let continentNoise,
     grasslandPotentialNoise, 
     miningPotentialNoise, 
     precipitationNoise, 
-    seasonalityNoise;
+    seasonalityNoise,
+    beachNoise;
 
 /**
  * 全てのノイズ関数を新しいシードで再初期化する関数
@@ -38,6 +39,7 @@ function initializeNoiseFunctions() {
     miningPotentialNoise = createNoise2D(seedFn);
     precipitationNoise = createNoise2D(seedFn);
     seasonalityNoise = createNoise2D(seedFn);
+    beachNoise = createNoise2D(seedFn);
 }
 
 /**
@@ -757,9 +759,73 @@ export async function generateClimateAndVegetation(allHexes, addLogMessage) {
     await addLogMessage("気候と植生を最終決定しています...");
     calculateFinalProperties(allHexes);
 
+    await addLogMessage("海岸線の砂浜を形成しています...");
+    generateBeaches(allHexes);
+
     return allHexes;
 }
 
+/**
+ * 第3.5パス：砂浜を生成する (確率的モデル + 湿地帯の考慮)
+ * @param {Array<object>} allHexes - 全ヘックスのデータ
+ */
+function generateBeaches(allHexes) {
+    // --- スケール関数を事前に定義 ---
+    const landElevationScale = d3.scaleLinear().domain([50, 300]).range([1.0, 0.0]).clamp(true);
+    const seaDepthScale = d3.scaleLinear().domain([0, -500]).range([1.0, 0.0]).clamp(true);
+
+    allHexes.forEach(h => {
+        const p = h.properties;
+        if (p.isWater) return;
+        p.beachNeighbors = [];
+
+        const nx = h.col / config.COLS;
+        const ny = h.row / config.ROWS;
+
+        h.neighbors.forEach(neighborIndex => {
+            const neighbor = allHexes[neighborIndex];
+            const n_p = neighbor.properties;
+            if (!n_p.isWater) return;
+
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            // 【ここから修正】湿地帯の特別ルールを追加
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            // 陸地側が湿地の場合、原則として砂浜は生成しない
+            if (p.vegetation === '湿地') {
+                // 例外: 流量が非常に大きい河口（20以上）であれば、砂が供給される可能性がある
+                if (p.flow < 20) {
+                    return; // 通常の湿地海岸はここで処理を打ち切り、砂浜を生成しない
+                }
+                // 大河口の湿地は、処理を続行（砂浜ができる可能性がある）
+            }
+            // ★★★ 修正ここまで ★★★
+
+            // --- STEP 1: 基本地形スコア ---
+            const landScore = landElevationScale(p.elevation);
+            const seaScore = seaDepthScale(n_p.elevation);
+            let beachScore = landScore * seaScore;
+            if (beachScore < 0.1) return;
+
+            // --- STEP 2: 河口ボーナス ---
+            const riverBonus = 1.0 + Math.min(0.5, Math.sqrt(p.flow / 10) * 0.5);
+            beachScore *= riverBonus;
+
+            // --- STEP 3: 内湾ボーナス ---
+            const landNeighborCount = neighbor.neighbors.filter(idx => !allHexes[idx].properties.isWater).length;
+            const bayBonus = 1.0 + (landNeighborCount / 6) * 0.5;
+            beachScore *= bayBonus;
+
+            // --- STEP 4: ランダム揺らぎ ---
+            const randomFactor = 0.7 + (beachNoise(nx * 15, ny * 15) + 1) / 2 * 0.6;
+            beachScore *= randomFactor;
+
+            // --- 最終判定 ---
+            if (beachScore > 0.5) {
+                p.beachNeighbors.push(neighborIndex);
+            }
+        });
+    });
+}
 
 // main.jsから呼び出すために、個別の関数をエクスポートする
 export {

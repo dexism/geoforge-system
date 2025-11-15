@@ -37,6 +37,31 @@ let minimapScaleY;
 // ================================================================
 
 /**
+ * 2つのヘックスが共有する2つの角の座標を返すヘルパー関数。
+ * @param {object} hex1 - 1つ目のヘックスオブジェクト
+ * @param {object} hex2 - 2つ目のヘックスオブジェクト
+ * @returns {Array<Array<number>>|null} - 2つの角の座標 [[x1, y1], [x2, y2]] または null
+ */
+function getSharedEdgePoints(hex1, hex2) {
+    if (!hex1 || !hex2) {
+        return null;
+    }
+    const commonPoints = [];
+    for (const p1 of hex1.points) {
+        for (const p2 of hex2.points) {
+            // 座標がほぼ一致するかをチェック
+            if (Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) < 1e-6) {
+                commonPoints.push(p1);
+            }
+        }
+    }
+    if (commonPoints.length === 2) {
+        return commonPoints;
+    }
+    return null;
+}
+
+/**
  * 2つのヘックスが共有する辺の中点を返すヘルパー関数。
  * 道路や河川がヘックスの中心ではなく、辺から辺へ滑らかに繋がるように見せるために使用します。
  * @param {object} hex1 - 1つ目のヘックスオブジェクト
@@ -419,6 +444,37 @@ function drawBorders() {
         .attr('x2', d => d.p2[0]).attr('y2', d => d.p2[1])
         .attr('stroke', '#f00').attr('stroke-width', 4)
         .attr('stroke-linecap', 'round').style('pointer-events', 'none');
+}
+
+// 砂浜描画関数
+async function drawBeaches(hexes) {
+    layers.beach.group.selectAll('*').remove();
+    const beachSegments = [];
+
+    hexes.forEach(h => {
+        if (h.properties.beachNeighbors && h.properties.beachNeighbors.length > 0) {
+            h.properties.beachNeighbors.forEach(neighborIndex => {
+                const neighborHex = hexes[neighborIndex];
+                const edgePoints = getSharedEdgePoints(h, neighborHex);
+                if (edgePoints) {
+                    beachSegments.push(edgePoints);
+                }
+            });
+        }
+    });
+
+    layers.beach.group.selectAll('.beach-segment')
+        .data(beachSegments)
+        .enter().append('line')
+        .attr('class', 'beach-segment')
+        .attr('x1', d => d[0][0])
+        .attr('y1', d => d[0][1])
+        .attr('x2', d => d[1][0])
+        .attr('y2', d => d[1][1])
+        .attr('stroke', '#e6d8ad') // 砂浜の色
+        .attr('stroke-width', 6)   // 幅6px
+        .attr('stroke-linecap', 'round') // 線の端を丸くする
+        .style('pointer-events', 'none');
 }
 
 /**
@@ -1165,6 +1221,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const terrainLayer = createLayer('terrain');                                // 基本地形 (標高)
     const whiteMapOverlayLayer = createLayer('white-map-overlay', false);       // 白地図
     const vegetationOverlayLayer = createLayer('vegetation-overlay', true);     // 植生 (森林、砂漠など)
+    const beachLayer = createLayer('beach', true);                              // 砂浜
     const snowLayer = createLayer('snow', true);                                // 積雪
     const riverLayer = createLayer('river');                                    // 河川
     const shadingLayer = createLayer('shading');                                // レリーフ (陰影)
@@ -1202,6 +1259,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     
     // 4f. 国境線 (初回描画)
     drawBorders();
+
+    drawBeaches(hexes);
 
     // 4g. 等高線
     await addLogMessage("等高線の補間計算を開始します...");
@@ -1457,6 +1516,9 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         toggleLayerVisibility('shading', this); 
         updateVisibleHexes(d3.zoomTransform(svg.node()));
     });
+    d3.select('#toggleBeachLayer').on('click', function() {
+        toggleLayerVisibility('beach', this);
+    });
     d3.select('#toggleContourLayer').on('click', function() { 
         toggleLayerVisibility('contour', this); 
         // 等高線は静的レイヤーなので直接表示を切り替えるだけで良い
@@ -1619,11 +1681,12 @@ export async function redrawSettlements(allHexes) {
 export async function redrawRoadsAndNations(allHexes, roadPaths) {
     updateHexesData(allHexes);
     updateChildrenMap(allHexes);
-    updateOverallInfo(allHexes);
+    updateOverallInfo(allHexes); // ？
 
     // 静的レイヤーを新しいデータで再描画
     drawRoads(roadPaths);
     drawBorders();
+    drawBeaches(hexes);
     
     // ★★★ [修正] updateVisibleHexesを呼び出して、表示を完全に再構築する ★★★
     if (svg) updateVisibleHexes(currentTransform);
