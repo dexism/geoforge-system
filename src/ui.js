@@ -1485,6 +1485,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         layers.terrain.group.style('display', isWhiteMap ? 'none' : 'inline');
         layers['white-map-overlay'].group.style('display', isWhiteMap ? 'inline' : 'none');
         layers.river.group.selectAll('.river-segment').attr('stroke', isWhiteMap ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.河川);
+        layers.beach.group.style('display', isWhiteMap ? 'none' : 'inline');
         // 変更を即時反映するために描画関数を呼び出す
         updateVisibleHexes(d3.zoomTransform(svg.node()));
     });
@@ -1515,9 +1516,6 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     d3.select('#toggleReliefLayer').on('click', function() { 
         toggleLayerVisibility('shading', this); 
         updateVisibleHexes(d3.zoomTransform(svg.node()));
-    });
-    d3.select('#toggleBeachLayer').on('click', function() {
-        toggleLayerVisibility('beach', this);
     });
     d3.select('#toggleContourLayer').on('click', function() { 
         toggleLayerVisibility('contour', this); 

@@ -17,9 +17,9 @@ export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
 // ■ 2. 地形生成パラメータ (v3.2 - 大陸生成パラメータ再調整版)
 // ================================================================
 // --- 大陸の形状と配置 ---
-export const CONTINENT_NOISE_FREQ =        3.0;  // 大陸形状の複雑さ。2.0-3.0が推奨
-export const CONTINENT_FALLOFF_START =     1.20; // マップ中央からx%の距離までは大陸が一切削られない
-export const CONTINENT_FALLOFF_RANGE =     0.30; // そこからx%の距離をかけて海になる
+export const CONTINENT_NOISE_FREQ =        4.0;  // 大陸形状の複雑さ。2.0-3.0が推奨
+export const CONTINENT_FALLOFF_START =     1.40; // マップ中央からx%の距離までは大陸が一切削られない
+export const CONTINENT_FALLOFF_RANGE =     0.20; // そこからx%の距離をかけて海になる
 export const SEA_LEVEL =                   0.05; // 陸地強度がこれより低いと海になる。0.3-0.4が推奨
 
 // --- 地形バイアス (特定のエリアの傾向を緩やかに操作) ---
@@ -260,7 +260,7 @@ const elevationColor_2k_3k   = d3.scaleLinear().domain([2000, 3000]).range(['#dc
 const elevationColor_3k_4k   = d3.scaleLinear().domain([3000, 4000]).range(['#c2a383', '#b0b0b0']);
 const elevationColor_4k_plus = d3.scaleLinear().domain([4000, 7000]).range(['#b0b0b0', '#ffffff']);
 const depthColor = d3.scaleLinear()
-    .domain([0, -1000]) // 水深0mから-5000m
+    .domain([0, -2000]) // 水深0mから-5000m
     .range(['#5ae', '#136']) // 明るい青から暗い青へ
     .clamp(true);
 
@@ -345,8 +345,6 @@ export const MONSTER_COLORS = {
 export const pastoralColor = d3.scaleSequential(d3.interpolateBrBG).domain([0, 1]);
 export const livestockColor = d3.scaleSequential(d3.interpolatePuRd).domain([0, 1]);
 
-// config.js の末尾あたりに追加
-
 // ================================================================
 // ■ 7. 生産シミュレーションパラメータ
 // ================================================================
@@ -374,5 +372,95 @@ export const PRODUCTION_PARAMS = {
         GRAIN_TO_ALCOHOL: 0.5,
         // 果物1トンから醸造できる酒の量 (キロリットル)
         FRUIT_TO_ALCOHOL: 0.7,
+    }
+};
+
+// config.js
+
+// ... (PRODUCTION_PARAMS の定義の後など)
+
+// ================================================================
+// ■ 8. 海運パラメータ (v1.0 - 船種定義)
+// ================================================================
+
+export const SHIP_TYPES = {
+    'dinghy': {
+        name: '小舟・漁船',
+        cargo_capacity_t: 1,      // 積載量 (トン)
+        range_km: 20,             // 航続距離 (km)
+        max_offshore_km: 10,      // 離岸可能距離 (km)
+        min_settlement_level: '村', // 保有可能な最低集落レベル
+        avg_speed_kmh: 4          // 平均速度 (km/h)
+    },
+    'small_trader': {
+        name: '小型商船・大型漁船',
+        cargo_capacity_t: 10,
+        range_km: 100,
+        max_offshore_km: 20,
+        min_settlement_level: '町',
+        avg_speed_kmh: 5
+    },
+    'coastal_trader': {
+        name: '沿岸交易船',
+        cargo_capacity_t: 30,
+        range_km: 200,
+        max_offshore_km: 20, // 沿岸航行に特化
+        min_settlement_level: '街',
+        avg_speed_kmh: 6
+    },
+    'medium_merchant': {
+        name: '中型商船',
+        cargo_capacity_t: 200,
+        range_km: 1000,
+        max_offshore_km: Infinity, // 外洋航行可能
+        min_settlement_level: '領都',
+        avg_speed_kmh: 8
+    },
+    'large_sailing_ship': {
+        name: '大型帆船',
+        cargo_capacity_t: 500,
+        range_km: 3000,
+        max_offshore_km: Infinity, // 外洋航行可能
+        min_settlement_level: '首都',
+        avg_speed_kmh: 10
+    }
+};
+
+// 各集落レベルがどの船まで保有できるかを定義するマップ
+// (海路生成ロジックで使いやすいように逆引きテーブルも用意)
+export const SHIP_AVAILABILITY = {
+    '村': ['dinghy'],
+    '町': ['dinghy', 'small_trader'],
+    '街': ['dinghy', 'small_trader', 'coastal_trader'],
+    '領都': ['dinghy', 'small_trader', 'coastal_trader', 'medium_merchant'],
+    '都市': ['dinghy', 'small_trader', 'coastal_trader', 'medium_merchant'], // 都市は領都と同等とする
+    '首都': ['dinghy', 'small_trader', 'coastal_trader', 'medium_merchant', 'large_sailing_ship']
+};
+
+// config.js
+
+// ================================================================
+// ■ 9. 港湾・海事パラメータ
+// ================================================================
+
+export const PORT_PARAMS = {
+    // 各集落レベルが持つ港湾設備の「接岸可能水深(m)」
+    // 船の喫水（ここでは簡易的に水深で代用）がこの値より深いと接岸できない
+    MAX_DRAFT_DEPTH: {
+        '村': 2,    // 自然の入り江など。水深-2mまで
+        '町': 5,    // 簡単な桟橋など。水深-5mまで
+        '街': 10,   // 整備された港。水深-10mまで
+        '領都': 20, // 大規模港湾。水深-20mまで
+        '都市': 20, // 領都と同等
+        '首都': 30  // 国家クラスの巨大港。水深-30mまで
+    },
+    // 各船種が安全に航行するために必要な「最低水深(m)」
+    // これより浅い海は航行不可（座礁リスク）
+    MIN_NAVIGATION_DEPTH: {
+        'dinghy': 1,
+        'small_trader': 2,
+        'coastal_trader': 4,
+        'medium_merchant': 8,
+        'large_sailing_ship': 12
     }
 };

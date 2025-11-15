@@ -406,24 +406,27 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                 const result = findAStarPath({ start: { x: lower.col, y: lower.row }, goal: { x: closestUpper.col, y: closestUpper.row }, getNeighbors, heuristic, cost: costFunc });
                 
                 if (result) {
-                    result.path.forEach(pos => {
-                        const hex = allHexes[getIndex(pos.x, pos.y)];
-                        if (hex && !hex.properties.isWater) {
-                            hex.properties.nationId = lower.properties.nationId;
-                            if (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel) {
-                                hex.properties.roadLevel = roadLevel;
-                            }
-                        }
-                    });
-
-                    const distance = calculateRoadDistance(result.path, roadLevel, allHexes);
                     const travelDays = calculateTravelDays(result.path, roadLevel, allHexes);
-                    lower.properties.distanceToParent = distance;
-                    lower.properties.travelDaysToParent = travelDays;
+                    // 移動日数が設定された上限を超えていないかチェック
+                    if (travelDays < config.MAX_TRAVEL_DAYS[roadLevel]) {
+                        result.path.forEach(pos => {
+                            const hex = allHexes[getIndex(pos.x, pos.y)];
+                            if (hex && !hex.properties.isWater) {
+                                hex.properties.nationId = lower.properties.nationId;
+                                if (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel) {
+                                    hex.properties.roadLevel = roadLevel;
+                                }
+                            }
+                        });
 
-                    roadPaths.push({ path: result.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: lower.properties.nationId });
-                    lower.properties.parentHexId = getIndex(closestUpper.col, closestUpper.row);
-                    processedLower.add(getIndex(lower.col, lower.row));
+                        const distance = calculateRoadDistance(result.path, roadLevel, allHexes);
+                        lower.properties.distanceToParent = distance;
+                        lower.properties.travelDaysToParent = travelDays;
+
+                        roadPaths.push({ path: result.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: lower.properties.nationId });
+                        lower.properties.parentHexId = getIndex(closestUpper.col, closestUpper.row);
+                        processedLower.add(getIndex(lower.col, lower.row));
+                    }
                 }
             }
         } 
@@ -460,12 +463,15 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                 // 経路が見つかった場合、移動日数を計算し、候補リスト(`potentialRoutes`)に追加する。
                 if (result) {
                     const travelDays = calculateTravelDays(result.path, roadLevel, allHexes);
-                    potentialRoutes.push({ 
-                        from: lower, 
-                        to: upper, 
-                        path: result.path, 
-                        travelDays: travelDays 
-                    });
+                    // 移動日数が設定された上限を超えていない場合のみ、接続候補に追加する
+                    if (travelDays < config.MAX_TRAVEL_DAYS[roadLevel]) {
+                        potentialRoutes.push({ 
+                            from: lower, 
+                            to: upper, 
+                            path: result.path, 
+                            travelDays: travelDays 
+                        });
+                    }
                 }
             }
         }

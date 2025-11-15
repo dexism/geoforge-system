@@ -340,17 +340,14 @@ export async function determineTerritories(allHexes, addLogMessage) {
 }
 
 /**
- * 魔物の分布を計算して各ヘックスにランクを割り当てる関数 (割合ベースの新ロジック)
+ * 魔物の分布を計算して各ヘックスにランクを割り当てる関数 (海上分布対応版)
  * @param {Array<object>} allHexes - 全てのヘックスデータ
  * @returns {Array<object>} - monsterRankプロパティが追加されたヘックスデータ
  */
 export function generateMonsterDistribution(allHexes) {
     // --- STEP 1: 事前準備 ---
-    
-    // 全てのヘックスのmonsterRankを一旦リセット
     allHexes.forEach(h => h.properties.monsterRank = null);
 
-    // Cランク判定のため、人口が100人以上いる「文明圏」のヘックスインデックスをセットに格納
     const civilizedHexIndexes = new Set();
     allHexes.forEach((h, index) => {
         if (h.properties.population >= 100) {
@@ -359,78 +356,92 @@ export function generateMonsterDistribution(allHexes) {
         }
     });
 
-    // 魔物の割り当て対象となる陸地ヘックスのリストを作成
-    let candidateHexes = allHexes.filter(h => !h.properties.isWater);
+    // 陸地と海域の候補リストを作成
+    let landCandidates = allHexes.filter(h => !h.properties.isWater);
+    let seaCandidates = allHexes.filter(h => h.properties.isWater);
 
-    // --- STEP 2: Sランク（伝説級）の決定 ---
-    // Sランクの候補地（深い森 or 高山）をフィルタリング
-    const sRankCandidates = candidateHexes.filter(h => {
+    // --- STEP 2: 陸上のSランク決定 ---
+    const sRankLandCandidates = landCandidates.filter(h => {
         const p = h.properties;
         return p.vegetation === '密林' || p.elevation > 3000;
     });
+    sRankLandCandidates.sort((a, b) => b.properties.manaValue - a.properties.manaValue);
+    const sRankLandHexes = sRankLandCandidates.slice(0, 4); // 陸上Sランクは4体
+    sRankLandHexes.forEach(h => h.properties.monsterRank = 'S');
+    const sRankLandIndexes = new Set(sRankLandHexes.map(h => getIndex(h.col, h.row)));
+    landCandidates = landCandidates.filter(h => !sRankLandIndexes.has(getIndex(h.col, h.row)));
 
-    // 候補地を魔力の高さでソートし、上位4ヶ所をSランクに決定
-    sRankCandidates.sort((a, b) => b.properties.manaValue - a.properties.manaValue);
-    const sRankHexes = sRankCandidates.slice(0, 4);
-    sRankHexes.forEach(h => h.properties.monsterRank = 'S');
+    // ★★★ ここから海上の魔物分布ロジックを追加 ★★★
 
-    // Sランクになったヘックスを以降の候補から除外
-    const sRankIndexes = new Set(sRankHexes.map(h => getIndex(h.col, h.row)));
-    candidateHexes = candidateHexes.filter(h => !sRankIndexes.has(getIndex(h.col, h.row)));
+    // --- STEP 2.5: 海上のSランク（クラーケンなど）の決定 ---
+    // 候補：水深が深く(-800m以下)、魔力が濃い(0.8以上)海域
+    const sRankSeaCandidates = seaCandidates.filter(h => {
+        const p = h.properties;
+        return p.elevation < -800 && p.manaValue > 0.8;
+    });
+    sRankSeaCandidates.sort((a, b) => b.properties.manaValue - a.properties.manaValue);
+    const sRankSeaHexes = sRankSeaCandidates.slice(0, 2); // 海上Sランクも2体
+    sRankSeaHexes.forEach(h => h.properties.monsterRank = 'S');
+    const sRankSeaIndexes = new Set(sRankSeaHexes.map(h => getIndex(h.col, h.row)));
+    seaCandidates = seaCandidates.filter(h => !sRankSeaIndexes.has(getIndex(h.col, h.row)));
 
-    // --- STEP 3: A, B, C, Dランクの割り当て ---
-    // 各ランクの割り当て処理を関数化
-    const assignRank = (rank, criteria, sortLogic, percentage) => {
-        if (candidateHexes.length === 0) return;
+    // --- STEP 3: 海上の A, B, C, D ランクの決定 ---
+    // 海岸からの距離を事前計算（効率化のため）
+    const distanceToCoast = new Map();
+    const queue = allHexes.filter(h => h.neighbors.some(n => !allHexes[n].properties.isWater));
+    queue.forEach(h => distanceToCoast.set(getIndex(h.col, h.row), 1));
+    let head = 0;
+    while(head < queue.length) {
+        const current = queue[head++];
+        const dist = distanceToCoast.get(getIndex(current.col, current.row));
+        current.neighbors.forEach(nIdx => {
+            if (allHexes[nIdx].properties.isWater && !distanceToCoast.has(nIdx)) {
+                distanceToCoast.set(nIdx, dist + 1);
+                queue.push(allHexes[nIdx]);
+            }
+        });
+    }
 
-        // 目標数を計算
-        const targetCount = Math.floor(allHexes.filter(h => !h.properties.isWater).length * percentage);
-        
-        // 条件に合う候補をフィルタリング
-        let rankCandidates = candidateHexes.filter(criteria);
-        
-        // ソートロジックを適用
-        if (sortLogic) {
-            rankCandidates.sort(sortLogic);
+    seaCandidates.forEach(h => {
+        const p = h.properties;
+        const dist = distanceToCoast.get(getIndex(h.col, h.row)) || 999;
+
+        // Aランク (リヴァイアサン等): 深海(-300m以下)で魔力が高い(0.6以上)
+        if (p.elevation < -300 && p.manaValue > 0.6) {
+            p.monsterRank = 'A';
         }
-        
-        // 目標数だけヘックスを取得
-        const assignedHexes = rankCandidates.slice(0, targetCount);
-        assignedHexes.forEach(h => h.properties.monsterRank = rank);
-        
-        // 割り当て済みのヘックスを候補から除外
-        const assignedIndexes = new Set(assignedHexes.map(h => getIndex(h.col, h.row)));
-        candidateHexes = candidateHexes.filter(h => !assignedIndexes.has(getIndex(h.col, h.row)));
-    };
-
-    // Aランク (10%): 魔力の濃い深い森 or 高山
-    assignRank('A',
-        h => (h.properties.vegetation === '密林' || h.properties.elevation > 3000) && h.properties.manaValue > 0.7,
-        (a, b) => b.properties.manaValue - a.properties.manaValue,
-        0.10
-    );
-
-    // Bランク (10%): 深い森 or 高い山
-    assignRank('B',
-        h => ['密林', '針葉樹林'].includes(h.properties.vegetation) || h.properties.elevation > 2000,
-        (a, b) => b.properties.elevation - a.properties.elevation,
-        0.10
-    );
-
-    // Cランク (30%): 人里離れた場所
-    assignRank('C',
-        h => !civilizedHexIndexes.has(getIndex(h.col, h.row)),
-        () => Math.random() - 0.5, // ランダムにシャッフル
-        0.30
-    );
-
-    // Dランク (50%): 残りのうち、人口が少ない場所
-    // 割合指定ではなく、残りの候補全てを対象とする
-    candidateHexes.forEach(h => {
-        if (h.properties.population < 500) {
-            h.properties.monsterRank = 'D';
+        // Bランク (大海蛇等): 外洋(海岸から5ヘックス以上離れている)
+        else if (dist > 4 && p.elevation < -200) {
+            p.monsterRank = 'B';
+        }
+        // Cランク (シーサーペント等): 沿岸(海岸から5ヘックス以内)
+        else if (dist <= 4) {
+            p.monsterRank = 'C';
+        }
+        // Dランク (大型魚等): 浅瀬のどこにでもいる
+        else {
+            p.monsterRank = 'D';
         }
     });
+
+    // ★★★ 海上ロジックここまで ★★★
+
+    // --- STEP 4: 陸上の A, B, C, Dランクの割り当て (既存ロジック) ---
+    const assignRank = (rank, criteria, sortLogic, percentage) => {
+        if (landCandidates.length === 0) return;
+        const targetCount = Math.floor(allHexes.filter(h => !h.properties.isWater).length * percentage);
+        let rankCandidates = landCandidates.filter(criteria);
+        if (sortLogic) { rankCandidates.sort(sortLogic); }
+        const assignedHexes = rankCandidates.slice(0, targetCount);
+        assignedHexes.forEach(h => h.properties.monsterRank = rank);
+        const assignedIndexes = new Set(assignedHexes.map(h => getIndex(h.col, h.row)));
+        landCandidates = landCandidates.filter(h => !assignedIndexes.has(getIndex(h.col, h.row)));
+    };
+
+    assignRank('A', h => (h.properties.vegetation === '密林' || h.properties.elevation > 3000) && h.properties.manaValue > 0.7, (a, b) => b.properties.manaValue - a.properties.manaValue, 0.10);
+    assignRank('B', h => ['密林', '針葉樹林'].includes(h.properties.vegetation) || h.properties.elevation > 2000, (a, b) => b.properties.elevation - a.properties.elevation, 0.10);
+    assignRank('C', h => !civilizedHexIndexes.has(getIndex(h.col, h.row)), () => Math.random() - 0.5, 0.30);
+    landCandidates.forEach(h => { if (h.properties.population < 500) { h.properties.monsterRank = 'D'; } });
 
     return allHexes;
 }
