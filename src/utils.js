@@ -50,3 +50,35 @@ export function formatProgressBar({ current, total, prefix = "", barWidth = 40 }
 
     return `${prefix} [${bar}] ${percent}% (${current}/${total})`;
 }
+
+/**
+ * ヘックスの位置情報を指定されたフォーマットの文字列に変換する
+ * @param {object} hexData - ヘックスのデータオブジェクト (x, y, properties.elevation を持つ)
+ * @param {string} formatType - 'full', 'short', 'coords', 'elevation' のいずれか
+ * @returns {string} フォーマットされた位置情報文字列
+ */
+export function formatLocation(hexData, formatType) {
+    if (!hexData) return 'N/A';
+
+    const p = hexData.properties || {};
+    const x = String(hexData.x || 0).padStart(3, '0');
+    const y = String(hexData.y || 0).padStart(3, '0');
+    const elevation = Math.round(p.elevation || 0);
+
+    const isDepth = elevation < 0;
+    const elevLabel = isDepth ? 'D' : 'H';
+    const elevValue = isDepth ? Math.abs(elevation) : elevation;
+
+    switch (formatType) {
+        case 'full':
+            return `E ${x} N ${y} ${elevLabel} ${elevValue}`;
+        case 'short':
+            return `${x}-${y} ${elevLabel} ${elevValue}`;
+        case 'coords':
+            return `${x}-${y}`;
+        case 'elevation':
+            return `${elevLabel} ${elevValue}`;
+        default:
+            return `${x}-${y}`;
+    }
+}

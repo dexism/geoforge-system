@@ -8,7 +8,7 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { getIndex, formatProgressBar } from './utils.js';
+import { getIndex, formatProgressBar, formatLocation } from './utils.js';
 
 // --- グローバル変数 ---
 // 全ての描画レイヤー（<g>要素）を管理するオブジェクト
@@ -473,9 +473,13 @@ function getInfoText(d) {
     const population = p.population ?? 0;
     const cultivatedArea = p.cultivatedArea ?? 0;
     const habitability = p.habitability ?? 0;
+
+    // 標高/水深の表示を切り替える変数を定義
+    const elevationLabel = p.elevation < 0 ? '水深' : '標高';
+    const elevationValue = p.elevation < 0 ? Math.abs(Math.round(p.elevation)) : Math.round(p.elevation);
     
     // --- 全ての情報を結合して最終的なテキストを生成 ---
-    let text =  `座標　　：E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}\n` +
+    let text =  `位置　　：E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}\n` +
                 `所属国家：${nationName}\n` +
                 `直轄上位：${superiorText}\n`+
                 `土地利用： ${landUseText}\n` +
@@ -484,7 +488,7 @@ function getInfoText(d) {
                 `居住適性： ${habitability.toFixed(1)}\n` +
                 `\n--- 土地詳細 ---\n` +
                 `気候帯　： ${p.climateZone}\n` +
-                `標高　　： ${Math.round(p.elevation)}m\n` +
+                `${elevationLabel}　　： ${elevationValue}m\n` + // 標高/水深
                 `気温　　： ${p.temperature.toFixed(1)}℃\n` +
                 `降水量　： ${p.precipitation_mm.toFixed(0)}mm/年\n` +
                 `魔力　　： ${p.manaRank}\n` +
@@ -600,8 +604,15 @@ function updateVisibleHexes(transform) {
                 .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
                 .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
                 .attr('fill', d => {
-                    if (d.properties.isWater) return config.TERRAIN_COLORS[d.properties.vegetation] || config.TERRAIN_COLORS['海洋'];
-                    return config.getElevationColor(d.properties.elevation);
+                    // ★★★ ここから修正 ★★★
+                    const p = d.properties;
+                    // ヘックスが「水域」かつ「標高が0より大きい」場合、それは湖沼
+                    if (p.isWater && p.elevation > 0) {
+                        return config.TERRAIN_COLORS['湖沼'];
+                    }
+                    // それ以外（陸地および海洋）の場合は、標高/水深に応じたグラデーションを適用
+                    return config.getElevationColor(p.elevation);
+                    // ★★★ 修正ここまで ★★★
                 })
                 .attr('stroke', 'none'),
             update => update,
@@ -679,7 +690,8 @@ function updateVisibleHexes(transform) {
     // 4e. レリーフ（陰影）レイヤー
     if (layers.shading.visible) {
         layers.shading.group.selectAll('.shading-hex')
-            .data(visibleLandHexes, d => d.index)
+            // ★★★ ここのデータソースを visibleLandHexes から visibleHexes に変更 ★★★
+            .data(visibleHexes, d => d.index)
             .join(
                 enter => enter.append('polygon')
                     .attr('class', 'shading-hex')
@@ -781,14 +793,15 @@ function updateVisibleHexes(transform) {
         .attr('dominant-baseline', 'middle');
 
     // 1行目: 座標
+    // 1行目: 座標 (汎用関数を利用)
     coordinateLabel.append('tspan')
-        .text(d => `${String(d.x).padStart(3, '0')} ${String(d.y).padStart(3, '0')}`);
+        .text(d => formatLocation(d, 'coords'));
 
-    // 2行目: 標高
+    // 2行目: 標高 (汎用関数を利用)
     coordinateLabel.append('tspan')
         .attr('x', d => d.cx) // X座標を親と同じ位置にリセット
-        .attr('dy', '1.0em')  // 1.2文字分だけ下にずらす (改行)
-        .text(d => `H ${Math.round(d.properties.elevation)}`);
+        .attr('dy', '1.0em')  // 1.0文字分だけ下にずらす
+        .text(d => formatLocation(d, 'elevation'));
     
     if (layers.settlement.visible) {
         hexLabelGroups.filter(d => d.properties.settlement)
@@ -815,6 +828,44 @@ function updateVisibleHexes(transform) {
         .style('display', effectiveRadius >= 50 ? 'inline' : 'none');
 
     // インタラクションレイヤー
+
+    const getTooltipText = (d) => {
+        const p = d.properties;
+        const settlementType = (p.settlement || '未開地').padEnd(2, '　');
+        // 新しい汎用関数を呼び出し、「省略位置」フォーマットを指定
+        const locationText = formatLocation(d, 'short'); 
+        const populationText = `人口：${(p.population || 0).toLocaleString()}人`;
+
+        let text = `${settlementType}：${locationText}\n${populationText}`;
+
+        // --- 親集落の階層をたどって表示 ---
+        if (p.parentHexId !== null) {
+            text += `\n---`;
+            let currentHex = d;
+            let safety = 0; // 無限ループ防止
+            while (currentHex && currentHex.properties.parentHexId !== null && safety < 10) {
+                const parentHex = hexes[currentHex.properties.parentHexId];
+                if (!parentHex) break;
+                
+                const parentType = (parentHex.properties.settlement || '').padEnd(2, '　'); // 2文字になるよう空白で埋める
+                // 親の座標は「座標のみ」フォーマットを指定
+                const parentCoords = formatLocation(parentHex, 'coords'); 
+                text += `\n${parentType}：${parentCoords}`; // 括弧で囲む
+                
+                currentHex = parentHex;
+                safety++;
+            }
+        }
+        
+        // --- 国家情報を表示 ---
+        const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] 
+            ? config.NATION_NAMES[p.nationId - 1] 
+            : '辺境';
+        text += `\n国家：${nationName}`;
+
+        return text;
+    };
+
     layers.interaction.group.selectAll('.interactive-hex')
         .data(visibleHexes, d => d.index)
         .join(
@@ -823,8 +874,11 @@ function updateVisibleHexes(transform) {
                     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
                     .style('fill', 'transparent')
                     .style('cursor', 'pointer');
-                newHexes.append('title').text(d => getInfoText(d));
+                
+                newHexes.append('title').text(d => getTooltipText(d));
+                
                 newHexes.on('click', (event, d) => {
+                    // (クリック時の処理は変更なし)
                     const highlightLayer = layers['highlight-overlay'].group;
                     highlightLayer.selectAll('*').remove();
                     const p = d.properties;
@@ -872,11 +926,8 @@ function updateVisibleHexes(transform) {
                                     .style('fill-opacity', 1.0)
                                     .style('pointer-events', 'none');
                                 
-                                // ★★★ ここから経路描画ロジックを追加 ★★★
                                 const childIndex = d.index;
                                 const parentIndex = superiorHex.index;
-
-                                // 該当する道路を検索
                                 const targetRoad = roadPathsData.find(road => {
                                     if (road.path.length < 2) return false;
                                     const startNodeIndex = getIndex(road.path[0].x, road.path[0].y);
@@ -903,8 +954,6 @@ function updateVisibleHexes(transform) {
                                         const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
                                         pathSegments.push({ path: pathString });
                                     }
-
-                                    // 経路をハイライトレイヤーに描画
                                     highlightLayer.selectAll('.connection-path')
                                         .data(pathSegments)
                                         .enter()
@@ -912,11 +961,10 @@ function updateVisibleHexes(transform) {
                                         .attr('class', 'connection-path')
                                         .attr('d', segment => segment.path)
                                         .attr('stroke', 'cyan')
-                                        .attr('stroke-width', 4) // 常に4px
+                                        .attr('stroke-width', 4)
                                         .attr('fill', 'none')
                                         .style('pointer-events', 'none');
                                 }
-                                // ★★★ 経路描画ロジックここまで ★★★
                             }
                         }
                     }
@@ -933,7 +981,7 @@ function updateVisibleHexes(transform) {
                 return newHexes;
             },
             update => {
-                update.select('title').text(d => getInfoText(d));
+                update.select('title').text(d => getTooltipText(d));
                 return update;
             },
             exit => exit.remove()

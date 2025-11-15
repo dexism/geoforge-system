@@ -69,9 +69,19 @@ function generateBaseProperties(col, row) {
     landStrength = Math.max(0, landStrength);
     const isWater = landStrength < config.SEA_LEVEL;
 
-    // --- 2. 陸地に地形の起伏を追加 ---
+    // --- 2. 陸地と水深の標高を計算 ---
     let elevation = 0;
-    if (!isWater) {
+    if (isWater) {
+        // ★★★ ここから修正 ★★★
+        // 水深を計算するスケールを定義
+        // landStrengthがSEA_LEVELに近いほど浅く(0m)、0に近いほど深く(-5000m)なる
+        const depthScale = d3.scaleLinear()
+            .domain([config.SEA_LEVEL, 0])
+            .range([0, -1000]) // 水深0mから-5000mの範囲
+            .clamp(true);
+        elevation = depthScale(landStrength);
+        // ★★★ 修正ここまで ★★★
+    } else {
         // 1. 海岸線に近いほど、標高全体を抑制する係数を計算する
         // landStrengthがSEA_LEVELに近いほど0.0に、1.0に近づくほど1.0になる係数
         // これにより、内陸に行くほど本来の標高に近づく
@@ -93,13 +103,15 @@ function generateBaseProperties(col, row) {
         details *= config.DETAIL_HEIGHT_MAX;
         
         // 3. 計算した標高に、海岸線抑制係数を乗算する
-        elevation = (mountain + hills + details) * coastalDampeningFactor;
+        const finalElevation = (mountain + hills + details) * coastalDampeningFactor;
+        elevation = config.elevationScale(finalElevation);
     }
 
     // --- 3. 気温と標高を計算 ---
     const properties = {};
     properties.isWater = isWater;
-    properties.elevation = isWater ? 0 : config.elevationScale(elevation);
+    // properties.elevation = isWater ? 0 : config.elevationScale(elevation);
+    properties.elevation = Math.round(elevation);
     const latitude = row / config.ROWS;
     const baseTemp = 0 + (latitude * 40);
     properties.climate = baseTemp + climateNoise(nx, ny) * 5;
@@ -577,7 +589,7 @@ function calculateFinalProperties(allHexes) {
         
         // これまで計算した適性に、標高係数を乗算する
         agriPotential *= elevationFactor;
-        
+
         properties.agriPotential = Math.min(1.0, agriPotential);
 
         properties.forestPotential = properties.landUse.forest || 0;

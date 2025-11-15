@@ -123,7 +123,7 @@ export const POPULATION_PARAMS = {
     MAX_POPULATION_PER_HEX: 50000,
 
     // 人口の集中度合いを調整する指数。値が大きいほど、ごく一部の好立地に人口が集中する。
-    POPULATION_CURVE: 9.0,
+    POPULATION_CURVE: 10.0,
 };
 export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面積(ha)
     '小麦': { yield: 0.60, type: '畑作', cultivation_ha_per_person: 1.5 },
@@ -259,7 +259,15 @@ const elevationColor_1k_2k   = d3.scaleLinear().domain([1000, 2000]).range(['#a8
 const elevationColor_2k_3k   = d3.scaleLinear().domain([2000, 3000]).range(['#dcd5c9', '#c2a383']);
 const elevationColor_3k_4k   = d3.scaleLinear().domain([3000, 4000]).range(['#c2a383', '#b0b0b0']);
 const elevationColor_4k_plus = d3.scaleLinear().domain([4000, 7000]).range(['#b0b0b0', '#ffffff']);
+const depthColor = d3.scaleLinear()
+    .domain([0, -1000]) // 水深0mから-5000m
+    .range(['#5ae', '#136']) // 明るい青から暗い青へ
+    .clamp(true);
+
 export function getElevationColor(elevation) {
+    if (elevation <= 0) {
+        return depthColor(elevation); // 標高が0以下なら水深の色を返す
+    }
     if (elevation < 1000) return elevationColor_0_1k(elevation);
     if (elevation < 2000) return elevationColor_1k_2k(elevation);
     if (elevation < 3000) return elevationColor_2k_3k(elevation);

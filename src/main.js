@@ -153,7 +153,7 @@ async function runStep3_Settlements() {
     await addLogMessage("集落と人口分布を再描画しています...");
     await redrawSettlements(worldData.allHexes);
     
-    populationDisplay.style.display = 'block';
+    // populationDisplay.style.display = 'block';
 
     updateButtonStates(3);
     loadingOverlay.style.display = 'none';
@@ -429,7 +429,7 @@ async function loadExistingWorld() {
             await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage);
             uiInitialized = true;
 
-            populationDisplay.style.display = 'block';
+            // populationDisplay.style.display = 'block';
             
             updateButtonStates(4); // 読み込み完了時は全ステップ完了済み
             loadingOverlay.style.display = 'none';
