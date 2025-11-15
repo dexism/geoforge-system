@@ -45,6 +45,21 @@ export const DETAIL_HEIGHT_MAX =           0.1;  // 細かい起伏の最大標�
 // exponent > 1にすることで、低い土地はより低く、高い土地はより高くなり、メリハリがつく
 export const elevationScale = d3.scalePow().exponent(1.2).domain([0.0, 5.0]).range([0, 7000]).clamp(true);
 
+// --- 大陸棚の生成 ---
+export const SHELF_PARAMS = {
+    // 大陸棚の基本的な幅（ヘックス数）。2 = 20km
+    BASE_WIDTH_HEXES: 2,
+    // ノイズによって変動する大陸棚の追加幅（ヘックス数）。8 = 80km
+    // BASE + NOISE で、20km～100kmの範囲で大陸棚が変動する
+    NOISE_WIDTH_HEXES: 8,
+    // 大陸棚の幅を変動させるためのノイズ周波数
+    NOISE_FREQ: 5.0,
+    // 大陸棚の最大水深 (m)
+    MAX_DEPTH: -200,
+    // 最深部の水深 (m)
+    ABYSSAL_DEPTH: -4000
+};
+
 // ================================================================
 // ■ 3. 気候・植生パラメータ
 // ================================================================
@@ -259,15 +274,29 @@ const elevationColor_1k_2k   = d3.scaleLinear().domain([1000, 2000]).range(['#a8
 const elevationColor_2k_3k   = d3.scaleLinear().domain([2000, 3000]).range(['#dcd5c9', '#c2a383']);
 const elevationColor_3k_4k   = d3.scaleLinear().domain([3000, 4000]).range(['#c2a383', '#b0b0b0']);
 const elevationColor_4k_plus = d3.scaleLinear().domain([4000, 7000]).range(['#b0b0b0', '#ffffff']);
-const depthColor = d3.scaleLinear()
-    .domain([0, -2000]) // 水深0mから-5000m
-    .range(['#5ae', '#136']) // 明るい青から暗い青へ
+// --- 水深のカラースケールを2段階で定義 ---
+// 1. 大陸棚 (0m ～ -200m)
+const shelfDepthColor = d3.scaleLinear()
+    .domain([0, SHELF_PARAMS.MAX_DEPTH])
+    .range(['#8cf', '#37b']) // 明るい水色 -> 青
+    .clamp(true);
+
+// 2. 深海 (-200m ～ 最深部)
+const abyssalDepthColor = d3.scaleLinear()
+    .domain([SHELF_PARAMS.MAX_DEPTH, SHELF_PARAMS.ABYSSAL_DEPTH])
+    .range(['#26a', '#136']) // 青 -> 深い藍色
     .clamp(true);
 
 export function getElevationColor(elevation) {
     if (elevation <= 0) {
-        return depthColor(elevation); // 標高が0以下なら水深の色を返す
+        // 水深に応じて、使用するカラースケールを切り替える
+        if (elevation > SHELF_PARAMS.MAX_DEPTH) {
+            return shelfDepthColor(elevation); // 大陸棚の色
+        } else {
+            return abyssalDepthColor(elevation); // 深海の色
+        }
     }
+    // 陸地の標高による色分け (変更なし)
     if (elevation < 1000) return elevationColor_0_1k(elevation);
     if (elevation < 2000) return elevationColor_1k_2k(elevation);
     if (elevation < 3000) return elevationColor_2k_3k(elevation);
@@ -275,11 +304,10 @@ export function getElevationColor(elevation) {
     return elevationColor_4k_plus(elevation);
 }
 export const TERRAIN_COLORS = { 
-    深海: '#136', 
-    海洋: '#248', 
     湖沼: '#058', 
     河川: '#37b',
-    砂漠: '#edc', 
+    砂浜: '#eeb',
+    砂漠: '#fca', 
     森林: '#7a5', 
     針葉樹林: '#475', 
     密林: '#262', 
@@ -325,7 +353,7 @@ export const forestColor = d3.scaleSequential(d3.interpolateYlGn).domain([0, 1])
 export const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 1]);  // 鉱業適性
 export const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]); // 漁業適性
 export const huntingColor = d3.scaleSequential(d3.interpolateYlOrBr).domain([0, 1]);  // 狩猟適性
-export const populationColor = d3.scaleLog().domain([1, 150000]).range(["black", "red"]).clamp(true);
+export const populationColor = d3.scaleLog().domain([1, POPULATION_PARAMS.MAX_POPULATION_PER_HEX]).range(["black", "red"]).clamp(true);
 
 // 白地図の配色
 export const WHITE_MAP_COLORS = { WATER: '#aaa' };

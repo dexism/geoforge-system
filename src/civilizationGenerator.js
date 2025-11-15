@@ -2,6 +2,7 @@
 // GeoForge System - 文明生成モジュール (v2.4 - 首都直轄モデル)
 // ================================================================
 
+import * as d3 from 'd3';
 import * as config from './config.js';
 import { getDistance, getIndex } from './utils.js';
 import { generateTradeRoutes, generateFeederRoads } from './roadGenerator.js';
@@ -28,7 +29,6 @@ function generatePopulation(allHexes) {
         const p = h.properties;
         let score = 0;
 
-        // いったん全ての陸地でスコアを計算する
         if (!p.isWater) {
             score += p.agriPotential * 30;
             score += p.fishingPotential * 20;
@@ -43,19 +43,37 @@ function generatePopulation(allHexes) {
             score += p.miningPotential * 5;
             score += p.forestPotential * 5;
 
+            // 隣接する最も深い海のヘックスを探す
+            let deepestNeighborDepth = 0;
+            h.neighbors.forEach(nIndex => {
+                const neighbor = allHexes[nIndex];
+                // 隣が海であり、現在の最大水深よりも深い場合
+                if (neighbor.properties.isWater && neighbor.properties.elevation < deepestNeighborDepth) {
+                    deepestNeighborDepth = neighbor.properties.elevation;
+                }
+            });
+
+            // 隣に海がある場合のみボーナスを計算
+            if (deepestNeighborDepth < 0) {
+                // 水深-20mを理想とし、そこから離れるほどボーナスが減少するスケール
+                const portBonusScale = d3.scaleLinear()
+                    .domain([0, -20, -100]) // 0m, -20m(理想), -100m
+                    .range([0, 1, 0])      // ボーナス 0 -> 1 -> 0
+                    .clamp(true);
+                
+                // 居住適性スコアに最大15点のボーナスを追加
+                score += portBonusScale(deepestNeighborDepth) * 15;
+            }
+
             // 特定の植生タイプに対して厳しいペナルティを課す
-            // スコアを乗算で減らすことで、元のスコアが高いほどペナルティの影響が大きくなる
             switch (p.vegetation) {
                 case '高山':
-                    // 非常に厳しいペナルティ (元のスコアの10%に)
                     score *= 0.1; 
                     break;
                 case '砂漠':
-                    // 厳しいペナルティ (元のスコアの20%に)
                     score *= 0.2;
                     break;
                 case '湿地':
-                    // 中程度のペナルティ (元のスコアの40%に)
                     score *= 0.4;
                     break;
             }
@@ -71,22 +89,14 @@ function generatePopulation(allHexes) {
     allHexes.forEach(h => {
         const p = h.properties;
         if (maxHabitability > 0) {
-            // スコアを 0.0 - 1.0 の範囲に正規化
             const normalizedHabitability = p.habitability / maxHabitability;
 
-            // 足切り判定
             if (normalizedHabitability >= config.POPULATION_PARAMS.HABITABILITY_THRESHOLD) {
                 const effectiveHabitability = (normalizedHabitability - config.POPULATION_PARAMS.HABITABILITY_THRESHOLD) / (1.0 - config.POPULATION_PARAMS.HABITABILITY_THRESHOLD);
                 const populationFactor = Math.pow(effectiveHabitability, config.POPULATION_PARAMS.POPULATION_CURVE);
                 const calculatedPopulation = Math.floor(populationFactor * config.POPULATION_PARAMS.MAX_POPULATION_PER_HEX);
                 
-                // 10人以下のヘックスは人口0とする
-                if (calculatedPopulation <= 10) {
-                    p.population = 0;
-                } else {
-                    p.population = calculatedPopulation;
-                }
-
+                p.population = (calculatedPopulation > 10) ? calculatedPopulation : 0;
             } else {
                 p.population = 0;
             }
@@ -94,7 +104,6 @@ function generatePopulation(allHexes) {
             p.population = 0;
         }
 
-        // プロパティの初期化
         p.settlement = null;
         p.nationId = 0;
         p.parentHexId = null;
@@ -294,39 +303,44 @@ export async function generateCivilization(allHexes, addLogMessage) {
     return { allHexes, roadPaths: [] };
 }
 
-export { defineNations, assignTerritoriesByTradeRoutes };
-
 export async function determineTerritories(allHexes, addLogMessage) {
-    await addLogMessage("国家の最終的な領土を確定させています...");
+    await addLogMessage("国家と辺境勢力の最終的な領域を確定させています...");
 
-    const queue = allHexes.filter(h => h.properties.nationId > 0);
+    // --- STEP 1: 全てのヘックスの最終的な支配者(territoryId)を決定する ---
+    allHexes.forEach(h => {
+        if (h.properties.isWater) {
+            h.properties.territoryId = null;
+            return;
+        }
+
+        let hub = h;
+        const visitedInLoop = new Set(); // 無限ループ防止用
+        // 親をたどれるだけたどり、最上位の支配者を探す
+        while (hub.properties.parentHexId !== null && !visitedInLoop.has(getIndex(hub.col, hub.row))) {
+            visitedInLoop.add(getIndex(hub.col, hub.row));
+            const parent = allHexes[hub.properties.parentHexId];
+            if (!parent) break;
+            hub = parent;
+        }
+        h.properties.territoryId = getIndex(hub.col, hub.row);
+    });
+
+    // --- STEP 2: どの勢力にも属さない空白地を、最も近い勢力に併合させる ---
+    const queue = allHexes.filter(h => h.properties.territoryId !== null);
     const visited = new Set(queue.map(h => getIndex(h.col, h.row)));
     let head = 0;
 
     while (head < queue.length) {
         const currentHex = queue[head++];
         
-        // territoryId の設定ロジックは変更なし
-        if (currentHex.properties.territoryId === null) {
-            let hub = currentHex;
-            let visitedLoop = new Set();
-            while(hub.properties.parentHexId !== null && !visitedLoop.has(getIndex(hub.col, hub.row))) {
-                visitedLoop.add(getIndex(hub.col, hub.row));
-                const parent = allHexes[hub.properties.parentHexId];
-                if (!parent) break;
-                hub = parent;
-            }
-            currentHex.properties.territoryId = getIndex(hub.col, hub.row);
-        }
-
-        // 近隣の「未所属」かつ「人口あり」のヘックスのみを自国領土に広げる
         currentHex.neighbors.forEach(neighborIndex => {
             if (!visited.has(neighborIndex)) {
                 visited.add(neighborIndex);
                 const neighborHex = allHexes[neighborIndex];
                 
-                // 条件を「人口が0より大きく、かつ未所属」に戻す
-                if (neighborHex.properties.population > 0 && neighborHex.properties.nationId === 0 && !neighborHex.properties.isWater) {
+                // 隣が水域でなく、まだどの勢力にも属していない場合
+                if (!neighborHex.properties.isWater && neighborHex.properties.territoryId === null) {
+                    // 自分の所属(国、支配者)を隣に伝播させる
                     neighborHex.properties.nationId = currentHex.properties.nationId;
                     neighborHex.properties.territoryId = currentHex.properties.territoryId;
                     queue.push(neighborHex);
@@ -335,12 +349,12 @@ export async function determineTerritories(allHexes, addLogMessage) {
         });
     }
 
-    await addLogMessage("領土の割り当てが完了しました。");
+    await addLogMessage("領域の割り当てが完了しました。");
     return allHexes;
 }
 
 /**
- * 魔物の分布を計算して各ヘックスにランクを割り当てる関数 (海上分布対応版)
+ * 魔物の分布を計算して各ヘックスにランクを割り当てる関数 (海上分布ロジック改善版)
  * @param {Array<object>} allHexes - 全てのヘックスデータ
  * @returns {Array<object>} - monsterRankプロパティが追加されたヘックスデータ
  */
@@ -356,39 +370,28 @@ export function generateMonsterDistribution(allHexes) {
         }
     });
 
-    // 陸地と海域の候補リストを作成
     let landCandidates = allHexes.filter(h => !h.properties.isWater);
     let seaCandidates = allHexes.filter(h => h.properties.isWater);
+    const totalSeaHexes = seaCandidates.length;
 
-    // --- STEP 2: 陸上のSランク決定 ---
+    // --- STEP 2: 陸上のSランク決定 (変更なし) ---
     const sRankLandCandidates = landCandidates.filter(h => {
         const p = h.properties;
         return p.vegetation === '密林' || p.elevation > 3000;
     });
     sRankLandCandidates.sort((a, b) => b.properties.manaValue - a.properties.manaValue);
-    const sRankLandHexes = sRankLandCandidates.slice(0, 4); // 陸上Sランクは4体
+    const sRankLandHexes = sRankLandCandidates.slice(0, 4);
     sRankLandHexes.forEach(h => h.properties.monsterRank = 'S');
     const sRankLandIndexes = new Set(sRankLandHexes.map(h => getIndex(h.col, h.row)));
     landCandidates = landCandidates.filter(h => !sRankLandIndexes.has(getIndex(h.col, h.row)));
 
-    // ★★★ ここから海上の魔物分布ロジックを追加 ★★★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // 【ここから海上の魔物分布ロジックを刷新】
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
-    // --- STEP 2.5: 海上のSランク（クラーケンなど）の決定 ---
-    // 候補：水深が深く(-800m以下)、魔力が濃い(0.8以上)海域
-    const sRankSeaCandidates = seaCandidates.filter(h => {
-        const p = h.properties;
-        return p.elevation < -800 && p.manaValue > 0.8;
-    });
-    sRankSeaCandidates.sort((a, b) => b.properties.manaValue - a.properties.manaValue);
-    const sRankSeaHexes = sRankSeaCandidates.slice(0, 2); // 海上Sランクも2体
-    sRankSeaHexes.forEach(h => h.properties.monsterRank = 'S');
-    const sRankSeaIndexes = new Set(sRankSeaHexes.map(h => getIndex(h.col, h.row)));
-    seaCandidates = seaCandidates.filter(h => !sRankSeaIndexes.has(getIndex(h.col, h.row)));
-
-    // --- STEP 3: 海上の A, B, C, D ランクの決定 ---
-    // 海岸からの距離を事前計算（効率化のため）
+    // --- STEP 2.5: 海岸からの距離を事前計算 ---
     const distanceToCoast = new Map();
-    const queue = allHexes.filter(h => h.neighbors.some(n => !allHexes[n].properties.isWater));
+    const queue = allHexes.filter(h => h.properties.isWater && h.neighbors.some(n => !allHexes[n].properties.isWater));
     queue.forEach(h => distanceToCoast.set(getIndex(h.col, h.row), 1));
     let head = 0;
     while(head < queue.length) {
@@ -402,32 +405,65 @@ export function generateMonsterDistribution(allHexes) {
         });
     }
 
-    seaCandidates.forEach(h => {
-        const p = h.properties;
-        const dist = distanceToCoast.get(getIndex(h.col, h.row)) || 999;
+    // --- STEP 3: 海上の S, A, B, C, D ランクを割合ベースで割り当て ---
+    const assignSeaRank = (rank, criteria, sortLogic, percentage) => {
+        if (seaCandidates.length === 0) return;
+        
+        const targetCount = Math.floor(totalSeaHexes * percentage);
+        let rankCandidates = seaCandidates.filter(criteria);
+        
+        if (sortLogic) {
+            rankCandidates.sort(sortLogic);
+        } else {
+            // ソート指定がない場合はランダムにシャッフルして揺らぎを与える
+            rankCandidates.sort(() => Math.random() - 0.5);
+        }
+        
+        const assignedHexes = rankCandidates.slice(0, targetCount);
+        assignedHexes.forEach(h => h.properties.monsterRank = rank);
+        
+        const assignedIndexes = new Set(assignedHexes.map(h => getIndex(h.col, h.row)));
+        seaCandidates = seaCandidates.filter(h => !assignedIndexes.has(getIndex(h.col, h.row)));
+    };
 
-        // Aランク (リヴァイアサン等): 深海(-300m以下)で魔力が高い(0.6以上)
-        if (p.elevation < -300 && p.manaValue > 0.6) {
-            p.monsterRank = 'A';
-        }
-        // Bランク (大海蛇等): 外洋(海岸から5ヘックス以上離れている)
-        else if (dist > 4 && p.elevation < -200) {
-            p.monsterRank = 'B';
-        }
-        // Cランク (シーサーペント等): 沿岸(海岸から5ヘックス以内)
-        else if (dist <= 4) {
-            p.monsterRank = 'C';
-        }
-        // Dランク (大型魚等): 浅瀬のどこにでもいる
-        else {
-            p.monsterRank = 'D';
-        }
-    });
+    // Sランク (2ヶ所): 水深-2000m以下で魔力が最も高い場所
+    assignSeaRank('S',
+        h => h.properties.elevation < -150,
+        (a, b) => b.properties.manaValue - a.properties.manaValue,
+        2 / totalSeaHexes // 割合で指定
+    );
 
-    // ★★★ 海上ロジックここまで ★★★
+    // Aランク (海域の5%): 深海(-1500m以下)で魔力が高い場所
+    assignSeaRank('A',
+        h => h.properties.elevation < -150,
+        (a, b) => b.properties.manaValue - a.properties.manaValue,
+        0.05
+    );
 
-    // --- STEP 4: 陸上の A, B, C, Dランクの割り当て (既存ロジック) ---
-    const assignRank = (rank, criteria, sortLogic, percentage) => {
+    // Bランク (海域の15%): 外洋(海岸から5ヘックス以上)で水深が深い場所
+    assignSeaRank('B',
+        h => (distanceToCoast.get(getIndex(h.col, h.row)) || 999) > 5,
+        (a, b) => a.properties.elevation - b.properties.elevation, // より深い(値が小さい)方を優先
+        0.15
+    );
+
+    // Dランク (海域の50%): どこにでもいるが、主に浅瀬(-200mより浅い)
+    assignSeaRank('D',
+        h => h.properties.elevation > -150,
+        null, // ランダム
+        0.50
+    );
+
+    // Cランク: 残りのすべての海域
+    // (A, B, Dに選ばれなかった場所が自動的にCになる)
+    seaCandidates.forEach(h => h.properties.monsterRank = 'C');
+
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // 【海上ロジック刷新ここまで】
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+    // --- STEP 4: 陸上の A, B, C, Dランクの割り当て (変更なし) ---
+    const assignLandRank = (rank, criteria, sortLogic, percentage) => {
         if (landCandidates.length === 0) return;
         const targetCount = Math.floor(allHexes.filter(h => !h.properties.isWater).length * percentage);
         let rankCandidates = landCandidates.filter(criteria);
@@ -438,9 +474,9 @@ export function generateMonsterDistribution(allHexes) {
         landCandidates = landCandidates.filter(h => !assignedIndexes.has(getIndex(h.col, h.row)));
     };
 
-    assignRank('A', h => (h.properties.vegetation === '密林' || h.properties.elevation > 3000) && h.properties.manaValue > 0.7, (a, b) => b.properties.manaValue - a.properties.manaValue, 0.10);
-    assignRank('B', h => ['密林', '針葉樹林'].includes(h.properties.vegetation) || h.properties.elevation > 2000, (a, b) => b.properties.elevation - a.properties.elevation, 0.10);
-    assignRank('C', h => !civilizedHexIndexes.has(getIndex(h.col, h.row)), () => Math.random() - 0.5, 0.30);
+    assignLandRank('A', h => (h.properties.vegetation === '密林' || h.properties.elevation > 3000) && h.properties.manaValue > 0.7, (a, b) => b.properties.manaValue - a.properties.manaValue, 0.10);
+    assignLandRank('B', h => ['密林', '針葉樹林'].includes(h.properties.vegetation) || h.properties.elevation > 2000, (a, b) => b.properties.elevation - a.properties.elevation, 0.10);
+    assignLandRank('C', h => !civilizedHexIndexes.has(getIndex(h.col, h.row)), () => Math.random() - 0.5, 0.30);
     landCandidates.forEach(h => { if (h.properties.population < 500) { h.properties.monsterRank = 'D'; } });
 
     return allHexes;
@@ -549,3 +585,5 @@ export function generateLivestockPotential(allHexes) {
     });
     return allHexes;
 }
+
+export { defineNations, assignTerritoriesByTradeRoutes };

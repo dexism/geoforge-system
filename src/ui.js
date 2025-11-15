@@ -87,7 +87,7 @@ function getSharedEdgeMidpoint(hex1, hex2) {
 }
 
 /**
- * サイドバーの全体情報パネルを更新する
+ * サイドバーの全体情報パネルを更新する (辺境地帯の集計に対応)
  * @param {Array<object>} allHexes - 全てのヘックスデータ
  */
 function updateOverallInfo(allHexes) {
@@ -107,6 +107,11 @@ function updateOverallInfo(allHexes) {
         settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
     };
     const nationStats = new Map();
+    // ★★★ 辺境地帯用の集計オブジェクトを追加 ★★★
+    const frontierStats = {
+        population: 0,
+        settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
+    };
 
     // --- STEP 1: 全ヘックスを走査し、データ集計 ---
     allHexes.forEach(h => {
@@ -118,12 +123,11 @@ function updateOverallInfo(allHexes) {
 
         if (p.nationId > 0) {
             globalStats.nations.add(p.nationId);
-            // 国家別の集計
+            // 国家別の集計 (変更なし)
             if (!nationStats.has(p.nationId)) {
                 nationStats.set(p.nationId, {
                     name: config.NATION_NAMES[p.nationId - 1] || `国家${p.nationId}`,
-                    population: 0,
-                    capital: null,
+                    population: 0, capital: null,
                     settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
                 });
             }
@@ -131,53 +135,47 @@ function updateOverallInfo(allHexes) {
             currentNation.population += p.population || 0;
             if (p.settlement && currentNation.settlements[p.settlement] !== undefined) {
                 currentNation.settlements[p.settlement]++;
-                if (p.settlement === '首都') {
-                    currentNation.capital = h; // 首都のヘックス情報を保存
-                }
+                if (p.settlement === '首都') { currentNation.capital = h; }
+            }
+        } else {
+            // ★★★ nationIdが0の場合、辺境として集計 ★★★
+            frontierStats.population += p.population || 0;
+            if (p.settlement && frontierStats.settlements[p.settlement] !== undefined) {
+                frontierStats.settlements[p.settlement]++;
             }
         }
     });
 
-    // --- STEP 2: グローバル情報の描画 ---
+    // --- STEP 2: グローバル情報の描画 (変更なし) ---
     popEl.textContent = `${globalStats.population.toLocaleString()}人`;
     nationCountEl.textContent = `${globalStats.nations.size}カ国`;
-
-    const summaryText = [
-        `首${globalStats.settlements['首都']}`,
-        `領${globalStats.settlements['領都']}`,
-        `街${globalStats.settlements['街']}`,
-        `町${globalStats.settlements['町']}`,
-        `村${globalStats.settlements['村']}`
-    ].join(' ');
+    const summaryText = [`首${globalStats.settlements['首都']}`, `領${globalStats.settlements['領都']}`, `街${globalStats.settlements['街']}`, `町${globalStats.settlements['町']}`, `村${globalStats.settlements['村']}`].join(' ');
     settlementSummaryEl.textContent = summaryText;
 
     // --- STEP 3: 国家別情報の描画 ---
     const sortedNations = Array.from(nationStats.values()).sort((a, b) => a.name.localeCompare(b.name));
-    
     let nationsHtml = '';
     sortedNations.forEach(nation => {
-        const capitalCoords = nation.capital ? `(E${String(nation.capital.col).padStart(3, '0')}-N${String((config.ROWS-1)-nation.capital.row).padStart(3, '0')})` : '';
-        const nationSettlementSummary = [
-            `首${nation.settlements['首都']}`,
-            `領${nation.settlements['領都']}`,
-            `街${nation.settlements['街']}`,
-            `町${nation.settlements['町']}`,
-            `村${nation.settlements['村']}`
-        ].join(' ');
-
+        const capitalCoords = nation.capital ? `(${formatLocation(nation.capital, 'coords')})` : '';
+        const nationSettlementSummary = [`首${nation.settlements['首都']}`, `領${nation.settlements['領都']}`, `街${nation.settlements['街']}`, `町${nation.settlements['町']}`, `村${nation.settlements['村']}`].join(' ');
         nationsHtml += `
             <div class="nation-info-block">
                 <h5>${nation.name} <span>${capitalCoords}</span></h5>
-                <div class="info-line">
-                    <span>人口</span>
-                    <span>${nation.population.toLocaleString()}人</span>
-                </div>
-                <div class="info-line" style="justify-content: flex-start; font-size: 13px;">
-                    <span>${nationSettlementSummary}</span>
-                </div>
-            </div>
-        `;
+                <div class="info-line"><span>人口</span><span>${nation.population.toLocaleString()}人</span></div>
+                <div class="info-line" style="justify-content: flex-start; font-size: 13px;"><span>${nationSettlementSummary}</span></div>
+            </div>`;
     });
+
+    // ★★★ STEP 4: 辺境地帯情報の描画を追加 ★★★
+    if (frontierStats.population > 0) {
+        const frontierSettlementSummary = [`街${frontierStats.settlements['街']}`, `町${frontierStats.settlements['町']}`, `村${frontierStats.settlements['村']}`].join(' ');
+        nationsHtml += `
+            <div class="nation-info-block">
+                <h5>辺境</h5>
+                <div class="info-line"><span>人口</span><span>${frontierStats.population.toLocaleString()}人</span></div>
+                <div class="info-line" style="justify-content: flex-start; font-size: 13px;"><span>${frontierSettlementSummary}</span></div>
+            </div>`;
+    }
 
     nationsDetailsEl.innerHTML = nationsHtml;
 }
@@ -472,6 +470,7 @@ async function drawBeaches(hexes) {
         .attr('x2', d => d[1][0])
         .attr('y2', d => d[1][1])
         .attr('stroke', '#e6d8ad') // 砂浜の色
+        .attr('stroke', '#edb') // 砂浜の色
         .attr('stroke-width', 6)   // 幅6px
         .attr('stroke-linecap', 'round') // 線の端を丸くする
         .style('pointer-events', 'none');

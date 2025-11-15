@@ -19,7 +19,8 @@ let continentNoise,
     miningPotentialNoise, 
     precipitationNoise, 
     seasonalityNoise,
-    beachNoise;
+    beachNoise,
+    shelfNoise;
 
 /**
  * 全てのノイズ関数を新しいシードで再初期化する関数
@@ -40,6 +41,7 @@ function initializeNoiseFunctions() {
     precipitationNoise = createNoise2D(seedFn);
     seasonalityNoise = createNoise2D(seedFn);
     beachNoise = createNoise2D(seedFn);
+    shelfNoise = createNoise2D(seedFn);
 }
 
 /**
@@ -74,15 +76,9 @@ function generateBaseProperties(col, row) {
     // --- 2. 陸地と水深の標高を計算 ---
     let elevation = 0;
     if (isWater) {
-        // ★★★ ここから修正 ★★★
-        // 水深を計算するスケールを定義
-        // landStrengthがSEA_LEVELに近いほど浅く(0m)、0に近いほど深く(-5000m)なる
-        const depthScale = d3.scaleLinear()
-            .domain([config.SEA_LEVEL, 0])
-            .range([0, -1000]) // 水深0mから-5000mの範囲
-            .clamp(true);
-        elevation = depthScale(landStrength);
-        // ★★★ 修正ここまで ★★★
+        // ★★★ 修正箇所 ★★★
+        // ここでは何もしない。海の標高は一旦0のまま。
+        // 水深の計算は、大陸棚を生成する専門の関数で行う。
     } else {
         // 1. 海岸線に近いほど、標高全体を抑制する係数を計算する
         // landStrengthがSEA_LEVELに近いほど0.0に、1.0に近づくほど1.0になる係数
@@ -112,7 +108,6 @@ function generateBaseProperties(col, row) {
     // --- 3. 気温と標高を計算 ---
     const properties = {};
     properties.isWater = isWater;
-    // properties.elevation = isWater ? 0 : config.elevationScale(elevation);
     properties.elevation = Math.round(elevation);
     const latitude = row / config.ROWS;
     const baseTemp = 0 + (latitude * 40);
@@ -229,6 +224,71 @@ function applyGeographicPrecipitationEffects(allHexes) {
             h.properties.precipitation_mm = Math.max(0, h.properties.precipitation_mm + precipCorrections[index]);
             h.properties.precipitation = Math.min(1.0, h.properties.precipitation_mm / 3000);
         }
+    });
+}
+
+/**
+ * 第1.2パス：大陸棚と深海を生成する (深度揺らぎ対応版)
+ * 海ヘックスの標高（水深）を計算して設定する
+ * @param {Array<object>} allHexes - 全ヘックスのデータ
+ */
+function generateContinentalShelves(allHexes) {
+    // --- STEP 1: 海岸からの距離を計算 (BFSアルゴリズム) ---
+    const distanceFromLand = new Map();
+    const queue = allHexes.filter(h => 
+        h.properties.isWater && h.neighbors.some(n => !allHexes[n].properties.isWater)
+    );
+    queue.forEach(h => distanceFromLand.set(getIndex(h.col, h.row), 1));
+    
+    let head = 0;
+    while(head < queue.length) {
+        const current = queue[head++];
+        const dist = distanceFromLand.get(getIndex(current.col, current.row));
+        current.neighbors.forEach(nIdx => {
+            if (allHexes[nIdx].properties.isWater && !distanceFromLand.has(nIdx)) {
+                distanceFromLand.set(nIdx, dist + 1);
+                queue.push(allHexes[nIdx]);
+            }
+        });
+    }
+
+    // --- STEP 2: 各海ヘックスの水深を計算 ---
+    const C = config.SHELF_PARAMS;
+    const seaHexes = allHexes.filter(h => h.properties.isWater);
+
+    seaHexes.forEach(h => {
+        const p = h.properties;
+        const nx = h.col / config.COLS;
+        const ny = h.row / config.ROWS;
+        const noise = (shelfNoise(nx * C.NOISE_FREQ, ny * C.NOISE_FREQ) + 1) / 2; // 0..1
+
+        // その場所固有の大陸棚の幅をノイズで決定
+        const shelfWidthInHexes = C.BASE_WIDTH_HEXES + Math.floor(noise * C.NOISE_WIDTH_HEXES);
+        const dist = distanceFromLand.get(getIndex(h.col, h.row));
+
+        // ★★★ ここから修正 ★★★
+        // その場所固有の大陸棚の最大深度をノイズで決定 (-100m ～ -200m の範囲で揺らぐ)
+        const randomizedShelfDepth = C.MAX_DEPTH + noise * 100;
+
+        if (dist !== undefined && dist <= shelfWidthInHexes) {
+            // --- パターンA: 大陸棚の上にいる場合 ---
+            // 揺らぎのある深度に向かって緩やかに深くなるよう設定
+            const shelfSlope = d3.scaleLinear()
+                .domain([1, shelfWidthInHexes])
+                .range([-10, randomizedShelfDepth])
+                .clamp(true);
+            p.elevation = Math.round(shelfSlope(dist));
+        } else {
+            // --- パターンB: 大陸棚の外（深海）にいる場合 ---
+            // 揺らぎのある深度から最深部に向かって急激に深くなる
+            const landStrength = (continentNoise(nx * config.CONTINENT_NOISE_FREQ, ny * config.CONTINENT_NOISE_FREQ) + 1) / 2;
+            const abyssalSlope = d3.scaleLinear()
+                .domain([config.SEA_LEVEL * 0.8, 0])
+                .range([randomizedShelfDepth, C.ABYSSAL_DEPTH]) // 開始点を揺らぎのある深度に
+                .clamp(true);
+            p.elevation = Math.round(abyssalSlope(landStrength));
+        }
+        // ★★★ 修正ここまで ★★★
     });
 }
 
@@ -728,6 +788,10 @@ export async function generatePhysicalMap(addLogMessage) {
         ].filter(n => n.col >= 0 && n.col < config.COLS && n.row >= 0 && n.row < config.ROWS)
          .map(n => getIndex(n.col, n.row));
     });
+
+    // パス1.2：大陸棚の形成
+    await addLogMessage("大陸棚と深海を形成しています...");
+    generateContinentalShelves(allHexes);
 
     // パス2：水系を生成
     await addLogMessage("水系と河川を配置しています...");

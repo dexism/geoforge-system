@@ -353,7 +353,7 @@ function calculateTravelDays(path, roadLevel, allHexes) {
 }
 
 /**
- * ⑪～⑬ 下位の道路網を生成し、プログレスバーを表示する
+ * ⑪～⑬ 下位の道路網を生成する (孤立集落の所属決定ロジック追加版)
  * @param {Array<object>} lowerSettlements - 下位の集落リスト
  * @param {Array<object>} upperSettlements - 上位の集落リスト
  * @param {Array<object>} allHexes - 全ヘックスのデータ
@@ -364,263 +364,130 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
     const roadLevelMap = { '街': 4, '町': 3, '村': 2 };
     const roadLevel = roadLevelMap[type];
     const roadPaths = [];
-    if (lowerSettlements.length === 0 || upperSettlements.length === 0) return roadPaths;
+    if (lowerSettlements.length === 0) return roadPaths; // 下位集落がなければ終了
 
     const prefixMap = { '街': '街道:', '町': '町道:', '村': '村道:' };
     const prefix = prefixMap[type] || `${type}道:`;
-
-    const potentialRoutes = []; // 未所属集落の接続候補を格納する配列
-    const processedLower = new Set(); // 接続が確定した下位集落を管理
-
-    // --- フェーズ1: 接続候補の経路を、最適化しながら探索 ---
     const progressId = `feeder-road-scan-${type}`;
-    await addLogMessage(`${type}道：接続候補経路を探索中...`, progressId);
-    let processedCount = 0;
-    const totalCount = lowerSettlements.length;
-    let lastReportedPercent = -1;
+    await addLogMessage(`${type}道：主要な接続を探索中...`, progressId);
 
+    const costFunc = createCostFunction(allHexes, null);
     const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
     const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
 
+    const unprocessedSettlements = [];
+
+    // --- フェーズ1 & 2: 通常の最短経路接続 ---
     for (const lower of lowerSettlements) {
-        // --- [最適化1] 仕様3-1: 既に国土内の集落を優先処理 ---
-        if (lower.properties.nationId > 0) {
-            const sameNationUppers = upperSettlements.filter(u => u.properties.nationId === lower.properties.nationId);
-            
-            let closestUpper = null;
-            let minDistance = Infinity;
-
-            if (sameNationUppers.length > 0) {
-                sameNationUppers.forEach(upper => {
-                    const dist = getDistance(lower, upper);
-                    if (dist < minDistance) {
-                        minDistance = dist;
-                        closestUpper = upper;
-                    }
-                });
-            }
-
-            // 最寄りの自国上位集落への経路を確定ルートとして敷設
-            if (closestUpper) { // これで安全にチェックできる
-                const costFunc = createCostFunction(allHexes, lower.properties.nationId);
-                const result = findAStarPath({ start: { x: lower.col, y: lower.row }, goal: { x: closestUpper.col, y: closestUpper.row }, getNeighbors, heuristic, cost: costFunc });
-                
-                if (result) {
-                    const travelDays = calculateTravelDays(result.path, roadLevel, allHexes);
-                    // 移動日数が設定された上限を超えていないかチェック
-                    if (travelDays < config.MAX_TRAVEL_DAYS[roadLevel]) {
-                        result.path.forEach(pos => {
-                            const hex = allHexes[getIndex(pos.x, pos.y)];
-                            if (hex && !hex.properties.isWater) {
-                                hex.properties.nationId = lower.properties.nationId;
-                                if (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel) {
-                                    hex.properties.roadLevel = roadLevel;
-                                }
-                            }
-                        });
-
-                        const distance = calculateRoadDistance(result.path, roadLevel, allHexes);
-                        lower.properties.distanceToParent = distance;
-                        lower.properties.travelDaysToParent = travelDays;
-
-                        roadPaths.push({ path: result.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: lower.properties.nationId });
-                        lower.properties.parentHexId = getIndex(closestUpper.col, closestUpper.row);
-                        processedLower.add(getIndex(lower.col, lower.row));
-                    }
-                }
-            }
-        } 
-        // --- [最適化2] 仕様3-3: 未所属の集落は、近い上位集落に探索を限定 ---
-        // まだ国籍が決まっていない集落の場合、全ての候補ではなく、近傍の候補に絞って探索する。
-        else {
-            // ----------------------------------------------------------------
-            // STEP 1: 探索候補の絞り込み
-            // ----------------------------------------------------------------
-            // 全ての上位集落を、この下位集落(`lower`)からの直線距離が近い順に並び替える。
+        let bestRoute = null;
+        let minTravelDays = Infinity;
+        
+        // ★★★ 修正点1: 上位集落が存在する場合のみ探索を実行 ★★★
+        if (upperSettlements && upperSettlements.length > 0) {
             const sortedUppers = [...upperSettlements].sort((a, b) => getDistance(lower, a) - getDistance(lower, b));
-            
-            // 探索対象を、最も近い上位7つに限定する。
-            // これにより、例えば上位集落が20個あっても、7回しかA*探索を行わないため、
-            // 計算量を大幅に削減できる。
             const targetCandidates = sortedUppers.slice(0, 7);
 
-            // ----------------------------------------------------------------
-            // STEP 2: 限定された候補への経路探索
-            // ----------------------------------------------------------------
-            // この時点ではどの国に所属するか不明なため、国籍ボーナスなしのコスト関数を使用する。
-            const costFunc = createCostFunction(allHexes, null);
-            
-            // 限定された7つの候補に対してのみ、A*アルゴリズムで経路探索を実行する。
             for (const upper of targetCandidates) {
                 const result = findAStarPath({ 
                     start: { x: lower.col, y: lower.row }, 
                     goal: { x: upper.col, y: upper.row }, 
-                    getNeighbors, // ループの外で定義された共通関数
-                    heuristic,    // ループの外で定義された共通関数
-                    cost: costFunc 
+                    getNeighbors, heuristic, cost: costFunc 
                 });
-
-                // 経路が見つかった場合、移動日数を計算し、候補リスト(`potentialRoutes`)に追加する。
                 if (result) {
                     const travelDays = calculateTravelDays(result.path, roadLevel, allHexes);
-                    // 移動日数が設定された上限を超えていない場合のみ、接続候補に追加する
-                    if (travelDays < config.MAX_TRAVEL_DAYS[roadLevel]) {
-                        potentialRoutes.push({ 
-                            from: lower, 
-                            to: upper, 
-                            path: result.path, 
-                            travelDays: travelDays 
-                        });
+                    if (travelDays < (config.MAX_TRAVEL_DAYS[roadLevel] || Infinity) && travelDays < minTravelDays) {
+                        minTravelDays = travelDays;
+                        bestRoute = { from: lower, to: upper, path: result.path, travelDays: travelDays };
                     }
                 }
             }
         }
-        
-        processedCount++;
-        if (addLogMessage) {
-            const percent = Math.floor((processedCount / totalCount) * 100);
-            if (percent > lastReportedPercent) {
-                const message = formatProgressBar({ current: processedCount, total: totalCount, prefix: prefix });
-                await addLogMessage(message, progressId);
-                lastReportedPercent = percent;
-            }
-        }
-    }
 
-    // --- フェーズ2: 候補の中から、移動日数が少なく衝突のないルートを確定 ---
-    // await addLogMessage(`${type}道：最適な道路を敷設中...`);
-    potentialRoutes.sort((a, b) => a.travelDays - b.travelDays); // 仕様3-5: 移動日数が少ない順にソート
-    
-    for (const route of potentialRoutes) {
-        const lowerIndex = getIndex(route.from.col, route.from.row);
-        if (processedLower.has(lowerIndex)) continue; // 既に所属が確定した集落はスキップ
-
-        const targetNationId = route.to.properties.nationId;
-        if (targetNationId === 0) continue;
-
-        let hasConflict = false; // 仕様3-6
-        for (const pos of route.path) {
-            const hexNationId = allHexes[getIndex(pos.x, pos.y)].properties.nationId;
-            if (hexNationId !== 0 && hexNationId !== targetNationId) {
-                hasConflict = true;
-                break;
-            }
-        }
-        
-        if (!hasConflict) { // 仕様3-7
-            const nationId = route.to.properties.nationId;
-            route.from.properties.nationId = nationId;
-            route.from.properties.parentHexId = getIndex(route.to.col, route.to.row);
-
-            const distance = calculateRoadDistance(route.path, roadLevel, allHexes);
-            // travelDays は既に計算済みなので再利用
-            route.from.properties.distanceToParent = distance;
-            route.from.properties.travelDaysToParent = route.travelDays;
-            
-            route.path.forEach(pos => {
+        if (bestRoute) {
+            // (最短経路が見つかった場合の処理は変更なし)
+            const fromHex = bestRoute.from;
+            const toHex = bestRoute.to;
+            const newNationId = toHex.properties.nationId;
+            fromHex.properties.nationId = newNationId;
+            fromHex.properties.parentHexId = getIndex(toHex.col, toHex.row);
+            fromHex.properties.distanceToParent = calculateRoadDistance(bestRoute.path, roadLevel, allHexes);
+            fromHex.properties.travelDaysToParent = bestRoute.travelDays;
+            bestRoute.path.forEach(pos => {
                 const hex = allHexes[getIndex(pos.x, pos.y)];
                 if (hex && !hex.properties.isWater) {
-                    hex.properties.nationId = nationId;
-                    if (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel) {
-                        hex.properties.roadLevel = roadLevel;
-                    }
+                    if (hex.properties.nationId === 0) { hex.properties.nationId = newNationId; }
+                    if (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel) { hex.properties.roadLevel = roadLevel; }
                 }
             });
-            
-            roadPaths.push({ path: route.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: nationId });
-            processedLower.add(lowerIndex);
+            roadPaths.push({ path: bestRoute.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: newNationId });
+        } else {
+            unprocessedSettlements.push(lower);
         }
     }
 
-    // --- フェーズ3:最後まで国籍が決まらなかった辺境集落の処理 (仕様3-9) ---
-    const remainingLower = lowerSettlements.filter(l => !processedLower.has(getIndex(l.col, l.row)));
-    if (remainingLower.length > 0) {
-        await addLogMessage(`${type}：辺境地域の所属を決定中...`);
-        
-        remainingLower.forEach(lower => {
-            // この集落からの全仮経路の中から、最も日数が少ないものを探す
-            const ownRoutes = potentialRoutes.filter(r => getIndex(r.from.col, r.from.row) === getIndex(lower.col, lower.row));
-            if (ownRoutes.length === 0) return; // 接続候補が一つもなければスキップ
-            
-            const bestRoute = ownRoutes[0]; // ソート済みなので先頭が最短
-            
-            // 手順3-9: 経路をたどり、最初に衝突する他国領土を探す
-            let connectionPoint = null;
-            let connectionNationId = 0;
-            let pathToConnection = [];
+    // --- フェーズ3: 孤立集落の所属決定 ---
+    if (unprocessedSettlements.length > 0) {
+        await addLogMessage(`${type}：孤立集落の所属を決定中...`);
+        const activityRangeHexes = 30 / config.HEX_SIZE_KM;
 
-            for(const pos of bestRoute.path) {
-                pathToConnection.push(pos);
-                const hexNationId = allHexes[getIndex(pos.x, pos.y)].properties.nationId;
-                if (hexNationId !== 0) {
-                    connectionPoint = allHexes[getIndex(pos.x, pos.y)];
-                    connectionNationId = hexNationId;
-                    break;
+        for (const lower of unprocessedSettlements) {
+            let nearestCivilization = null;
+            let minDistance = Infinity;
+
+            for (let i = 0; i < allHexes.length; i++) {
+                const targetHex = allHexes[i];
+                const p = targetHex.properties;
+                // territoryIdがnullでないことを保証
+                if ((p.settlement || p.roadLevel > 0) && p.territoryId !== null) {
+                    const dist = getDistance(lower, targetHex);
+                    if (dist < activityRangeHexes && dist < minDistance) {
+                        minDistance = dist;
+                        nearestCivilization = targetHex;
+                    }
                 }
             }
 
-            if (connectionPoint) {
-                // 集落本体と経路上のヘックスに国籍を設定
-                lower.properties.nationId = connectionNationId;
-                pathToConnection.forEach(pos => {
-                    const hex = allHexes[getIndex(pos.x, pos.y)];
-                    if (hex) {
-                        hex.properties.nationId = connectionNationId;
-                        if (!hex.properties.isWater && (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel)) {
-                           hex.properties.roadLevel = roadLevel;
-                        }
-                    }
-                });
-                roadPaths.push({ path: pathToConnection.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: connectionNationId });
+            if (!nearestCivilization) continue;
 
-                // そこから一番近い「同じ国籍の」上位集落まで道を敷設する
-                const sameNationUppers = upperSettlements.filter(u => u.properties.nationId === connectionNationId);
-                if (sameNationUppers.length > 0) {
-                    let closestUpper = null;
-                    let minDistance = Infinity;
-                    sameNationUppers.forEach(upper => {
-                        const dist = getDistance(connectionPoint, upper);
-                        if(dist < minDistance) {
-                            minDistance = dist;
-                            closestUpper = upper;
+            let hub = allHexes[nearestCivilization.properties.territoryId];
+            if (!hub) continue;
+
+            const p_nearest = nearestCivilization.properties;
+            let finalHub = hub;
+
+            if (p_nearest.settlement && p_nearest.settlement === lower.properties.settlement) {
+                if (allHexes[p_nearest.parentHexId]) {
+                    finalHub = allHexes[p_nearest.parentHexId];
+                }
+            }
+            
+            const finalNationId = finalHub.properties.nationId;
+            const finalHubIndex = getIndex(finalHub.col, finalHub.row);
+
+            // ★★★ 修正点2: 探索のgoalが存在することを保証 ★★★
+            if (nearestCivilization) {
+                const result = findAStarPath({
+                    start: { x: lower.col, y: lower.row },
+                    goal: { x: nearestCivilization.col, y: nearestCivilization.row },
+                    getNeighbors, heuristic, cost: costFunc
+                });
+
+                if (result) {
+                    lower.properties.nationId = finalNationId;
+                    lower.properties.parentHexId = finalHubIndex;
+
+                    const newPath = result.path;
+                    newPath.forEach(pos => {
+                        const hex = allHexes[getIndex(pos.x, pos.y)];
+                        if (hex && !hex.properties.isWater) {
+                            if (hex.properties.nationId === 0) hex.properties.nationId = finalNationId;
+                            if (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel) hex.properties.roadLevel = roadLevel;
                         }
                     });
-                    
-                    if(closestUpper) {
-                        const costFunc = createCostFunction(allHexes, connectionNationId);
-                        const result = findAStarPath({ 
-                            start: { x: connectionPoint.col, y: connectionPoint.row }, 
-                            goal: { x: closestUpper.col, y: closestUpper.row }, 
-                            getNeighbors, // ループの外で定義された共通関数を使用
-                            heuristic,    // ループの外で定義された共通関数
-                            cost: costFunc 
-                        });
-                        
-                        if(result) {
-                             // 経路上のヘックスに国籍と道路レベルを設定
-                             result.path.forEach(pos => {
-                                const hex = allHexes[getIndex(pos.x, pos.y)];
-                                if (hex) {
-                                    hex.properties.nationId = connectionNationId;
-                                    if (!hex.properties.isWater && (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel)) {
-                                       hex.properties.roadLevel = roadLevel;
-                                    }
-                                }
-                             });
-                             roadPaths.push({ path: result.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: connectionNationId });
-                             
-                             // 最終的な親と距離・日数を設定
-                             lower.properties.parentHexId = getIndex(closestUpper.col, closestUpper.row);
-                             const fullPath = [...pathToConnection, ...result.path.slice(1)];
-                             const distance = calculateRoadDistance(fullPath, roadLevel, allHexes);
-                             const travelDays = calculateTravelDays(fullPath, roadLevel, allHexes);
-                             lower.properties.distanceToParent = distance;
-                             lower.properties.travelDaysToParent = travelDays;
-                        }
-                    }
+                    roadPaths.push({ path: newPath.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: finalNationId });
                 }
             }
-        });
+        }
     }
 
     return roadPaths;
