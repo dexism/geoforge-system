@@ -1,22 +1,22 @@
 :root {
-    --primary-color: #3498db;
+    --primary-color: #38c;
     --sidebar-width: 200px;
-    --sidebar-bg: rgba(10, 20, 40, 0.9);
-    --text-color: #e0e0e0;
+    --sidebar-bg: #123e;
+    --text-color: #eee;
 }
 
 html, body {
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background-color: #235;
+    background-color: #38c;
     font-family: sans-serif;
     font-size: 1.0rem;
     color: var(--text-color);
 }
 
 svg {
-    display: block; /* For main-content to fill height */
+    display: block;
     width: 100%;
     height: 100%;
 }
@@ -78,7 +78,8 @@ button.active:hover {
     left: 0;
     /* flex: 0 0 var(--sidebar-width); */
     flex: 0 0 auto;
-    padding: 1rem;
+    padding: 10px;
+    padding-top: 60px;
     box-sizing: border-box;
     background-color: var(--sidebar-bg);
     border-right: 1px solid #999;
@@ -93,7 +94,6 @@ button.active:hover {
 }
 .sidebar h3 { 
     margin-top: 0; 
-    /* margin-left: 50px; */
     text-align: center;
     font-size: 18px;
 }
@@ -158,9 +158,9 @@ button.active:hover {
    ================================================================ */
 #overall-info-container {
     padding: 5px 2px;
-    background-color: #0003;
+    background-color: #0008;
     border-radius: 5px;
-    margin: 32px 0 20px 0;
+    margin: 0 0 20px 0;
 }
 #overall-info-container summary {
     padding-bottom: 5px;
@@ -195,7 +195,7 @@ button.active:hover {
 .nation-info-block {
     padding-top: 10px;
     margin-top: 10px;
-    border-top: 1px solid #445;
+    border-top: 2px solid #445;
 }
 .nation-info-block h5 {
     display: flex;              /* ★★★ Flexboxを有効化 ★★★ */
@@ -208,7 +208,7 @@ button.active:hover {
 }
 /* 座標を表示するspan要素のスタイル */
 .nation-info-block h5 span {
-    font-size: 12px;
+    font-size: 13px;
     color: #ccc;
     font-weight: normal;
 }
@@ -230,9 +230,9 @@ button.active:hover {
    分割生成ボタンのスタイル
    ================================================================ */
 .generation-controls {
-    margin-top: 15px;
+    margin-top: 10px;
     padding-top: 10px;
-    border-top: 1px solid #334;
+    border-top: 2px solid #fff6;
 }
 
 .generation-controls .note {
@@ -267,7 +267,7 @@ button.active:hover {
 .legend-container {
     margin-top: 20px;
     padding: 10px;
-    background-color: rgba(0,0,0,0.2);
+    background-color: #0008;
     border-radius: 5px;
     display: none;
 }
@@ -405,24 +405,6 @@ button.active:hover {
 }
 
 /* ================================================================
-   画面情報 スタイル
-   ================================================================ */
-/* 人口表示用のコンテナ */
-#population-display {
-    position: absolute;
-    top: 10px;
-    right: 10px; /* 画面右上に配置 */
-    z-index: 10; /* UIボタンと同じ階層に表示 */
-    background-color: #000a; /* 半透明の黒背景 */
-    color: #fff; /* 白文字 */
-    padding: 8px 15px; /* 内側の余白 */
-    border-radius: 5px; /* 角を丸くする */
-    font-size: 16px;
-    font-weight: bold;
-    display: none; /* 起動時は非表示 */
-}
-
-/* ================================================================
    ヘックス内情報 スタイル
    ================================================================ */
 /* ラベル共通設定 */
@@ -469,19 +451,18 @@ button.active:hover {
     bottom: 10px;
     right: 10px;
     width: auto; 
-    max-width: 90vw; /* スマホ画面では幅を可変に */
-    max-height: 90dvh; /* 高くなりすぎないように制限 */
-    background-color: rgba(10, 20, 40, 0.95);
+    height: auto;
+    background-color: var(--sidebar-bg);
     color: #eee;
-    border: 1px solid #999;
+    border: 2px solid #fff;
     border-radius: 8px;
     z-index: 20; /* UIボタンより手前に表示 */
-    box-shadow: 0 4px 12px #0008;
+    box-shadow: 0 0 10px #000;
     font-size: 14px;
-    box-sizing: border-box;
     overflow: hidden;
     
     /* 表示・非表示のアニメーション */
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
     transition: opacity 0.2s ease-out, transform 0.2s ease-out;
     opacity: 1;
     transform: translateY(0);
@@ -498,7 +479,7 @@ button.active:hover {
     justify-content: space-between;
     align-items: center;
     padding: 8px 12px;
-    background-color: rgba(0,0,0,0.4);
+    background-color: #0008;
     border-bottom: 1px solid #999;
     font-weight: bold;
 }
@@ -509,7 +490,7 @@ button.active:hover {
     color: #fff;
     font-size: 1.8em;
     line-height: 1;
-    padding: 0 5px;
+    padding: 0;
     cursor: pointer;
     opacity: 0.7;
     text-align: right;
@@ -522,7 +503,7 @@ button.active:hover {
     padding: 12px;
     overflow-y: auto;
     /* (max-height - ヘッダーの高さ) で計算 */
-    max-height: calc(90dvh - 45px); 
+    max-height: calc(100dvh - 285px); 
     /* \n などの改行を正しく表示するための設定 */
     white-space: pre-wrap;
     line-height: 1.6;
@@ -555,7 +536,6 @@ button.active:hover {
     fill: none; /* 塗りつぶしはしない */
     stroke: #0003; /* 境界線の色 */
     stroke-width: 1.0px; /* 境界線の太さ */
-    /* stroke-opacity: 0.2; /* 透明度 */
     pointer-events: none; /* クリックイベントを透過させる */
 }
 
@@ -639,18 +619,12 @@ button.active:hover {
     width: 200px;
     height: 200px;
     border-radius: 10px;
-    border: 3px solid #fff;
-    background-color: #0005; /* 背景を少し暗くして見やすくする */
+    border: 2px solid #fff;
     box-shadow: 0 0 10px #000;
+    background-color: #000;
     z-index: 10;
-    opacity: 0.5; /* 全体を半透明にする */
-    transition: opacity 0.3s;
     display: none; /* 初期状態では非表示 */
     overflow: hidden;
-}
-
-#minimap-container:hover {
-    opacity: 1.0; /* マウスオーバーで不透明に */
 }
 
 #minimap-svg {
@@ -660,7 +634,7 @@ button.active:hover {
 
 /* ミニマップ内のビューポート矩形 */
 #minimap-viewport {
-    fill: #fff1; /* 半透明の白 */
+    fill: #0ff1; /* 半透明の白 */
     stroke: cyan;
-    stroke-width: 4px; /* SVG座標系での太さ */
+    stroke-width: 3px; /* SVG座標系での太さ */
 }

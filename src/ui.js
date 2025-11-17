@@ -1250,13 +1250,16 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             .attr('height', hexHeight * scale)
             .attr('fill', d => {
                 if (d.properties.isWater) return '#004'; // 海洋
-                if (d.properties.elevation >= 2000) return '#222'; // 山岳
                 if (d.properties.settlement === '首都') return '#f0f'; // 首都
-                if (d.properties.settlement === '都市' || d.properties.settlement === '領都') return '#f004'; // 領都
-                if (d.properties.settlement === '街') return '#f804'; // 街
-                if (d.properties.settlement === '町') return '#ff04'; // 町
-                if (d.properties.settlement === '村') return '#0f04'; // 村
-                return '#000'; // 平地・森林
+                if (d.properties.settlement === '都市' || d.properties.settlement === '領都') return '#f00f'; // 領都
+                if (d.properties.settlement === '街') return '#f80f'; // 街
+                if (d.properties.settlement === '町') return '#ff0f'; // 町
+                if (d.properties.settlement === '村') return '#0f0f'; // 村
+                if (d.properties.elevation >= 4000) return '#000'; // 山岳
+                if (d.properties.elevation >= 3000) return '#111'; // 山岳
+                if (d.properties.elevation >= 2000) return '#222'; // 山岳
+                if (d.properties.elevation >= 1000) return '#333'; // 山岳
+                return '#444'; // 平地・森林
             });
 
     // ビューポート矩形を初期状態で追加
