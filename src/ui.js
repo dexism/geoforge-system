@@ -648,6 +648,7 @@ function getInfoText(d) {
         text += formatSector('第五次産業 (統治)', p.industry.quinary, '');
 
         // 食料収支
+        text += `\n\n--- 食料生産 ---`;
         if (p.surplus && p.surplus['食料']) {
             text += `\n食料収支：+${p.surplus['食料']}t (余剰)`;
         } else if (p.shortage && p.shortage['食料']) {

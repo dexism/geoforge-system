@@ -138,7 +138,7 @@ export const POPULATION_PARAMS = {
     MAX_POPULATION_PER_HEX: 50000,
 
     // 人口の集中度合いを調整する指数。値が大きいほど、ごく一部の好立地に人口が集中する。
-    POPULATION_CURVE: 10.0,
+    POPULATION_CURVE: 9.5,
 };
 export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面積(ha)
     '小麦': { yield: 0.60, type: '畑作', cultivation_ha_per_person: 1.5 },
