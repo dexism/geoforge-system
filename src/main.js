@@ -145,10 +145,8 @@ async function runStep3_Settlements() {
     await addLogMessage("狩猟のポテンシャルを評価しています...");
     worldData.allHexes = generateHuntingPotential(worldData.allHexes);
 
-    // ★★★ ここから追加 ★★★
     await addLogMessage("畜産のポテンシャルを評価しています...");
     worldData.allHexes = generateLivestockPotential(worldData.allHexes);
-    // ★★★ 追加ここまで ★★★
 
     await addLogMessage("集落と人口分布を再描画しています...");
     await redrawSettlements(worldData.allHexes);
@@ -317,7 +315,7 @@ async function runStep5_Save() {
 
     if (GAS_WEB_APP_URL.startsWith('https://script.google.com')) {
       try {
-          await addLogMessage('生成した世界をスプレッドシートに保存しています...');
+          await addLogMessage('生成した世界をデータベースに保存しています...');
           fetch(GAS_WEB_APP_URL, {
               method: 'POST',
               mode: 'no-cors', 
@@ -328,7 +326,7 @@ async function runStep5_Save() {
           });
           await addLogMessage('保存リクエストを送信しました。');
       } catch (error) {
-          await addLogMessage(`スプレッドシートへの保存に失敗しました: ${error.message}`);
+          await addLogMessage(`データベースへの保存に失敗しました: ${error.message}`);
       }
     } else {
         await addLogMessage('[設定注意] GASのURLが設定されていません。保存は行われません。');
@@ -399,7 +397,7 @@ async function loadExistingWorld() {
     }
     
     try {
-        await addLogMessage('既存の世界データをスプレッドシートから読み込み中...');
+        await addLogMessage('既存の世界データをデータベースから読み込み中...');
         progressBarContainer.style.display = 'block';
 
         const response = await fetch(GAS_WEB_APP_URL);

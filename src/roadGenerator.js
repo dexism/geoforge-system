@@ -447,9 +447,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
             let nearestCivilization = null;
             let minDistance = Infinity;
 
-            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-            // 【復活】孤立集落の所属先を探すためのループ
-            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            // 孤立集落の所属先を探すためのループ
             for (let i = 0; i < allHexes.length; i++) {
                 const targetHex = allHexes[i];
                 const p = targetHex.properties;

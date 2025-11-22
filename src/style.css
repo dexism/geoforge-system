@@ -198,9 +198,9 @@ button.active:hover {
     border-top: 2px solid #445;
 }
 .nation-info-block h5 {
-    display: flex;              /* ★★★ Flexboxを有効化 ★★★ */
-    justify-content: space-between; /* ★★★ 両端揃え ★★★ */
-    align-items: baseline;      /* ★★★ 文字のベースラインを揃える ★★★ */
+    display: flex;              /* Flexboxを有効化 */
+    justify-content: space-between; /* 両端揃え */
+    align-items: baseline;      /* 文字のベースラインを揃える */
     margin: 0 5px 8px 5px;      /* marginを調整 */
     font-size: 15px;
     color: var(--primary-color);

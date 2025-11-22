@@ -76,7 +76,6 @@ function generateBaseProperties(col, row) {
     // --- 2. 陸地と水深の標高を計算 ---
     let elevation = 0;
     if (isWater) {
-        // ★★★ 修正箇所 ★★★
         // ここでは何もしない。海の標高は一旦0のまま。
         // 水深の計算は、大陸棚を生成する専門の関数で行う。
     } else {
@@ -266,7 +265,6 @@ function generateContinentalShelves(allHexes) {
         const shelfWidthInHexes = C.BASE_WIDTH_HEXES + Math.floor(noise * C.NOISE_WIDTH_HEXES);
         const dist = distanceFromLand.get(getIndex(h.col, h.row));
 
-        // ★★★ ここから修正 ★★★
         // その場所固有の大陸棚の最大深度をノイズで決定 (-100m ～ -200m の範囲で揺らぐ)
         const randomizedShelfDepth = C.MAX_DEPTH + noise * 100;
 
@@ -288,7 +286,6 @@ function generateContinentalShelves(allHexes) {
                 .clamp(true);
             p.elevation = Math.round(abyssalSlope(landStrength));
         }
-        // ★★★ 修正ここまで ★★★
     });
 }
 
@@ -640,9 +637,7 @@ function calculateFinalProperties(allHexes) {
                 .clamp(true)(properties.precipitation_mm);
             agriPotential += precipFactor * 0.2;
         }
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-        // 【ここから修正】標高によるペナルティを追加
-        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+        // 標高によるペナルティを追加
         // 500mまではペナルティなし、そこから2500mにかけて適性が徐々に減少し、最終的に90%減となる
         const elevationFactor = d3.scaleLinear()
             .domain([500, 2500])      // 標高500mからペナルティ開始、2500mで最大化
@@ -690,7 +685,7 @@ function calculateFinalProperties(allHexes) {
         }
         properties.fishingPotential = Math.min(1.0, fishingPotential);
 
-        // ★★★ ここから狩猟適性の計算を追加 ★★★
+        // 狩猟適性の計算
         let huntingPotential = 0;
         if (!isWater) {
             // [基準1] 基本スコア
@@ -749,7 +744,6 @@ function calculateFinalProperties(allHexes) {
         }
         // 最終的な値を 0.0 ～ 1.0 の範囲に収める
         properties.huntingPotential = Math.max(0.0, Math.min(1.0, huntingPotential));
-        // ★★★ 狩猟適性の計算ここまで ★★★
     });
 }
 
@@ -851,9 +845,7 @@ function generateBeaches(allHexes) {
             const n_p = neighbor.properties;
             if (!n_p.isWater) return;
 
-            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-            // 【ここから修正】湿地帯の特別ルールを追加
-            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            // 湿地帯の特別ルール
             // 陸地側が湿地の場合、原則として砂浜は生成しない
             if (p.vegetation === '湿地') {
                 // 例外: 流量が非常に大きい河口（20以上）であれば、砂が供給される可能性がある
@@ -862,7 +854,6 @@ function generateBeaches(allHexes) {
                 }
                 // 大河口の湿地は、処理を続行（砂浜ができる可能性がある）
             }
-            // ★★★ 修正ここまで ★★★
 
             // --- STEP 1: 基本地形スコア ---
             const landScore = landElevationScale(p.elevation);

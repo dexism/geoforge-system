@@ -27,6 +27,14 @@ body {
   padding: 0.5rem;
   height: 100dvh;
 }
+footer {
+  margin-bottom: 20rem;
+}
+footer p {
+  font-weight: normal;
+  font-size: 0.8rem;
+  color: #666;
+}
 h1, h2, h3, h4 { 
   color: var(--primary-color); 
 }
@@ -175,6 +183,18 @@ th {
 td { 
   text-align: center;
   background-color: #fffa; 
+}
+
+/* 認証エリアのスタイル */
+.auth-container {
+    background-color: #eef;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+}
+.auth-container input[type="password"] {
+    font-family: monospace; /* パスワード文字を見やすく */
 }
 
 /* ================================================================
@@ -515,7 +535,6 @@ td {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0px;
 }
 .skill-card-header h5 {
     margin: 0; 
@@ -695,12 +714,12 @@ td {
     font-size: 22px;
 }
 .axis-position-label.pos-a-plus { /* A+軸（上） */
-    top: 10%; 
+    top: 8%; 
     left: 50%; 
     transform: translateX(-50%); 
 }
 .axis-position-label.pos-a-minus { /* A-軸（下） */
-    bottom: 10%; 
+    bottom: 8%; 
     left: 50%; 
     transform: translateX(-50%); 
 }
@@ -723,7 +742,7 @@ td {
    フォームの最下部にフッターの高さ分の余白（padding）を確保します。*/
 #character-sheet {
     /* フッターの高さを200px程度と想定 */
-    padding-bottom: 15rem;
+    padding-bottom: 1rem;
 }
 
 /* フッター本体のスタイル */

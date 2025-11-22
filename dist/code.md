@@ -66,8 +66,8 @@ function getCharacterList() {
       const sheetName = sheet.getName();
       // シート名が4桁の数字であるものだけをキャラクターシートと見なす
       if (/^\d{4}$/.test(sheetName)) {
-        const charName = sheet.getRange("B3").getValue(); // キャラクター名はB3セル
-        const playerName = sheet.getRange("B2").getValue(); // プレイヤー名はB2セル
+        const playerName = sheet.getRange("B6").getValue(); 
+        const charName = sheet.getRange("B7").getValue(); 
         characterList.push({
           id: sheetName,
           charName: charName,
@@ -91,7 +91,6 @@ function getCharacterData(characterId) {
     const sheet = ss.getSheetByName(characterId);
     if (!sheet) return null;
     
-    // ... (データ読み込みロジックはほぼ変更なし、キーマッピングにID,作成日,更新日を追加) ...
     const values = sheet.getDataRange().getValues();
     const data = {};
     
@@ -100,6 +99,9 @@ function getCharacterData(characterId) {
       const value = row[1];
       const keyMap = {
         'キャラクターID': 'id', '作成日': 'createdAt', '更新日': 'updatedAt',
+        // ▼ 追加
+        'パスコードHash': 'passcodeHash', 
+        // ▲
         'プレイヤー名': 'playerName', 'キャラクター名': 'charName', '二つ名': 'nickname', '二つ名使用': 'useNickname',
         '信用': 'credit', '名声': 'fame', '悪名': 'notoriety', '生まれ': 'birth', '育ち': 'upbringing', '契機': 'trigger',
         'スキル': 'skills', '特徴': 'features', 'R: ロール': 'vectorR', 'A: アプローチ': 'vectorA', 'ポジション': 'position'
@@ -110,7 +112,6 @@ function getCharacterData(characterId) {
         } else if (key === '二つ名使用') {
           data[keyMap[key]] = (value === true || String(value).toUpperCase() === 'TRUE');
         } else {
-          // 日付データを文字列として正しく取得
           data[keyMap[key]] = (value instanceof Date) ? Utilities.formatDate(value, Session.getScriptTimeZone(), "yyyy/MM/dd HH:mm:ss") : value;
         }
       }
@@ -249,9 +250,9 @@ function writeDataToSheet(sheet, data) {
       ['キャラクターID', data.id],
       ['作成日', data.createdAt],
       ['更新日', data.updatedAt],
-      ['基本情報', ''],
-      ['プレイヤー名', data.playerName],
-      ['キャラクター名', data.charName],
+      ['パスコードHash', data.passcodeHash || ''], // 5行目: 元の「基本情報」見出しを置換
+      ['プレイヤー名', data.playerName],          // 6行目: これによりB6参照が維持される
+      ['キャラクター名', data.charName],          // 7行目: これによりB7参照が維持される
       ['二つ名', data.nickname],
       ['二つ名使用', data.useNickname],
       ['風評', ''],
@@ -274,7 +275,43 @@ function writeDataToSheet(sheet, data) {
   // A列とB列に書き込み
   sheet.getRange(1, 1, outputData.length, 2).setValues(outputData);
   sheet.getRange("A:A").setFontWeight("bold");
-  sheet.getRange("B2:B4").setNumberFormat('@'); // IDと日付を文字列として表示
+  
+  // ID(B2), 作成日(B3), 更新日(B4), Hash(B5) を文字列として扱う
+  sheet.getRange("B2:B5").setNumberFormat('@'); 
+  
   sheet.autoResizeColumn(1);
   sheet.autoResizeColumn(2);
+}
+
+/**
+ * 【新設】パスコードのみを更新する関数
+ */
+function updateCharacterPasscode(characterId, newHash) {
+    try {
+        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        const sheet = ss.getSheetByName(characterId);
+        if (!sheet) throw new Error("シートが見つかりません");
+        
+        // "パスコードHash" というラベルのある行を探して書き換える
+        const textFinder = sheet.getRange("A:A").createTextFinder("パスコードHash");
+        const cell = textFinder.findNext();
+        
+        if (cell) {
+            cell.offset(0, 1).setValue(newHash); // B列に書き込む
+            // 更新日も更新
+            const dateFinder = sheet.getRange("A:A").createTextFinder("更新日");
+            const dateCell = dateFinder.findNext();
+            if (dateCell) {
+                dateCell.offset(0, 1).setValue(new Date());
+            }
+        } else {
+            // 古い形式のシートなどで行がない場合は挿入する等の処理が必要だが、
+            // 今回は簡易的にエラーとするか、運用でカバー（新規保存時に行が作られるため）
+             throw new Error("パスコード保存行が見つかりません。シートの形式が古い可能性があります。");
+        }
+        
+        return "認証コードを更新しました。";
+    } catch(e) {
+        throw new Error(e.message);
+    }
 }

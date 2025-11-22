@@ -385,9 +385,7 @@ export function generateMonsterDistribution(allHexes) {
     const sRankLandIndexes = new Set(sRankLandHexes.map(h => getIndex(h.col, h.row)));
     landCandidates = landCandidates.filter(h => !sRankLandIndexes.has(getIndex(h.col, h.row)));
 
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    // 【ここから海上の魔物分布ロジックを刷新】
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // 海上の魔物分布ロジック
 
     // --- STEP 2.5: 海岸からの距離を事前計算 ---
     const distanceToCoast = new Map();
@@ -457,10 +455,6 @@ export function generateMonsterDistribution(allHexes) {
     // Cランク: 残りのすべての海域
     // (A, B, Dに選ばれなかった場所が自動的にCになる)
     seaCandidates.forEach(h => h.properties.monsterRank = 'C');
-
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    // 【海上ロジック刷新ここまで】
-    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
     // --- STEP 4: 陸上の A, B, C, Dランクの割り当て (変更なし) ---
     const assignLandRank = (rank, criteria, sortLogic, percentage) => {

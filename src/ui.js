@@ -107,7 +107,7 @@ function updateOverallInfo(allHexes) {
         settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
     };
     const nationStats = new Map();
-    // ★★★ 辺境地帯用の集計オブジェクトを追加 ★★★
+    // 辺境地帯用の集計オブジェクトを追加
     const frontierStats = {
         population: 0,
         settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
@@ -138,7 +138,7 @@ function updateOverallInfo(allHexes) {
                 if (p.settlement === '首都') { currentNation.capital = h; }
             }
         } else {
-            // ★★★ nationIdが0の場合、辺境として集計 ★★★
+            // nationIdが0の場合、辺境として集計
             frontierStats.population += p.population || 0;
             if (p.settlement && frontierStats.settlements[p.settlement] !== undefined) {
                 frontierStats.settlements[p.settlement]++;
@@ -166,7 +166,7 @@ function updateOverallInfo(allHexes) {
             </div>`;
     });
 
-    // ★★★ STEP 4: 辺境地帯情報の描画を追加 ★★★
+    // STEP 4: 辺境地帯情報の描画を追加
     if (frontierStats.population > 0) {
         const frontierSettlementSummary = [`街${frontierStats.settlements['街']}`, `町${frontierStats.settlements['町']}`, `村${frontierStats.settlements['村']}`].join(' ');
         nationsHtml += `
@@ -472,7 +472,7 @@ function drawRoads(roadPaths) {
 
     // 航路を描画
     layers['sea-route'].group.selectAll('.sea-route-segment')
-        // ★★★ ソート処理を追加 ★★★
+        // ソート処理を追加
         .data(seaRoutePathData.sort((a, b) => (shipOrder[a.shipKey] || 0) - (shipOrder[b.shipKey] || 0)))
         .enter()
         .append('path')
@@ -560,7 +560,7 @@ async function drawBeaches(hexes) {
 function getInfoText(d) {
     const p = d.properties;
     
-    // --- 上位集落の情報を整形 ---
+    // --- 【既存維持】上位集落情報 ---
     let superiorText = 'なし';
     if (p.parentHexId != null) {
         const superiorHex = allHexesData[p.parentHexId]; 
@@ -583,7 +583,7 @@ function getInfoText(d) {
         }
     }
 
-    // --- 土地利用情報の整形 ---
+    // --- 【既存維持】土地利用・基本情報 ---
     let landUseText;
     if (p.isWater) {
         landUseText = p.vegetation;
@@ -596,19 +596,13 @@ function getInfoText(d) {
         landUseText = landUseParts.join(', ');
     }
     
-    // --- 国家情報の整形 ---
     const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺境';
-    
-    // 未定義の可能性があるプロパティにデフォルト値を設定
     const population = p.population ?? 0;
     const cultivatedArea = p.cultivatedArea ?? 0;
     const habitability = p.habitability ?? 0;
-
-    // 標高/水深の表示を切り替える変数を定義
     const elevationLabel = p.elevation < 0 ? '水深' : '標高';
     const elevationValue = p.elevation < 0 ? Math.abs(Math.round(p.elevation)) : Math.round(p.elevation);
     
-    // --- 全ての情報を結合して最終的なテキストを生成 ---
     let text =  `位置　　：E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}\n` +
                 `所属国家：${nationName}\n` +
                 `直轄上位：${superiorText}\n`+
@@ -618,7 +612,7 @@ function getInfoText(d) {
                 `居住適性： ${habitability.toFixed(1)}\n` +
                 `\n--- 土地詳細 ---\n` +
                 `気候帯　： ${p.climateZone}\n` +
-                `${elevationLabel}　　： ${elevationValue}m\n` + // 標高/水深
+                `${elevationLabel}　　： ${elevationValue}m\n` +
                 `気温　　： ${p.temperature.toFixed(1)}℃\n` +
                 `降水量　： ${p.precipitation_mm.toFixed(0)}mm/年\n` +
                 `魔力　　： ${p.manaRank}\n` +
@@ -633,33 +627,47 @@ function getInfoText(d) {
                 `牧畜適性： ${(p.pastoralPotential * 100).toFixed(0).padStart(3, ' ')}%\n` + 
                 `家畜適性： ${(p.livestockPotential * 100).toFixed(0).padStart(3, ' ')}%`;
     
-    // --- 食料需給情報の追加 (経済シミュレーション後にのみ表示) ---
-    if (p.production) {
-        const surplusKeys = Object.keys(p.surplus || {});
-        const shortageKeys = Object.keys(p.shortage || {});
-        if (Object.keys(p.production).length > 0) { // 生産物が何かあればセクションを表示
-            text += `\n\n--- 産業生産 (t/年) ---`; // セクション名を変更
-            // 生産物をフィルタリングして表示 (0より大きいもののみ)
-            const productionText = Object.entries(p.production)
-                .filter(([, amount]) => amount > 0.1)
-                .map(([item, amount]) => `${item} ${Math.round(amount).toLocaleString()}`)
-                .join('t\n　　　') + 't';
-            text += `\n生産：${productionText}`;
+    // --- 【変更】産業構造情報の表示 (階層化) ---
+    if (p.industry) {
+        text += `\n\n--- 産業構造 ---`;
 
-            // 全体の食料収支を表示
-            if (p.surplus['食料']) {
-                text += `\n食料収支：+${p.surplus['食料']}t の余剰`;
-            } else if (p.shortage['食料']) {
-                text += `\n食料収支：${p.shortage['食料']}t の不足`;
+        const formatSector = (name, data, unit) => {
+            const items = Object.entries(data || {})
+                .filter(([, val]) => val > 0.1)
+                .map(([k, v]) => `${k}: ${Math.round(v).toLocaleString()}${unit}`);
+            if (items.length > 0) {
+                return `\n▼ ${name}\n　${items.join('\n　')}`;
             }
+            return '';
+        };
+
+        text += formatSector('第一次産業 (資源)', p.industry.primary, 't');
+        text += formatSector('第二次産業 (加工)', p.industry.secondary, '');
+        text += formatSector('第三次産業 (サービス)', p.industry.tertiary, 'G');
+        text += formatSector('第四次産業 (知識)', p.industry.quaternary, 'P');
+        text += formatSector('第五次産業 (統治)', p.industry.quinary, '');
+
+        // 食料収支
+        if (p.surplus && p.surplus['食料']) {
+            text += `\n食料収支：+${p.surplus['食料']}t (余剰)`;
+        } else if (p.shortage && p.shortage['食料']) {
+            text += `\n食料収支：-${p.shortage['食料']}t (不足)`;
         }
+    } else if (p.production && Object.keys(p.production).length > 0) {
+        // 互換性フォールバック
+         text += `\n\n--- 産業生産 (t/年) ---`;
+         const productionText = Object.entries(p.production)
+            .filter(([, amount]) => amount > 0.1)
+            .map(([item, amount]) => `${item} ${Math.round(amount).toLocaleString()}`)
+            .join('t\n　　　') + 't';
+        text += `\n生産：${productionText}`;
     }
     
-    // --- 主要都市の場合、支配領域の集計情報を追加 (経済シミュレーション後にのみ表示) ---
+    // --- 【既存維持】領地集計情報 ---
     if (p.territoryData && ['首都', '都市', '領都', '街', '町'].includes(p.settlement)) {
         const data = p.territoryData;
         text += `\n\n--- 領地集計 ---`;
-        const settlementCountText = Object.entries(data.settlementCounts).filter(([, count]) => count > 0).map(([type, count]) => { const shortName = { '都市': '都', '領都': '領', '街': '街', '町': '町', '村': '村' }[type]; return `${shortName}${count}`; }).join(', ');
+        const settlementCountText = Object.entries(data.settlementCounts).filter(([, count]) => count > 0).map(([type, count]) => { const shortName = { '首都': '首', '都市': '都', '領都': '領', '街': '街', '町': '町', '村': '村' }[type]; return `${shortName}${count}`; }).join(', ');
         if(settlementCountText) text += `\n直轄集落： ${settlementCountText}`;
         text += `\n合計人口： ${data.population.toLocaleString()}人`;
         text += `\n合計農地： ${Math.round(data.cultivatedArea).toLocaleString()}ha`;
@@ -734,7 +742,6 @@ function updateVisibleHexes(transform) {
                 .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
                 .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
                 .attr('fill', d => {
-                    // ★★★ ここから修正 ★★★
                     const p = d.properties;
                     // ヘックスが「水域」かつ「標高が0より大きい」場合、それは湖沼
                     if (p.isWater && p.elevation > 0) {
@@ -742,7 +749,6 @@ function updateVisibleHexes(transform) {
                     }
                     // それ以外（陸地および海洋）の場合は、標高/水深に応じたグラデーションを適用
                     return config.getElevationColor(p.elevation);
-                    // ★★★ 修正ここまで ★★★
                 })
                 .attr('stroke', 'none'),
             update => update,
@@ -820,7 +826,7 @@ function updateVisibleHexes(transform) {
     // 4e. レリーフ（陰影）レイヤー
     if (layers.shading.visible) {
         layers.shading.group.selectAll('.shading-hex')
-            // ★★★ ここのデータソースを visibleLandHexes から visibleHexes に変更 ★★★
+            // ここのデータソースを visibleLandHexes から visibleHexes に変更
             .data(visibleHexes, d => d.index)
             .join(
                 enter => enter.append('polygon')
@@ -1586,7 +1592,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .on('zoom', (event) => {
             // ズーム中は全体の変形のみ適用
             g.attr('transform', event.transform);
-            // ★★★ [新規] 現在のズーム状態を保存 ★★★
+            // 現在のズーム状態を保存
             currentTransform = event.transform;
             updateMinimapViewport(event.transform);
         })
@@ -1781,7 +1787,7 @@ function updateHexesData(updatedAllHexes) {
 
     updatedAllHexes.forEach((h, index) => {
         if (hexes[index]) {
-            // ★★★ [ここを修正] プロパティをマージするのではなく、完全に上書きする ★★★
+            // プロパティをマージするのではなく、完全に上書きする
             // これにより、roadGeneratorで変更された nationId が確実に反映される
             hexes[index].properties = h.properties;
             // 描画用のシェーディング値のみ、追加で計算する
@@ -1796,7 +1802,7 @@ function updateHexesData(updatedAllHexes) {
  */
 export async function redrawClimate(allHexes) {
     updateHexesData(allHexes);
-    // ★★★ [修正] updateVisibleHexesを呼び出して、表示を完全に再構築する ★★★
+    // updateVisibleHexesを呼び出して、表示を完全に再構築する
     if (svg) updateVisibleHexes(currentTransform);
     console.log("気候・植生が更新され、再描画されました。");
 }
@@ -1809,7 +1815,7 @@ export async function redrawSettlements(allHexes) {
     updateHexesData(allHexes);
     updateChildrenMap(allHexes);
     updateOverallInfo(allHexes);
-    // ★★★ [修正] updateVisibleHexesを呼び出して、表示を完全に再構築する ★★★
+    // updateVisibleHexesを呼び出して、表示を完全に再構築する
     if (svg) updateVisibleHexes(currentTransform);
     console.log("集落が更新され、再描画されました。");
 }
@@ -1829,13 +1835,13 @@ export async function redrawRoadsAndNations(allHexes, roadPaths) {
     drawBorders();
     drawBeaches(hexes);
     
-    // ★★★ [修正] updateVisibleHexesを呼び出して、表示を完全に再構築する ★★★
+    // updateVisibleHexesを呼び出して、表示を完全に再構築する
     if (svg) updateVisibleHexes(currentTransform);
     console.log("道路・国家が更新され、再描画されました。");
 }
 
 /**
- * ★★★ [新規] UIの状態をリセットする関数 ★★★
+ * UIの状態をリセットする関数
  */
 export function resetUI() {
     if (minimapContainer) {
