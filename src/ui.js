@@ -610,7 +610,7 @@ function getInfoText(d) {
                 `人口　　： ${population.toLocaleString()}人\n` +
                 `農地面積： ${Math.round(cultivatedArea).toLocaleString()} ha\n` +
                 `居住適性： ${habitability.toFixed(1)}\n` +
-                `\n--- 土地詳細 ---\n` +
+                `\n=== 土地詳細 ===\n` +
                 `気候帯　： ${p.climateZone}\n` +
                 `${elevationLabel}　　： ${elevationValue}m\n` +
                 `気温　　： ${p.temperature.toFixed(1)}℃\n` +
@@ -627,18 +627,59 @@ function getInfoText(d) {
                 `牧畜適性： ${(p.pastoralPotential * 100).toFixed(0).padStart(3, ' ')}%\n` + 
                 `家畜適性： ${(p.livestockPotential * 100).toFixed(0).padStart(3, ' ')}%`;
     
-    // --- 【変更】産業構造情報の表示 (階層化) ---
+    // --- 【変更点】産業構造情報の表示 (カテゴリ分け対応) ---
     if (p.industry) {
-        text += `\n\n--- 産業構造 ---`;
+        text += `\n\n=== 産業構造 ===`;
 
-        const formatSector = (name, data, unit) => {
-            const items = Object.entries(data || {})
-                .filter(([, val]) => val > 0.1)
-                .map(([k, v]) => `${k}: ${Math.round(v).toLocaleString()}${unit}`);
-            if (items.length > 0) {
-                return `\n▼ ${name}\n　${items.join('\n　')}`;
+        // カテゴリ定義マップ
+        const categoryMap = {
+            // 第一次産業
+            '小麦': '農業', '大麦': '農業', '雑穀': '農業', '稲': '農業', '果物': '農業', '薬草': '農業',
+            '木材': '林業',
+            '鉱石': '鉱業', '魔鉱石': '鉱業',
+            '魚介類': '漁業',
+            '牧畜肉': '畜産', '家畜肉': '畜産', '乳製品': '畜産', '革': '畜産', '魔獣素材': '畜産',
+            '狩猟肉': '狩猟',
+            // 第二次産業
+            '武具・道具': '鍛冶・工房',
+            '織物': '織物・染色',
+            'ポーション・魔導具': '錬金・魔導',
+            '酒(穀物)': '食品加工', '酒(果実)': '食品加工',
+            '建築': '建築'
+        };
+
+        const formatSector = (sectorName, data, unit) => {
+            const entries = Object.entries(data || {}).filter(([, val]) => val > 0.1);
+            if (entries.length === 0) return '';
+
+            // データをカテゴリごとにグルーピング
+            const groups = {};
+            const noCategoryItems = [];
+
+            entries.forEach(([key, val]) => {
+                const cat = categoryMap[key];
+                const str = `${key}: ${Math.round(val).toLocaleString()}${unit}`;
+                if (cat) {
+                    if (!groups[cat]) groups[cat] = [];
+                    groups[cat].push(str);
+                } else {
+                    noCategoryItems.push(str);
+                }
+            });
+
+            let content = '';
+            
+            // カテゴリありの項目（インデントして表示）
+            for (const [catName, items] of Object.entries(groups)) {
+                content += `\n　■ ${catName}\n　　${items.join('\n　　')}`;
             }
-            return '';
+
+            // カテゴリなしの項目（そのままリスト表示）
+            if (noCategoryItems.length > 0) {
+                content += `\n　${noCategoryItems.join('\n　')}`;
+            }
+
+            return `\n▼ ${sectorName}${content}`;
         };
 
         text += formatSector('第一次産業 (資源)', p.industry.primary, 't');
@@ -648,14 +689,15 @@ function getInfoText(d) {
         text += formatSector('第五次産業 (統治)', p.industry.quinary, '');
 
         // 食料収支
-        text += `\n\n--- 食料生産 ---`;
+        text += `\n\n=== 食料生産 ===`;
+
         if (p.surplus && p.surplus['食料']) {
-            text += `\n食料収支：+${p.surplus['食料']}t (余剰)`;
+            text += `\n[食料収支] +${p.surplus['食料']}t (余剰)`;
         } else if (p.shortage && p.shortage['食料']) {
-            text += `\n食料収支：-${p.shortage['食料']}t (不足)`;
+            text += `\n[食料収支] -${p.shortage['食料']}t (不足)`;
         }
     } else if (p.production && Object.keys(p.production).length > 0) {
-        // 互換性フォールバック
+        // フォールバック (古いデータ用)
          text += `\n\n--- 産業生産 (t/年) ---`;
          const productionText = Object.entries(p.production)
             .filter(([, amount]) => amount > 0.1)
@@ -667,7 +709,7 @@ function getInfoText(d) {
     // --- 【既存維持】領地集計情報 ---
     if (p.territoryData && ['首都', '都市', '領都', '街', '町'].includes(p.settlement)) {
         const data = p.territoryData;
-        text += `\n\n--- 領地集計 ---`;
+        text += `\n\n=== 領地集計 ===`;
         const settlementCountText = Object.entries(data.settlementCounts).filter(([, count]) => count > 0).map(([type, count]) => { const shortName = { '首都': '首', '都市': '都', '領都': '領', '街': '街', '町': '町', '村': '村' }[type]; return `${shortName}${count}`; }).join(', ');
         if(settlementCountText) text += `\n直轄集落： ${settlementCountText}`;
         text += `\n合計人口： ${data.population.toLocaleString()}人`;
