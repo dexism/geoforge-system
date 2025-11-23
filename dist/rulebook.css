@@ -478,4 +478,5 @@ footer {
     /* --- 各コンポーネントのモバイル調整 --- */
     .char-card { grid-template-columns: 1fr; gap: 0.5rem; }
     .char-image { width: 100%; height: auto; }
+    .quadrant-diagram { width: 100%; height: auto; }
 }
