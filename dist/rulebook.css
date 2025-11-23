@@ -41,12 +41,12 @@
    ========================================================================== */
 html {
     scroll-behavior: smooth;
-    scroll-padding-top: 2rem;
+    scroll-padding-top: 1rem;
 }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
-    line-height: 1.8;
+    line-height: 1.6;
     background-color: var(--background-color);
     color: var(--text-color);
     margin: 0;
@@ -62,10 +62,10 @@ h1, h2, h3, h4 {
     padding-left: 1rem;
 }
 
-h1 { font-size: 2.2em; margin-top: 2em; }
-h2 { font-size: 1.8em; margin-top: 1.8em; border-left-width: 4px; }
-h3 { font-size: 1.4em; margin-top: 1.5em; border-left-width: 3px; }
-h4 { font-size: 1.2em; }
+h1 { font-size: 2.2rem; margin-top: 2rem; }
+h2 { font-size: 1.8rem; margin-top: 1.8rem; border-left-width: 4px; }
+h3 { font-size: 1.4rem; margin-top: 1.5rem; border-left-width: 3px; }
+h4 { font-size: 1.2rem; }
 
 p {
   text-indent: 1em; /* 1文字分下げる */
@@ -86,8 +86,8 @@ a:hover {
 
 blockquote {
     border-left: 3px solid var(--secondary-color);
-    padding: 1rem 1.5rem;
-    margin: 1.5rem 0;
+    padding: 0.5rem 0.5rem;
+    margin: 0.5rem 0;
     background-color: var(--quote-bg-color);
     border-radius: 4px;
     font-style: italic;
@@ -96,11 +96,11 @@ blockquote {
 table {
     width: 100%;
     border-collapse: collapse;
-    margin: 1.5rem 0;
+    margin: 0.5rem 0;
 }
 th, td {
     border: 1px solid var(--border-color);
-    padding: 0.8rem;
+    padding: 0.5rem;
     text-align: left;
 }
 th {
@@ -118,7 +118,7 @@ header {
     background: var(--primary-color);
     color: white;
     text-align: center;
-    padding: 2rem 1rem;
+    padding: 1rem 0.5rem;
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 header h1, header h2 {
@@ -134,8 +134,8 @@ header .sub-title { font-style: italic; opacity: 0.9; }
 .container {
     display: flex;
     max-width: 1200px;
-    margin: 2rem auto;
-    padding: 0 1rem;
+    margin: 0.5rem auto;
+    padding: 0 0.5rem;
 }
 
 main {
@@ -145,15 +145,15 @@ main {
 section {
     margin-bottom: 1rem;
     background-color: var(--surface-color);
-    padding: 2rem;
+    padding: 0.5rem;
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 footer {
     text-align: center;
-    padding: 2rem;
-    font-size: 0.9em;
+    padding: 0.5rem;
+    font-size: 0.9rem;
     opacity: 0.7;
 }
 
@@ -164,19 +164,19 @@ footer {
 /* --- PC用サイドバー --- */
 .sidebar {
     flex: 0 0 250px;
-    margin-right: 2rem;
+    margin-right: 0.5rem;
     position: sticky;
-    top: 2rem;
+    top: 0.5rem;
     align-self: flex-start;
     max-height: calc(100vh - 4rem);
     overflow-y: auto;
 }
 .sidebar h3 { margin-top: 0; }
 .sidebar ul { list-style: none; padding: 0; }
-.sidebar ul ul { padding-left: 1.5rem; font-size: 0.9em; }
+.sidebar ul ul { padding-left: 0.5rem; font-size: 0.9em; }
 .sidebar summary { cursor: pointer; font-weight: bold; }
 .sidebar details[open] summary { color: var(--primary-color); }
-.sidebar a { display: block; padding: 0.4rem 0; transition: color 0.2s; }
+.sidebar a { display: block; padding: 0.5rem 0; transition: color 0.2s; }
 
 /* --- ハンバーガーメニュー用要素 --- */
 .menu-toggle-checkbox {
@@ -201,8 +201,8 @@ footer {
 .comment-box, .gm-name-box, .example-box, .formula-box {
     background-color: var(--code-bg-color);
     border: 1px solid var(--border-color);
-    padding: 1rem 1.5rem;
-    margin: 1.5rem 0;
+    padding: 0.5rem;
+    margin: 0.5rem 0;
     border-radius: 4px;
 }
 .comment-box h4, .gm-name-box h3, .example-box h5 {
@@ -217,13 +217,13 @@ footer {
 .accordion {
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
 }
 .accordion summary {
     cursor: pointer;
-    padding: 1rem;
+    padding: 0.5rem;
     font-weight: bold;
-    font-size: 1.1em;
+    font-size: 1em;
     background-color: var(--background-color);
 }
 .accordion[open] summary {
@@ -232,13 +232,13 @@ footer {
 }
 .accordion .table-container {
     margin: 0;
-    padding: 1rem;
+    padding: 0.5rem;
 }
 
 /* --- テーブルの横スクロール対応 --- */
 .table-container {
     overflow-x: auto;
-    margin: 1.5rem 0;
+    margin: 0.5rem 0;
 }
 .table-container table {
     min-width: 600px;
@@ -256,9 +256,9 @@ footer {
 .char-card {
     display: grid;
     grid-template-columns: 200px 1fr;
-    gap: 2rem;
-    margin: 3rem 0;
-    padding: 1.5rem;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+    padding: 0.5rem;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background-color: var(--background-color);
@@ -277,7 +277,7 @@ footer {
 }
 .char-description h3 { margin-top: 0; font-size: 1.6em; }
 .char-description h4 {
-    margin-top: 1.5rem;
+    margin-top: 0.5rem;
     border-bottom: 2px solid var(--border-color);
     padding-bottom: 0.5rem;
     border-left: none;
@@ -286,14 +286,14 @@ footer {
 .char-lifepath {
     list-style: none;
     padding: 0;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.5rem;
     display: flex;
-    gap: 1.5rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
 }
 .char-lifepath li {
     background-color: var(--code-bg-color);
-    padding: 0.2rem 0.8rem;
+    padding: 0.2rem 0.5rem;
     border-radius: 15px;
     font-size: 0.9em;
 }
@@ -304,7 +304,7 @@ footer {
     background: var(--background-color);
     border: 1px solid var(--border-color);
     border-left: 4px solid var(--secondary-color);
-    padding: 1rem 1.5rem;
+    padding: 0.5rem;
     border-radius: 4px;
 }
 .step-box h4 { margin: 0 0 0.5rem 0; padding: 0; border: none; }
@@ -313,12 +313,12 @@ footer {
 .class-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin: 2rem 0;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
 }
 .class-card {
     background: var(--background-color);
-    padding: 1.5rem;
+    padding: 0.5rem;
     border-radius: 8px;
     border: 1px solid var(--border-color);
 }
@@ -329,8 +329,8 @@ footer {
 .congrats-box {
     border: 2px solid var(--primary-color);
     background-color: var(--quote-bg-color);
-    padding: 1rem 2rem;
-    margin: 2rem 0;
+    padding: 0.5rem;
+    margin: 0.5rem 0;
     border-radius: 8px;
 }
 .congrats-box h4 { border: none; padding: 0; margin-top: 0; }
@@ -340,8 +340,8 @@ footer {
     border: 1px solid var(--border-color);
     background-color: var(--background-color);
     border-radius: 8px;
-    padding: 1.5rem;
-    margin: 2rem 0;
+    padding: 0.5rem;
+    margin: 0.5rem 0;
 }
 .region-card h3, .nation-card h4, .info-card h4 {
     margin-top: 0;
@@ -352,18 +352,18 @@ footer {
     background-color: var(--teller-info-bg);
     border: 1px solid var(--primary-color);
     border-left-width: 4px;
-    padding: 1rem 1.5rem;
-    margin: 1.5rem 0;
+    padding: 0.5rem;
+    margin: 0.5rem 0;
     border-radius: 4px;
 }
 .data-block {
     border: 1px solid var(--border-color);
-    padding: 1rem 1.5rem;
-    margin-bottom: 1.5rem;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
     border-radius: 4px;
 }
 .data-block h4, .data-block h5 { margin-top: 0; border-left: none; padding-left: 0; }
-.data-block h5 { font-size: 1.2em; color: var(--text-color); margin-bottom: 1rem; }
+.data-block h5 { font-size: 1.2em; color: var(--text-color); margin-bottom: 0.5rem; }
 .data-block.animal { border-left: 4px solid var(--animal-color); }
 .data-block.monster { border-left: 4px solid var(--monster-color); }
 .data-block dl { margin: 0; overflow: hidden; }
@@ -376,41 +376,41 @@ footer {
     border: 1px solid var(--border-color);
     border-left: 4px solid var(--secondary-color);
     border-radius: 4px;
-    padding: 1.5rem;
-    margin: 1.5rem 0;
+    padding: 0.5rem;
+    margin: 0.5rem 0;
 }
 .scenario-outline-box dl { overflow: hidden; }
 .scenario-outline-box dt { float: left; clear: left; width: 120px; margin-bottom: 0.5rem; color: var(--primary-color); }
 .scenario-outline-box dd { margin-left: 130px; margin-bottom: 0.5rem; }
 
-.trailer-box { border: 2px dashed var(--border-color); padding: 1.5rem; margin: 2rem 0; text-align: center; }
+.trailer-box { border: 2px dashed var(--border-color); padding: 0.5rem; margin: 0.5rem 0; text-align: center; }
 .trailer-box h4 { margin-top: 0; border: none; padding: 0; }
-.trailer-box hr { border: none; border-top: 1px solid var(--border-color); margin: 1rem 0; }
+.trailer-box hr { border: none; border-top: 1px solid var(--border-color); margin: 0.5rem 0; }
 
-.narration-box { background-color: var(--quote-bg-color); border-radius: 4px; padding: 1.5rem; margin: 1.5rem 0; font-style: italic; }
+.narration-box { background-color: var(--quote-bg-color); border-radius: 4px; padding: 0.5rem; margin: 0.5rem 0; font-style: italic; }
 .narration-box h4 { font-style: normal; margin-top: 0; border: none; padding: 0; }
 .narration-box hr { border: none; border-top: 1px solid var(--border-color); opacity: 0.5; margin: 1rem 0; }
 
-.handout-box { border: 2px solid var(--primary-color); padding: 1.5rem; margin: 1.5rem 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.handout-box { border: 2px solid var(--primary-color); padding: 0.5rem; margin: 0.5rem 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 .handout-box h4 { margin-top: 0; border-bottom: 2px solid var(--primary-color); padding-bottom: 0.5rem; }
 
 .npc-list { list-style: none; padding: 0; }
-.npc-list li { background: var(--background-color); padding: 1rem 1.5rem; margin-bottom: 1rem; border-radius: 4px; border-left: 4px solid var(--secondary-color); }
+.npc-list li { background: var(--background-color); padding: 0.5rem; margin-bottom: 0.5rem; border-radius: 4px; border-left: 4px solid var(--secondary-color); }
 .npc-list li:last-child { margin-bottom: 0; }
 
-.scene-box { border: 1px solid var(--border-color); padding: 1.5rem; margin: 2rem 0; border-radius: 8px; }
+.scene-box { border: 1px solid var(--border-color); padding: 0.5rem; margin: 0.5rem 0; border-radius: 8px; }
 .scene-box h4 { margin-top: 0; }
 
-.action-card, .choice-card { border: 1px solid var(--border-color); border-radius: 4px; padding: 1rem 1.5rem; margin: 1rem 0; background: var(--background-color); }
+.action-card, .choice-card { border: 1px solid var(--border-color); border-radius: 4px; padding: 0.5rem; margin: 1rem 0; background: var(--background-color); }
 .action-card h5, .choice-card h6 { margin-top: 0; font-size: 1.2em; }
 .action-card dt, .choice-card dt { color: var(--primary-color); }
 
-.result-card { border-left-width: 4px; border-left-style: solid; padding: 1rem 1.5rem; margin: 1rem 0; background: var(--background-color); }
+.result-card { border-left-width: 4px; border-left-style: solid; padding: 0.5rem; margin: 0.5rem 0; background: var(--background-color); }
 .result-card.success { border-color: var(--success-color); }
 .result-card.failure { border-color: var(--failure-color); }
 .result-card.critical-failure { border-color: var(--critical-failure-color); }
 
-.dialogue-box { padding: 1.5rem; margin: 1.5rem 0; border-radius: 4px; background: var(--background-color); border: 1px solid var(--border-color); }
+.dialogue-box { padding: 0.5rem; margin: 0.5rem 0; border-radius: 4px; background: var(--background-color); border: 1px solid var(--border-color); }
 .dialogue-box p:first-child { margin-top: 0; }
 
 
@@ -445,7 +445,7 @@ footer {
         background-color: var(--text-color); border-radius: 2px; left: 50%; margin-left: -12px;
         transition: transform 0.3s, top 0.3s;
     }
-    .menu-toggle-label span { top: 50%; margin-top: -1.5px; }
+    .menu-toggle-label span { top: 50%; margin-top: -0.5px; }
     .menu-toggle-label span::before { top: -8px; }
     .menu-toggle-label span::after { top: 8px; }
 
@@ -458,13 +458,13 @@ footer {
         background-color: var(--surface-color);
         transform: translateX(-100%);
         transition: transform 0.3s ease-in-out;
-        padding: 2rem;
+        padding: 0.5rem;
         box-shadow: 2px 0 5px rgba(0,0,0,0.2);
         margin-right: 0; 
         max-height: 100vh;
     }
 
     /* --- 各コンポーネントのモバイル調整 --- */
-    .char-card { grid-template-columns: 1fr; gap: 1.5rem; }
+    .char-card { grid-template-columns: 1fr; gap: 0.5rem; }
     .char-image { width: 100%; height: auto; }
 }
