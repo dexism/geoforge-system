@@ -465,6 +465,10 @@ step4Btn.addEventListener('click', runStep4_Nations);
 step5Btn.addEventListener('click', runStep5_Save);
 
 regenerateBtn.addEventListener('click', async () => {
+    // ボタンが押されたら、確認ダイアログを出す前に（または同時に）通知処理を投げる
+    // awaitをつけないことで、通知の完了を待たずにダイアログを表示させる
+    notifyRegenerationAttempt(); 
+
     const confirmationMessage = "【警告】\n\n" +
                                 "世界の再生成には数分かかる場合があります。\n" +
                                 "現在の生成ステップは全てリセットされます。\n\n" +
@@ -474,5 +478,35 @@ regenerateBtn.addEventListener('click', async () => {
         await generateNewWorld();
     }
 });
+
+// --- 通知送信用のヘルパー関数 ---
+async function notifyRegenerationAttempt() {
+    try {
+        // 1. 無料APIを使ってIPアドレスと場所情報を取得
+        const ipResponse = await fetch('https://ipapi.co/json/');
+        const ipData = await ipResponse.json();
+
+        // 2. ユーザーエージェント（ブラウザ情報）を取得
+        const userAgent = navigator.userAgent;
+
+        // 3. GASにデータを送信
+        if (GAS_WEB_APP_URL.startsWith('https://script.google.com')) {
+            fetch(GAS_WEB_APP_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                cache: 'no-cache',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    type: 'notification',       // 処理分岐用タグ
+                    action: 'force_regenerate', // アクション名
+                    ipData: ipData,             // IP情報オブジェクト
+                    userAgent: userAgent        // ブラウザ情報
+                })
+            });
+        }
+    } catch (e) {
+        console.warn("通知送信に失敗しましたが、処理は続行します。", e);
+    }
+}
 
 main();
