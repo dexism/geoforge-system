@@ -146,8 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- メニュー操作 ---
     const menuBtn = document.getElementById('menu-btn');
     const closeMenuBtn = document.getElementById('close-menu-btn');
-    const drawer = document.getElementById('drawer-nav');
-    const overlay = document.getElementById('drawer-overlay');
+    // const drawer = document.getElementById('drawer-nav');
+    // const overlay = document.getElementById('drawer-overlay');
 
     function openDrawer() {
         drawer.classList.add('open');
