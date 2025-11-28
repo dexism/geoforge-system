@@ -1,5 +1,5 @@
 /** @type {import('vite').UserConfig} */
-module.exports = {
+export default {
   root: './src',
   build: {
     outDir: '../dist'
