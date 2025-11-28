@@ -1089,7 +1089,7 @@
     <h2>2.3 TRPGパート：冒険と交渉</h2>
     
     <div class="summary-box">
-        <h4><span class="material-icons-round">sports_sword</span> TRPGパートのポイント</h4>
+        <h4><span class="material-icons-round">explore</span> TRPGパートのポイント</h4>
         <ul>
             <li><strong>判定：</strong>「1d10 + 能力値 + スキル」で目標値以上なら成功。</li>
             <li><strong>HP：</strong>数値ではなく「6段階の状態」で管理。</li>
@@ -1097,277 +1097,284 @@
         </ul>
     </div>
 
-    <h3>2.3.1 判定（ロール）の基本</h3>
-    <p>運命は君の"宣言"で動きます。基本ルールは超シンプルです。</p>
-    <div class="formula-box">
-        <h4>判定の公式</h4>
-        <p class="math"><strong>1d10の出目 + 能力値 + スキルレベル ≧ 目標値</strong></p>
-        <ul>
-            <li><strong>クリティカル：</strong>出目「10」。自動成功に加え、劇的な良い結果になります。</li>
-            <li><strong>ファンブル：</strong>出目「1」。自動失敗に加え、ピンチに陥ります。</li>
-        </ul>
-        <p><strong>目標値の目安：</strong> 簡単(4)、普通(6)、困難(8)、超困難(10)</p>
-    </div>
-    <p>「どう判定するか」は君のアイデア次第です。「隣で寝ている仲間に気づかれずに部屋を出る」場合、通常は【運動】ですが、「寝言のパターンを熟知しているから【知力】でタイミングを見切る！」と提案すれば、TLはそれを許可するかもしれません。</p>
-
-    <h3>2.3.2 キャラクターの状態（HP）</h3>
-    <p>このゲームにはHPという細かい数値はありません。キャラクターの命の危機は、以下の6段階で管理されます。</p>
-    <div class="table-container">
-        <table>
-            <thead><tr><th>状態</th><th>HP相当</th><th>説明</th></tr></thead>
-            <tbody>
-                <tr><td><strong>万全</strong></td><td>HP 5</td><td>万全の状態。何の不調もない。</td></tr>
-                <tr><td><strong>軽傷</strong></td><td>HP 4</td><td>かすり傷や軽い打撲。行動に支障はない。</td></tr>
-                <tr><td><strong>中傷</strong></td><td>HP 3</td><td>無視できない程度の怪我。治療を考え始めるべき。</td></tr>
-                <tr><td><strong>重傷</strong></td><td>HP 2</td><td>深い傷を負い、動きが鈍っている。全力を出すのは難しい。</td></tr>
-                <tr><td><strong>虚脱</strong></td><td>HP 1</td><td>意識混濁、立っているのもやっと。気力を振り絞らねば動けない。</td></tr>
-                <tr><td><strong>昏睡</strong></td><td>HP 0</td><td>意識を失い、一切の行動ができない危険な状態。</td></tr>
-            </tbody>
-        </table>
-    </div>
-    <p>回復ポーションなどのアイテムで回復できますが、重傷以上のダメージや部位欠損は魔法や高度な医療が必要になるかもしれません。</p>
-
-    <h3>2.3.3 戦闘ルール：ヒーローの時間</h3>
-    
-    <div class="noel-guide">
-        <div class="noel-avatar"><span class="material-icons-round">support_agent</span></div>
-        <div class="noel-text">
-            <h4>ノエルからのアドバイス</h4>
-            <p>「この世界の戦闘は、難しいシミュレーションじゃありません。あなたが『どうカッコよく切り抜けるか』を宣言する、ヒーローのための舞台なんです。<br>
-            ただ殴るだけじゃなく、地形を利用したり、相手の裏をかいたり…あなたの機転が勝利の鍵ですよ！」</p>
+    <section id="trpg-roll">
+        <h3>2.3.1 判定（ロール）の基本</h3>
+        <p>運命は君の"宣言"で動きます。基本ルールは超シンプルです。</p>
+        <div class="formula-box">
+            <h4>判定の公式</h4>
+            <p class="math"><strong>1d10の出目 + 能力値 + スキルレベル ≧ 目標値</strong></p>
+            <ul>
+                <li><strong>クリティカル：</strong>出目「10」。自動成功に加え、劇的な良い結果になります。</li>
+                <li><strong>ファンブル：</strong>出目「1」。自動失敗に加え、ピンチに陥ります。</li>
+            </ul>
+            <p><strong>目標値の目安：</strong> 簡単(4)、普通(6)、困難(8)、超困難(10)</p>
         </div>
-    </div>
+        <p>「どう判定するか」は君のアイデア次第です。「隣で寝ている仲間に気づかれずに部屋を出る」場合、通常は【運動】ですが、「寝言のパターンを熟知しているから【知力】でタイミングを見切る！」と提案すれば、TLはそれを許可するかもしれません。</p>
+    </section>
 
-    <div class="summary-box">
-        <h4><span class="material-icons-round">sports_martial_arts</span> 戦闘のシステム</h4>
-        <ul>
-            <li><strong>状況確認：</strong>「距離」と「敵意」で開幕の有利不利が決まります。</li>
-            <li><strong>3すくみ：</strong>「攻撃・位置取り・見極め」の3属性で判定を行います。</li>
-            <li><strong>防御：</strong>判定は「負け」扱いになりますが、ダメージを軽減し態勢を立て直せます。</li>
-        </ul>
-    </div>
-
-    <h4>1. 戦闘システム（距離と間合い）</h4>
-    <p>戦闘は、敵と遭遇した「エンカウント距離」から始まり、武器が届く「間合い（短距離）」での攻防へと移行します。適切な距離で戦うことが重要です。</p>
-
-    <!-- 距離と行動の対応表（ビジュアル化） -->
-    <table class="battle-matrix">
-        <thead>
-            <tr>
-                <th>距離区分 (m)</th>
-                <th>状況</th>
-                <th>有効な武器・行動</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td><strong>遠距離 (30m〜)</strong></td>
-                <td>敵意の届く範囲</td>
-                <td>戦闘準備、奇襲、<span class="highlight">《狙い》</span></td>
-            </tr>
-            <tr>
-                <td><strong>中距離 (10〜30m)</strong></td>
-                <td>牽制・魔法域</td>
-                <td><span class="highlight">短弓・魔法</span>、位置取り（接近）</td>
-            </tr>
-            <tr>
-                <td><strong>近距離 (5〜10m)</strong></td>
-                <td>一足飛びの距離</td>
-                <td><span class="highlight">投擲武器・槍</span>、突進</td>
-            </tr>
-            <tr>
-                <td><strong>短距離 (0〜5m)</strong></td>
-                <td><strong>間合い（激戦区）</strong></td>
-                <td><span class="highlight">剣・斧・格闘</span>、全ての近接技術</td>
-            </tr>
-        </tbody>
-    </table>
-    <p class="note">※短距離（間合い）はさらに「穂先(3m)」「剣先」「当て身」「懐(0m)」などに分かれ、位置取りの攻防が発生します。</p>
-
-    <h4>2. 敵意レベル（Intent）</h4>
-    <p>敵がこちらをどう認識しているかによって、先制攻撃のしやすさ（反応速度）や判定の補正が変わります。</p>
-    <div class="table-container">
-        <table>
-            <thead><tr><th>レベル</th><th>状態</th><th>特徴・補正</th></tr></thead>
-            <tbody>
-                <tr>
-                    <td><strong>気づいていない<br>（Unaware）</strong></td>
-                    <td>死角・不意打ち</td>
-                    <td>敵は存在を認識していない。奇襲や隠密行動が可能。<br><strong>【攻撃判定+2】</strong></td>
-                </tr>
-                <tr>
-                    <td><strong>無関心<br>（Indifferent）</strong></td>
-                    <td>反応速度：低</td>
-                    <td>存在を認識しているが戦闘意図なし。交渉や観察が可能。<br><strong>【攻撃判定+1】</strong></td>
-                </tr>
-                <tr>
-                    <td><strong>警戒<br>（Alert）</strong></td>
-                    <td>反応速度：中</td>
-                    <td>驚いているか、注意を払っている。間合いを維持しつつ牽制行動を取る。</td>
-                </tr>
-                <tr>
-                    <td><strong>敵意剥き出し<br>（Hostile）</strong></td>
-                    <td>反応速度：高</td>
-                    <td>明確に攻撃を意図している。即座に接近や攻撃を開始する。</td>
-                </tr>
-                <tr>
-                    <td><strong>強い殺意<br>（Deadly Intent）</strong></td>
-                    <td>反応速度：極高</td>
-                    <td>即座に致命的攻撃を狙う。PLが先手を取るには特殊技能や奇襲が必要。</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <h4>3. 戦闘技術と3すくみ（行動宣言）</h4>
-    <p>プレイヤーは「攻撃」「位置取り」「見極め」の3つから行動方針を選びます。これらはジャンケンの関係にあり、<strong>勝てばボーナス、負ければペナルティ</strong>を受けます。</p>
-
-    <!-- 3すくみの図解化 -->
-    <div class="rps-diagram">
-        <div class="rps-card attack">
-            <span class="rps-icon">✊</span>
-            <strong>攻撃 (Attack)</strong>
-            <p>敵を倒す</p>
-            <span class="rps-win">WIN vs 位置取り</span>
-        </div>
-        <div class="rps-card maneuver">
-            <span class="rps-icon">✌</span>
-            <strong>位置取り (Maneuver)</strong>
-            <p>場を支配する</p>
-            <span class="rps-win">WIN vs 見極め</span>
-        </div>
-        <div class="rps-card observe">
-            <span class="rps-icon">✋</span>
-            <strong>見極め (Observe)</strong>
-            <p>次につなげる</p>
-            <span class="rps-win">WIN vs 攻撃</span>
-        </div>
-    </div>
-
-    <h4>4. 戦闘技術リスト（詳細）</h4>
-    <p>具体的な行動（技）は以下の中から選択します。</p>
-
-    <details class="accordion" open>
-        <summary>✊ 攻撃（アタック）の技術</summary>
-        <p>敵に損害を与えることを最優先します。</p>
-        <ul>
-            <li><strong>《打ち》：</strong>拳、斧、メイス、剣による打撃。または投擲。</li>
-            <li><strong>《薙ぎ》：</strong>ナイフ、剣、槍による切断軌道。（※獣皮など素材価値を下げる場合あり）</li>
-            <li><strong>《突き》：</strong>槍、矢、ボルト、投げナイフ、剣による刺突。</li>
-            <li><strong>《投げ》：</strong>体当たり、突き飛ばし、プレス攻撃などを含む。</li>
-        </ul>
-    </details>
-
-    <details class="accordion" open>
-        <summary>✌ 位置取り（マニューバ）の技術</summary>
-        <p>有利な間合いを作り出す、または退路を確保します。</p>
-        <ul>
-            <li><strong>《踏み込み》：</strong>有利な間合いを作り、一撃を加える。</li>
-            <li><strong>《体捌き》：</strong>間合いをずらし、敵の攻撃判定に-2のペナルティを与える。</li>
-            <li><strong>《崩し》：</strong>攻撃範囲内で相手の体勢を崩し、転倒判定を誘発する。</li>
-            <li><strong>《掴み》：</strong>突き放しや組み付きによって、強制的に間合いを制御する。</li>
-        </ul>
-    </details>
-
-    <details class="accordion" open>
-        <summary>✋ 見極め（オブザーブ）の技術</summary>
-        <p>敵の動きや意図を観察し、次ラウンドに備えます。</p>
-        <ul>
-            <li><strong>《牽制》：</strong>攻撃範囲内にとどまり、間合いを変化させずに相手を釘付けにする。</li>
-            <li><strong>《誘い》：</strong>フェイント。カウンターによる攻撃機会を創出する。</li>
-            <li><strong>《狙い》：</strong>弓を引き絞るなどして、次ラウンドで強力な攻撃を可能にする。</li>
-            <li><strong>《予備動作》：</strong>武器の持ち替えなどを行う（捨てるだけなら宣言不要）。</li>
-        </ul>
-    </details>
-
-    <h4>5. その他の行動（防御と一般）</h4>
-    <p>3すくみに属さない特殊な行動です。</p>
-    
-    <details class="accordion" open>
-        <summary>🛡️ 防御と一般行動</summary>
-        <dl>
-            <dt>🛡️ 防御（ガード）</dt>
-            <dd><strong>「負け」扱いとなる行動です。</strong>判定上の勝負は放棄し、相手に押し込まれますが、その代わり<strong>「ダメージの軽減」</strong>や<strong>「致命傷の回避」</strong>といった効果を確実に得ることができます。</dd>
-        </dl>
+    <section id="trpg-hp">
+        <h3>2.3.2 キャラクターの状態（HP）</h3>
+        <p>このゲームにはHPという細かい数値はありません。キャラクターの命の危機は、以下の6段階で管理されます。</p>
         <div class="table-container">
             <table>
-                <thead><tr><th>技術名</th><th>説明</th></tr></thead>
+                <thead><tr><th>状態</th><th>HP相当</th><th>説明</th></tr></thead>
                 <tbody>
-                    <tr><td><strong>《防護》</strong></td><td>急所を守り、耐える。</td></tr>
-                    <tr><td><strong>《避け》</strong></td><td>足運びによる回避。</td></tr>
-                    <tr><td><strong>《受け流し》</strong></td><td>武器や盾で攻撃軌道を逸らす。</td></tr>
-                    <tr><td><strong>《受け身》</strong></td><td>格差のある打撃を、跳ぶなどしてダメージ分散する。</td></tr>
+                    <tr><td><strong>万全</strong></td><td>HP 5</td><td>万全の状態。何の不調もない。</td></tr>
+                    <tr><td><strong>軽傷</strong></td><td>HP 4</td><td>かすり傷や軽い打撲。行動に支障はない。</td></tr>
+                    <tr><td><strong>中傷</strong></td><td>HP 3</td><td>無視できない程度の怪我。治療を考え始めるべき。</td></tr>
+                    <tr><td><strong>重傷</strong></td><td>HP 2</td><td>深い傷を負い、動きが鈍っている。全力を出すのは難しい。</td></tr>
+                    <tr><td><strong>虚脱</strong></td><td>HP 1</td><td>意識混濁、立っているのもやっと。気力を振り絞らねば動けない。</td></tr>
+                    <tr><td><strong>昏睡</strong></td><td>HP 0</td><td>意識を失い、一切の行動ができない危険な状態。</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p>回復ポーションなどのアイテムで回復できますが、重傷以上のダメージや部位欠損は魔法や高度な医療が必要になるかもしれません。</p>
+    </section>
+
+    <section id="trpg-combat">
+        <h3>2.3.3 戦闘ルール：ヒーローの時間</h3>
+        <div class="noel-guide">
+            <div class="noel-avatar"><span class="material-icons-round">support_agent</span></div>
+            <div class="noel-text">
+                <h4>ノエルからのアドバイス</h4>
+                <p>「この世界の戦闘は、難しいシミュレーションじゃありません。あなたが『どうカッコよく切り抜けるか』を宣言する、ヒーローのための舞台なんです。<br>
+                ただ殴るだけじゃなく、地形を利用したり、相手の裏をかいたり…あなたの機転が勝利の鍵ですよ！」</p>
+            </div>
+        </div>
+
+        <div class="summary-box">
+            <h4><span class="material-icons-round">sports_martial_arts</span> 戦闘のシステム</h4>
+            <ul>
+                <li><strong>状況確認：</strong>「距離」と「敵意」で開幕の有利不利が決まります。</li>
+                <li><strong>3すくみ：</strong>「攻撃・位置取り・見極め」の3属性で判定を行います。</li>
+                <li><strong>防御：</strong>判定は「負け」扱いになりますが、ダメージを軽減し態勢を立て直せます。</li>
+            </ul>
+        </div>
+
+        <h4>1. 戦闘システム（距離と間合い）</h4>
+        <p>戦闘は、敵と遭遇した「エンカウント距離」から始まり、武器が届く「間合い（短距離）」での攻防へと移行します。適切な距離で戦うことが重要です。</p>
+
+        <!-- 距離と行動の対応表（ビジュアル化） -->
+        <table class="battle-matrix">
+            <thead>
+                <tr>
+                    <th>距離区分 (m)</th>
+                    <th>状況</th>
+                    <th>有効な武器・行動</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>遠距離 (30m〜)</strong></td>
+                    <td>敵意の届く範囲</td>
+                    <td>戦闘準備、奇襲、<span class="highlight">《狙い》</span></td>
+                </tr>
+                <tr>
+                    <td><strong>中距離 (10〜30m)</strong></td>
+                    <td>牽制・魔法域</td>
+                    <td><span class="highlight">短弓・魔法</span>、位置取り（接近）</td>
+                </tr>
+                <tr>
+                    <td><strong>近距離 (5〜10m)</strong></td>
+                    <td>一足飛びの距離</td>
+                    <td><span class="highlight">投擲武器・槍</span>、突進</td>
+                </tr>
+                <tr>
+                    <td><strong>短距離 (0〜5m)</strong></td>
+                    <td><strong>間合い（激戦区）</strong></td>
+                    <td><span class="highlight">剣・斧・格闘</span>、全ての近接技術</td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="note">※短距離（間合い）はさらに「穂先(3m)」「剣先」「当て身」「懐(0m)」などに分かれ、位置取りの攻防が発生します。</p>
+
+        <h4>2. 敵意レベル（Intent）</h4>
+        <p>敵がこちらをどう認識しているかによって、先制攻撃のしやすさ（反応速度）や判定の補正が変わります。</p>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>レベル</th><th>状態</th><th>特徴・補正</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>気づいていない<br>（Unaware）</strong></td>
+                        <td>死角・不意打ち</td>
+                        <td>敵は存在を認識していない。奇襲や隠密行動が可能。<br><strong>【攻撃判定+2】</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>無関心<br>（Indifferent）</strong></td>
+                        <td>反応速度：低</td>
+                        <td>存在を認識しているが戦闘意図なし。交渉や観察が可能。<br><strong>【攻撃判定+1】</strong></td>
+                    </tr>
+                    <tr>
+                        <td><strong>警戒<br>（Alert）</strong></td>
+                        <td>反応速度：中</td>
+                        <td>驚いているか、注意を払っている。間合いを維持しつつ牽制行動を取る。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>敵意剥き出し<br>（Hostile）</strong></td>
+                        <td>反応速度：高</td>
+                        <td>明確に攻撃を意図している。即座に接近や攻撃を開始する。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>強い殺意<br>（Deadly Intent）</strong></td>
+                        <td>反応速度：極高</td>
+                        <td>即座に致命的攻撃を狙う。PLが先手を取るには特殊技能や奇襲が必要。</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
 
-        <dl>
-            <dt>👟 一般行動</dt>
-            <dd>戦闘技術以外の行動です。<br>
-            <strong>例：</strong>《移動》（戦場内の位置変更）、《逃走》（戦闘から離脱）、《会話》、《アイテム使用》など</dd>
-        </dl>
-    </details>
+        <h4>3. 戦闘技術と3すくみ（行動宣言）</h4>
+        <p>プレイヤーは「攻撃」「位置取り」「見極め」の3つから行動方針を選びます。これらはジャンケンの関係にあり、<strong>勝てばボーナス、負ければペナルティ</strong>を受けます。</p>
 
-    <h4>6. この世界の魔法について（注意）</h4>
-    <div class="info-card">
-        <h4><span class="material-icons-round">warning</span> 戦闘魔法は存在しません</h4>
-        <p>この世界での魔法は「生活を便利にするエネルギー技術」であり、ファイアボールのような戦闘用呪文は一般的ではありません。<br>
-        冒険者が使えるのは<strong>《生活魔法》</strong>（着火、洗浄、集露、風傘）のみです。<br>
-        ただし、<strong>《運命介入》</strong>を使って「偶然、敵の目の前で着火魔法が暴発した！」といった演出を行うことは可能です。</p>
-    </div>
-
-    <h4>7. 基本的な戦闘の流れ（ラウンドフロー）</h4>
-    <div class="step-flow">
-        <p><strong>① TLの状況描写</strong><br>
-        「魔物は牙を剥き、唸りながら距離を詰めてくる（敵意剥き出し・近距離）」</p>
-        <p class="step-arrow">↓</p>
-        <p><strong>② 行動宣言（目的と技術）</strong><br>
-        PL：「懐に飛び込んで短剣を突き立てたい！ <strong>✌位置取り</strong>で<strong>《踏み込み》</strong>ます！」<br>
-        敵：（TLは心の中で<strong>✊攻撃</strong>を選択）</p>
-        <p class="step-arrow">↓</p>
-        <p><strong>③ 判定と効果適用</strong><br>
-        <strong>結果：攻撃（グー） vs 位置取り（チョキ） → 敵の勝ち！</strong><br>
-        PLは判定にペナルティ（-2など）を受け、敵はボーナスを得て判定します。<br>
-        ダメージ処理後、勝った側の意図通りに間合いが変化します。</p>
-        <p class="step-arrow">↓</p>
-        <p><strong>④ 結果描写</strong><br>
-        TL：「君は飛び込もうとしたが、魔物の突進の方が早かった！ 押し込まれてダメージを受けるが、結果的に間合いは『懐』になったぞ！」</p>
-    </div>
-
-    <h3>2.3.4 この世界の魔法</h3>
-    <p>この世界での魔法はまだ研究段階で、戦闘で「ファイアボール」のような派手な呪文を使える人はほぼいません。魔法は不思議なエネルギーとして、魔道具などで生活に溶け込んでいます。<br>
-    冒険者であるあなたたちは、訓練によって以下の<strong>《生活魔法》</strong>を使うことができます。</p>
-    
-    <details class="accordion">
-        <summary>生活魔法リストを見る</summary>
-        <div class="table-container">
-            <table>
-                <thead><tr><th>魔法名</th><th>効果</th><th>備考</th></tr></thead>
-                <tbody>
-                    <tr>
-                        <td><strong>着火（キンドル）</strong></td>
-                        <td>指先に小さな火種を生み出す。</td>
-                        <td>1分の集中が必要。乾いた薪などに着火できる。</td>
-                    </tr>
-                    <tr>
-                        <td><strong>洗浄（クレンズ）</strong></td>
-                        <td>汚れた食器や布、身体を綺麗にする。</td>
-                        <td>30秒ほどかかる。魔法的な呪いや古い染みは落ちない。</td>
-                    </tr>
-                    <tr>
-                        <td><strong>集露（ワーラ）</strong></td>
-                        <td>空気中や植物から水分を集め、コップ一杯の水を生成。</td>
-                        <td>10分ほどかかる。喉を潤すには十分。</td>
-                    </tr>
-                    <tr>
-                        <td><strong>風傘（エアコート）</strong></td>
-                        <td>1mほどの風のドームを作り、雨や雪を防ぐ。</td>
-                        <td>1分の集中で10分間維持。横殴りの雨や強風には無力。</td>
-                    </tr>
-                </tbody>
-            </table>
+        <!-- 3すくみの図解化 -->
+        <div class="rps-diagram">
+            <div class="rps-card attack">
+                <span class="rps-icon">✊</span>
+                <strong>攻撃 (Attack)</strong>
+                <p>敵を倒す</p>
+                <span class="rps-win">WIN vs 位置取り</span>
+            </div>
+            <div class="rps-card maneuver">
+                <span class="rps-icon">✌</span>
+                <strong>位置取り (Maneuver)</strong>
+                <p>場を支配する</p>
+                <span class="rps-win">WIN vs 見極め</span>
+            </div>
+            <div class="rps-card observe">
+                <span class="rps-icon">✋</span>
+                <strong>見極め (Observe)</strong>
+                <p>次につなげる</p>
+                <span class="rps-win">WIN vs 攻撃</span>
+            </div>
         </div>
-    </details>
+
+        <h4>4. 戦闘技術リスト（詳細）</h4>
+        <p>具体的な行動（技）は以下の中から選択します。</p>
+
+        <details class="accordion" open>
+            <summary>✊ 攻撃（アタック）の技術</summary>
+            <p>敵に損害を与えることを最優先します。</p>
+            <ul>
+                <li><strong>《打ち》：</strong>拳、斧、メイス、剣による打撃。または投擲。</li>
+                <li><strong>《薙ぎ》：</strong>ナイフ、剣、槍による切断軌道。（※獣皮など素材価値を下げる場合あり）</li>
+                <li><strong>《突き》：</strong>槍、矢、ボルト、投げナイフ、剣による刺突。</li>
+                <li><strong>《投げ》：</strong>体当たり、突き飛ばし、プレス攻撃などを含む。</li>
+            </ul>
+        </details>
+
+        <details class="accordion" open>
+            <summary>✌ 位置取り（マニューバ）の技術</summary>
+            <p>有利な間合いを作り出す、または退路を確保します。</p>
+            <ul>
+                <li><strong>《踏み込み》：</strong>有利な間合いを作り、一撃を加える。</li>
+                <li><strong>《体捌き》：</strong>間合いをずらし、敵の攻撃判定に-2のペナルティを与える。</li>
+                <li><strong>《崩し》：</strong>攻撃範囲内で相手の体勢を崩し、転倒判定を誘発する。</li>
+                <li><strong>《掴み》：</strong>突き放しや組み付きによって、強制的に間合いを制御する。</li>
+            </ul>
+        </details>
+
+        <details class="accordion" open>
+            <summary>✋ 見極め（オブザーブ）の技術</summary>
+            <p>敵の動きや意図を観察し、次ラウンドに備えます。</p>
+            <ul>
+                <li><strong>《牽制》：</strong>攻撃範囲内にとどまり、間合いを変化させずに相手を釘付けにする。</li>
+                <li><strong>《誘い》：</strong>フェイント。カウンターによる攻撃機会を創出する。</li>
+                <li><strong>《狙い》：</strong>弓を引き絞るなどして、次ラウンドで強力な攻撃を可能にする。</li>
+                <li><strong>《予備動作》：</strong>武器の持ち替えなどを行う（捨てるだけなら宣言不要）。</li>
+            </ul>
+        </details>
+
+        <h4>5. その他の行動（防御と一般）</h4>
+        <p>3すくみに属さない特殊な行動です。</p>
+        
+        <details class="accordion" open>
+            <summary>🛡️ 防御と一般行動</summary>
+            <dl>
+                <dt>🛡️ 防御（ガード）</dt>
+                <dd><strong>「負け」扱いとなる行動です。</strong>判定上の勝負は放棄し、相手に押し込まれますが、その代わり<strong>「ダメージの軽減」</strong>や<strong>「致命傷の回避」</strong>といった効果を確実に得ることができます。</dd>
+            </dl>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>技術名</th><th>説明</th></tr></thead>
+                    <tbody>
+                        <tr><td><strong>《防護》</strong></td><td>急所を守り、耐える。</td></tr>
+                        <tr><td><strong>《避け》</strong></td><td>足運びによる回避。</td></tr>
+                        <tr><td><strong>《受け流し》</strong></td><td>武器や盾で攻撃軌道を逸らす。</td></tr>
+                        <tr><td><strong>《受け身》</strong></td><td>格差のある打撃を、跳ぶなどしてダメージ分散する。</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <dl>
+                <dt>👟 一般行動</dt>
+                <dd>戦闘技術以外の行動です。<br>
+                <strong>例：</strong>《移動》（戦場内の位置変更）、《逃走》（戦闘から離脱）、《会話》、《アイテム使用》など</dd>
+            </dl>
+        </details>
+
+        <h4>6. この世界の魔法について（注意）</h4>
+        <div class="info-card">
+            <h4><span class="material-icons-round">warning</span> 戦闘魔法は存在しません</h4>
+            <p>この世界での魔法は「生活を便利にするエネルギー技術」であり、ファイアボールのような戦闘用呪文は一般的ではありません。<br>
+            冒険者が使えるのは<strong>《生活魔法》</strong>（着火、洗浄、集露、風傘）のみです。<br>
+            ただし、<strong>《運命介入》</strong>を使って「偶然、敵の目の前で着火魔法が暴発した！」といった演出を行うことは可能です。</p>
+        </div>
+
+        <h4>7. 基本的な戦闘の流れ（ラウンドフロー）</h4>
+        <div class="step-flow">
+            <p><strong>① TLの状況描写</strong><br>
+            「魔物は牙を剥き、唸りながら距離を詰めてくる（敵意剥き出し・近距離）」</p>
+            <p class="step-arrow">↓</p>
+            <p><strong>② 行動宣言（目的と技術）</strong><br>
+            PL：「懐に飛び込んで短剣を突き立てたい！ <strong>✌位置取り</strong>で<strong>《踏み込み》</strong>ます！」<br>
+            敵：（TLは心の中で<strong>✊攻撃</strong>を選択）</p>
+            <p class="step-arrow">↓</p>
+            <p><strong>③ 判定と効果適用</strong><br>
+            <strong>結果：攻撃（グー） vs 位置取り（チョキ） → 敵の勝ち！</strong><br>
+            PLは判定にペナルティ（-2など）を受け、敵はボーナスを得て判定します。<br>
+            ダメージ処理後、勝った側の意図通りに間合いが変化します。</p>
+            <p class="step-arrow">↓</p>
+            <p><strong>④ 結果描写</strong><br>
+            TL：「君は飛び込もうとしたが、魔物の突進の方が早かった！ 押し込まれてダメージを受けるが、結果的に間合いは『懐』になったぞ！」</p>
+        </div>
+    </section>
+
+    <section id="trpg-magic">
+        <h3>2.3.4 この世界の魔法</h3>
+        <p>この世界での魔法はまだ研究段階で、戦闘で「ファイアボール」のような派手な呪文を使える人はほぼいません。魔法は不思議なエネルギーとして、魔道具などで生活に溶け込んでいます。<br>
+        冒険者であるあなたたちは、訓練によって以下の<strong>《生活魔法》</strong>を使うことができます。</p>
+        
+        <details class="accordion">
+            <summary>生活魔法リストを見る</summary>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>魔法名</th><th>効果</th><th>備考</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>着火（キンドル）</strong></td>
+                            <td>指先に小さな火種を生み出す。</td>
+                            <td>1分の集中が必要。乾いた薪などに着火できる。</td>
+                        </tr>
+                        <tr>
+                            <td><strong>洗浄（クレンズ）</strong></td>
+                            <td>汚れた食器や布、身体を綺麗にする。</td>
+                            <td>30秒ほどかかる。魔法的な呪いや古い染みは落ちない。</td>
+                        </tr>
+                        <tr>
+                            <td><strong>集露（ワーラ）</strong></td>
+                            <td>空気中や植物から水分を集め、コップ一杯の水を生成。</td>
+                            <td>10分ほどかかる。喉を潤すには十分。</td>
+                        </tr>
+                        <tr>
+                            <td><strong>風傘（エアコート）</strong></td>
+                            <td>1mほどの風のドームを作り、雨や雪を防ぐ。</td>
+                            <td>1分の集中で10分間維持。横殴りの雨や強風には無力。</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    </section>
 </article>
 
 <!-- 2.4 経営SLGパート：富と名声の獲得 -->

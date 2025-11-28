@@ -48,6 +48,25 @@ document.addEventListener('DOMContentLoaded', () => {
         tlModal.classList.remove('active');
     }
 
+    // --- ★新規追加：戻るボタンの生成と制御 ---
+    const backBtn = document.createElement('button');
+    backBtn.id = 'back-to-top';
+    backBtn.innerHTML = '<span class="material-icons-round">arrow_upward</span>';
+    backBtn.title = "ページトップへ戻る";
+    document.body.appendChild(backBtn);
+
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 300) {
+            backBtn.classList.add('visible');
+        } else {
+            backBtn.classList.remove('visible');
+        }
+    });
+
+    backBtn.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
     // --- 1. 最終更新日時の設定 ---
     const lastUpdateEl = document.getElementById('last-update');
     if (lastUpdateEl) {
@@ -106,8 +125,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const clone = el.cloneNode(true);
             clone.querySelectorAll(targetSelector).forEach(child => child.remove());
-            const content = clone.innerHTML;
             
+            // ★新規追加：ツールチップ化処理（特定の単語を置換）
+            let content = clone.innerHTML;
+            const terms = [
+                { word: '商才', desc: '市場感覚、創造力、交渉力の総称' },
+                { word: '魔石', desc: '魔力の結晶体。エネルギー資源であり貨幣' },
+                { word: 'G', desc: '通貨単位グレイン。1G=銅貨1枚' },
+                { word: 'IP', desc: 'インスピレーション・ポイント' },
+                { word: 'LP', desc: 'レッジャー・ポイント（元帳点）' },
+                { word: 'TL', desc: 'テラー（GM）のこと' }
+            ];
+            
+            terms.forEach(term => {
+                // 既にリンクやタグの中にある場合は除外する簡易正規表現
+                const regex = new RegExp(`(?<!<[^>]*)${term.word}`, 'g');
+                content = content.replace(regex, `<span class="tooltip" data-tip="${term.desc}">${term.word}</span>`);
+            });
+
             return { index, id, title, level, content, tags };
         });
 
@@ -160,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
 
-                <div class="home-section-title">目的から探す</div>
+                <div class="home-section-title">はじめる</div>
                 <div class="home-grid">
                     <div class="home-card accent" onclick="location.hash='#intro-top'">
                         <div class="icon"><span class="material-icons-round">emoji_people</span></div>
@@ -178,7 +213,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
 
-                <!-- 主要ルールへのショートカット -->
                 <div class="home-section-title">主要ルール（ショートカット）</div>
                 <div class="home-grid">
                     <div class="home-card" onclick="location.hash='#data-fate'">
@@ -197,8 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
 
-                <!-- データ・ルール -->
-                <div class="home-section-title">ルール・データ詳細</div>
+                <div class="home-section-title">ルール・データ</div>
                 <div class="home-grid three-col">
                     <div class="home-card" onclick="location.hash='#keiei'">
                         <div class="icon"><span class="material-icons-round">store</span></div>
@@ -206,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="home-card" onclick="location.hash='#player-trpg'">
                         <div class="icon"><span class="material-icons-round">explore</span></div>
-                        <h3>冒険・戦闘</h3>
+                        <h3>冒険ルール</h3>
                     </div>
                     <div class="home-card" onclick="location.hash='#data-top'">
                         <div class="icon"><span class="material-icons-round">library_books</span></div>
@@ -358,23 +391,4 @@ document.addEventListener('DOMContentLoaded', () => {
     searchInput.addEventListener('input', (e) => performSearch(e.target.value));
     
     window.addEventListener('hashchange', router);
-
-    // --- 戻るボタンの制御 ---
-    const backBtn = document.createElement('button');
-    backBtn.id = 'back-to-top';
-    backBtn.innerHTML = '<span class="material-icons-round">arrow_upward</span>';
-    backBtn.title = "ページトップへ戻る";
-    document.body.appendChild(backBtn);
-
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 300) {
-            backBtn.classList.add('visible');
-        } else {
-            backBtn.classList.remove('visible');
-        }
-    });
-
-    backBtn.addEventListener('click', () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
 });
