@@ -1,11 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
     // 読み込むファイルリスト
     const files = [
-        'sections/01_introduction.html',
-        'sections/02_player.html',
-        'sections/03_teller.html',
-        'sections/04_scenario.html',
-        'sections/05_data.html'
+        './sections/01_introduction.html',
+        './sections/02_player.html',
+        './sections/03_teller.html',
+        './sections/04_scenario.html',
+        './sections/05_data.html'
     ];
 
     const contentArea = document.getElementById('content-area');
@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             // rulebook.json の読み込み
             try {
-                const jsonRes = await fetch('rulebook.json');
+                const jsonRes = await fetch('./rulebook.json');
                 if (jsonRes.ok) {
                     const jsonData = await jsonRes.json();
                     tooltipTerms = jsonData.tooltips || [];
