@@ -303,7 +303,12 @@ body.dark-mode .site-header { box-shadow: none; }
 .home-card h3 { margin: 0; font-size: 1.1rem; }
 .home-card p { margin: 0.3rem 0 0; font-size: 0.85rem; color: var(--text-sub); }
 
-.home-grid.three-col .home-card { flex-direction: column; text-align: center; padding: 1rem; }
+.home-grid.three-col .home-card { 
+    flex-direction: column; 
+    text-align: center; 
+    align-items: center; 
+    padding: 1rem; 
+}
 
 /* ==========================================================================
    7. 関連記事 & ナビゲーション
