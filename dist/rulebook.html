@@ -109,25 +109,34 @@
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
                 
-                // section, article を抽出 (これらを1つの「記事」として扱う)
-                const elements = doc.querySelectorAll('section[id], article[id]');
+                // 記事として分割する対象のセレクタ (IDを持つsection/article)
+                const targetSelector = 'section[id], article[id]';
                 
-                articles = Array.from(elements).map((el, index) => {
-                    // タイトル取得 (h1 > h2 > h3 の優先順位)
+                // 全要素を取得（文書順）
+                const allElements = Array.from(doc.querySelectorAll(targetSelector));
+                
+                articles = allElements.map((el, index) => {
+                    // タイトル取得
                     const titleEl = el.querySelector('h1, h2, h3');
-                    const title = titleEl ? titleEl.textContent : '無題のセクション';
+                    const title = titleEl ? titleEl.textContent.trim() : '無題';
                     
-                    // 自分のID
+                    // IDと階層レベル
                     const id = el.id;
-
-                    // 目次表示用の階層レベル判定 (h1=1, h2=2...)
                     const level = titleEl ? parseInt(titleEl.tagName.substring(1)) : 2;
 
-                    // 記事の中身 (HTML)
-                    // 画像パスの補正などはここで行えますが、
-                    // rulebook.htmlがルートにあるなら images/ へのパスはそのままで通じるはずです。
+                    // --- 修正ポイント: コンテンツの抽出（ネスト除去） ---
+                    // 要素をクローンして操作する
+                    const clone = el.cloneNode(true);
                     
-                    return { index, id, title, level, content: el.innerHTML };
+                    // クローン内の「子記事として分割される要素」を削除する
+                    // これにより、親記事には「導入部分」だけが残る
+                    const nestedTargets = clone.querySelectorAll(targetSelector);
+                    nestedTargets.forEach(child => child.remove());
+                    
+                    // 残ったHTMLをこの記事のコンテンツとする
+                    const content = clone.innerHTML;
+                    
+                    return { index, id, title, level, content };
                 });
 
                 generateTOC();
@@ -138,7 +147,6 @@
                 let html = '<ul>';
                 articles.forEach(article => {
                     // 章(Level 1)と節(Level 2以降)でスタイルを変える
-                    // h1タグを持つセクションは親階層、それ以外は子階層として扱う簡易ロジック
                     const indentClass = `level-${article.level}`;
                     
                     html += `<li class="${indentClass}">
@@ -177,8 +185,6 @@
             // 5. 記事の描画
             function renderArticle(article) {
                 // 前後の記事を探す（ナビゲーション用）
-                // ただし、単なるデータだけのarticleなどは飛ばすなどのロジックも追加可能ですが、
-                // ここでは単純に配列の前後を取得します。
                 const prev = articles[article.index - 1];
                 const next = articles[article.index + 1];
 
