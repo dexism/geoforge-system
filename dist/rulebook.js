@@ -35,12 +35,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let articles = [];
 
-    // --- ドロワー閉じる関数 (先に定義) ---
+    // --- ドロワー閉じる関数 ---
     function closeDrawer() {
         drawer.classList.remove('open');
         overlay.classList.remove('open');
     }
-    // グローバルスコープに登録（HTML内のonclickから呼ぶため）
     window.closeDrawer = closeDrawer;
 
     // --- モーダル閉じる関数 ---
@@ -93,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function parseAndIndexContent(html) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        // IDを持つ section, article を記事単位として抽出
         const targetSelector = 'section[id], article[id]';
         const allElements = Array.from(doc.querySelectorAll(targetSelector));
         
@@ -120,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function router() {
         const hash = window.location.hash.substring(1);
         closeAllModals();
-        closeDrawer(); // 画面遷移時にドロワーも閉じる
+        closeDrawer();
         
         if (!hash) {
             renderHome(); 
@@ -137,7 +135,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 6. ホーム画面の描画 ---
     function renderHome() {
-        // ID修正: HTMLファイルの整理に伴うID変更を反映
         const html = `
             <div class="home-view fade-in">
                 <div class="home-hero">
@@ -171,10 +168,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         <h3>経営ルール</h3>
                     </div>
                     <div class="home-card" onclick="location.hash='#player-trpg'">
-                        <div class="icon"><span class="material-icons-round">explore</span></div>
+                        <div class="icon"><span class="material-icons-round">shield</span></div>
                         <h3>冒険ルール</h3>
                     </div>
-                    <div class="home-card" onclick="location.hash='#data-section'">
+                    <!-- 修正箇所: リンク先を #data-top に変更 -->
+                    <div class="home-card" onclick="location.hash='#data-top'">
                         <div class="icon"><span class="material-icons-round">library_books</span></div>
                         <h3>データ一覧</h3>
                     </div>
@@ -304,13 +302,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- イベントリスナー登録 ---
     homeBtn.addEventListener('click', () => { location.hash = ''; });
-    
-    // ドロワー開閉
     menuBtn.addEventListener('click', () => { drawer.classList.add('open'); overlay.classList.add('open'); });
-    closeMenuBtn.addEventListener('click', closeDrawer); // 修正: 関数定義済みなので参照できる
+    closeMenuBtn.addEventListener('click', closeDrawer);
     overlay.addEventListener('click', closeDrawer);
 
-    // ツール・検索モーダル
     tlToolBtn.addEventListener('click', () => { tlModal.classList.add('active'); });
     searchBtn.addEventListener('click', () => { 
         searchModal.classList.add('active');
