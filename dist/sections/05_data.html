@@ -1,25 +1,262 @@
-<!-- データセクション -->
-<section id="data-section">
+<!-- 
+  05_data.html
+  タグ定義:
+  - data: データ集
+  - reference: 参照用
+  - class: クラス・ポジションデータ
+  - skill: スキルデータ
+  - business: 事業データ
+  - glossary: 用語集
+-->
+
+<!-- 5 データセクション（トップ） -->
+<section id="data-top" data-tags="data,reference,guide">
     <h1>5 データセクション</h1>
-    <!-- ご提供のテキストを挿入 -->
-    <article id="class-list">
-        <h2>5.1 クラス一覧</h2>
-        <!-- ご提供のテキストを挿入 -->
-    </article>
-    <article id="skill-list">
-        <h2>5.2 スキル一覧</h2>
-        <!-- ご提供のテキストを挿入 -->
-    </article>
-    <article id="jigyo-list">
-        <h2>5.3 事業一覧</h2>
-        <!-- ご提供のテキストを挿入 -->
-    </article>
-    <article id="event-list">
-        <h2>5.4 イベント一覧</h2>
-        <!-- ご提供のテキストを挿入 -->
-    </article>
-    <article id="glossary">
-        <h2>5.5 用語集</h2>
-        <!-- ご提供のテキストを挿入 -->
-    </article>
+    
+    <div class="summary-box">
+        <h4><span class="material-icons-round">folder_open</span> データアーカイブ</h4>
+        <p>このセクションは、ゲームプレイ中に頻繁に参照するデータをまとめたアーカイブです。キャラクター作成やセッション運営の補助としてご活用ください。</p>
+    </div>
+
+    <div class="home-grid three-col">
+        <div class="home-card" onclick="location.hash='#data-class'">
+            <div class="icon"><span class="material-icons-round">badge</span></div>
+            <h3>クラス一覧</h3>
+        </div>
+        <div class="home-card" onclick="location.hash='#data-skill'">
+            <div class="icon"><span class="material-icons-round">bolt</span></div>
+            <h3>スキル一覧</h3>
+        </div>
+        <div class="home-card" onclick="location.hash='#data-business'">
+            <div class="icon"><span class="material-icons-round">storefront</span></div>
+            <h3>事業一覧</h3>
+        </div>
+        <div class="home-card" onclick="location.hash='#data-glossary'">
+            <div class="icon"><span class="material-icons-round">menu_book</span></div>
+            <h3>用語集</h3>
+        </div>
+    </div>
 </section>
+
+<!-- 5.1 クラス一覧 -->
+<article id="data-class" data-tags="data,class,reference">
+    <h2>5.1 クラス（ポジション）一覧</h2>
+    <p>本作のクラスは、スキル選択によって決定される「RAベクトル（役割×手段）」によって表されます。以下は代表的なポジションのデータです。</p>
+
+    <details class="accordion" open>
+        <summary>ポジションデータ表</summary>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ポジション名</th>
+                        <th>RA属性</th>
+                        <th>役割・得意分野</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>脳筋ストライカー</strong></td>
+                        <td>【武闘 × 動】</td>
+                        <td>前衛物理アタッカー。障害物の破壊や、多数の敵の殲滅が得意。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>挑発ヴァンガード</strong></td>
+                        <td>【武闘 × 静】</td>
+                        <td>防御特化のタンク。敵の攻撃を引きつけ、仲間を守る盾となる。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>千手のトリックスター</strong></td>
+                        <td>【知略 × 動】</td>
+                        <td>環境利用や遊撃。アイテムや地形を利用して戦況を操作する。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>策士オラクル</strong></td>
+                        <td>【知略 × 静】</td>
+                        <td>情報分析と支援。事前の準備や知識で勝利を確定させる。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>器用貧乏フレックス</strong></td>
+                        <td>【バランス】</td>
+                        <td>万能型。状況に応じて役割を変えるサブ担当。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+    
+    <div class="info-card">
+        <h4>上級クラス（準備中）</h4>
+        <p>特定の条件（名声値や特定スキルの習得）を満たすことで解禁される「上級職」や、悪名を高めることで変化する「フォールンクラス（闇職）」のデータは、今後のアップデートで追加予定です。</p>
+    </div>
+</article>
+
+<!-- 5.2 スキル一覧 -->
+<article id="data-skill" data-tags="data,skill,reference">
+    <h2>5.2 スキル一覧</h2>
+    <p>キャラクターが習得可能なスキルの一覧です。</p>
+
+    <details class="accordion">
+        <summary>【武闘】系スキル</summary>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>名称</th><th>Lv</th><th>タイミング</th><th>効果概要</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>剛腕</strong></td><td>1</td><td>常時</td><td>筋力判定に+1のボーナス。一時的に重い物を持てる。</td></tr>
+                    <tr><td><strong>健脚</strong></td><td>1</td><td>常時</td><td>移動速度上昇。長距離移動の疲労軽減。</td></tr>
+                    <tr><td><strong>受け身</strong></td><td>2</td><td>リアクション</td><td>物理ダメージを軽減する。落下ダメージ無効。</td></tr>
+                    <tr><td><strong>ラッシュ</strong></td><td>2</td><td>アクション</td><td>2回攻撃を行う。命中判定にペナルティあり。</td></tr>
+                    <tr><td><strong>不屈</strong></td><td>3</td><td>オート</td><td>HPが0になっても、一度だけHP1で耐える。</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+
+    <details class="accordion">
+        <summary>【知略】系スキル</summary>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>名称</th><th>Lv</th><th>タイミング</th><th>効果概要</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>観察眼</strong></td><td>1</td><td>常時</td><td>探索・看破判定に+1。隠された情報に気づきやすくなる。</td></tr>
+                    <tr><td><strong>ハッタリ</strong></td><td>1</td><td>アクション</td><td>交渉判定にボーナス。嘘を真実のように信じ込ませる。</td></tr>
+                    <tr><td><strong>鑑定</strong></td><td>2</td><td>アクション</td><td>アイテムの価値や魔道具の効果を見抜く。</td></tr>
+                    <tr><td><strong>尋問</strong></td><td>2</td><td>アクション</td><td>対象から情報を聞き出す判定に大幅なボーナス。</td></tr>
+                    <tr><td><strong>博識</strong></td><td>3</td><td>常時</td><td>知識判定でクリティカル値が下がる（出目11以上で成功）。</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+
+    <details class="accordion">
+        <summary>【特殊・その他】系スキル</summary>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>名称</th><th>Lv</th><th>タイミング</th><th>効果概要</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>忍び足</strong></td><td>1</td><td>常時</td><td>隠密判定に+1。足音を消して移動する。</td></tr>
+                    <tr><td><strong>聞き込み</strong></td><td>1</td><td>ダウンタイム</td><td>街での情報収集判定にボーナス。</td></tr>
+                    <tr><td><strong>応急手当</strong></td><td>1</td><td>アクション</td><td>味方一人のHPを少量回復する。止血効果。</td></tr>
+                    <tr><td><strong>盾防御</strong></td><td>2</td><td>リアクション</td><td>盾装備時、回避判定の代わりにブロックを行える。</td></tr>
+                    <tr><td><strong>準備万端</strong></td><td>3</td><td>セットアップ</td><td>戦闘開始時、任意のアイテムを即座に使用できる。</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+    
+    <div class="comment-box">
+        <p>※魔法スキルや、経営スキル（商才を活用するもの）については現在調整中です。</p>
+    </div>
+</article>
+
+<!-- 5.3 事業一覧 -->
+<article id="data-business" data-tags="data,management,reference">
+    <h2>5.3 事業一覧</h2>
+    <p>プレイヤーが経営SLGパートで設立・運営できる事業のデータです。各事業はそれぞれ異なるリソースを産出し、特有のリスクを持ちます。</p>
+
+    <details class="accordion" open>
+        <summary>基本事業リスト</summary>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>事業名</th>
+                        <th>主な産出</th>
+                        <th>リスク</th>
+                        <th>備考</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>交易業</strong></td>
+                        <td>資金(G)</td>
+                        <td>相場変動、盗賊</td>
+                        <td>最も基本的な金策手段。情報収集にも役立つ。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>工房業</strong></td>
+                        <td>製品、装備</td>
+                        <td>材料不足、事故</td>
+                        <td>冒険に役立つアイテムを安価に確保できる。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>輸送業</strong></td>
+                        <td>信用、資金</td>
+                        <td>襲撃、災害</td>
+                        <td>他プレイヤーやNPCからの依頼を受けやすい。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>研究業</strong></td>
+                        <td>知識(IP)</td>
+                        <td>爆発、暴走</td>
+                        <td>インスピレーションポイント(IP)を効率よく獲得できる。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>農　業</strong></td>
+                        <td>食料</td>
+                        <td>天候、害獣</td>
+                        <td>安定した食料供給は、大規模な遠征の基盤となる。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+    
+    <div class="info-card">
+        <h4>事業の拡張について（準備中）</h4>
+        <p>事業レベルを上げるためのコストや、レベルアップによる恩恵（支店の設立、自動化など）の詳細ルールは、今後のアップデートで公開されます。</p>
+    </div>
+</article>
+
+<!-- 5.4 イベント一覧 -->
+<article id="data-event" data-tags="data,event,management">
+    <h2>5.4 イベント一覧</h2>
+    <p>経営フェーズや移動中に発生するランダムイベントの表です。</p>
+    
+    <div class="comment-box">
+        <p><strong>現在、データ調整中です。</strong><br>
+        正式リリース版では、以下のイベント表が実装される予定です。</p>
+        <ul>
+            <li>経営ハプニング表（従業員のストライキ、流行の発生など）</li>
+            <li>荒野の遭遇表（旅商人との出会い、モンスターの痕跡など）</li>
+            <li>街の噂話表（新しい遺跡の発見、王国の政変など）</li>
+        </ul>
+    </div>
+</article>
+
+<!-- 5.5 用語集 -->
+<article id="data-glossary" data-tags="data,glossary,reference">
+    <h2>5.5 用語集</h2>
+    <p>『運命を刻む元帳』で使用される独自の用語についての解説です。</p>
+
+    <details class="accordion">
+        <summary>システム用語</summary>
+        <dl>
+            <dt>テラー (TL)</dt>
+            <dd>Teller。本作におけるゲームマスター（GM）の呼称。物語の語り部であり、元帳の記録者。</dd>
+            
+            <dt>GeoForge System</dt>
+            <dd>本作の世界シミュレーションエンジンの名称。経済、気候、地理の変動を管理している。</dd>
+            
+            <dt>レジャーポイント (Ledger Point)</dt>
+            <dd>元帳ポイント。プレイヤーの行動が世界に与えた影響を数値化したもの。秩序への貢献は「プライム」、混沌への加担は「フォールン」として加算される。</dd>
+            
+            <dt>インスピレーションポイント (IP)</dt>
+            <dd>キャラクターの「ひらめき」を表すリソース。消費することで、新製品の開発やスキルの判定ボーナスなどを得られる。</dd>
+        </dl>
+    </details>
+
+    <details class="accordion">
+        <summary>世界観用語</summary>
+        <dl>
+            <dt>魔石</dt>
+            <dd>魔物の体内にある魔力の結晶。文明を支えるエネルギー資源であり、貨幣としての価値も持つ。</dd>
+            
+            <dt>ダストクロウ</dt>
+            <dd>大陸西部の開拓拠点。多くの冒険者や商人が集まる、物語の始まりの地。</dd>
+            
+            <dt>商才</dt>
+            <dd>キャラクターの能力値の一種。「市場感覚」「創造力」「交渉力」の3つからなり、経営や交渉の判定に使用する。</dd>
+        </dl>
+    </details>
+</article>
