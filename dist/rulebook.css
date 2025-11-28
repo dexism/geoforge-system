@@ -4,41 +4,41 @@
    1. 変数定義 (カラーパレット)
    ========================================================================== */
    :root {
-    /* ライトモード (デフォルト) */
+    /* ライトモード (変更なし) */
     --bg-color: #ffffff;
     --bg-sub: #f7f9fc;
-    --text-main: #333333;
-    --text-sub: #666666;
-    --accent: #2563eb; /* 知的な青 */
+    --text-main: #0f1419; /* X準拠の黒に近いグレー */
+    --text-sub: #536471;
+    --accent: #1d9bf0;    /* X (Twitter) Blue */
     --accent-light: #eff6ff;
-    --border: #e2e8f0;
+    --border: #eff3f4;    /* 薄いボーダー */
     --card-bg: #ffffff;
-    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --card-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
     
-    --success: #10b981;
+    --success: #00ba7c;
     --warning: #f59e0b;
-    --danger: #ef4444;
+    --danger: #f91880;
 
     /* レイアウト */
     --header-height: 60px;
     --content-width: 800px;
 }
 
-/* ダークモード */
+/* ダークモード (Xの「ブラック」テーマ風に調整) */
 body.dark-mode {
-    --bg-color: #111827;
-    --bg-sub: #1f2937;
-    --text-main: #f3f4f6;
-    --text-sub: #9ca3af;
-    --accent: #60a5fa;
-    --accent-light: #1e3a8a;
-    --border: #374151;
-    --card-bg: #1f2937;
-    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+    --bg-color: #000000;    /* 完全な黒 */
+    --bg-sub: #000000;      /* 背景も黒 */
+    --text-main: #e7e9ea;   /* 白に近いグレー */
+    --text-sub: #71767b;    /* 暗めのグレー */
+    --accent: #1d9bf0;      /* アクセントは同じ青 */
+    --accent-light: #16181c;/* 引用などの背景 */
+    --border: #2f3336;      /* 区切り線（重要） */
+    --card-bg: #000000;     /* カード背景も黒（ボーダーで区切るスタイル） */
+    --card-shadow: none;    /* X風デザインは影を使わずボーダーで区切る */
 }
 
 /* ==========================================================================
-   2. 基本設定 (リセット & タイポグラフィ)
+   2. 基本設定
    ========================================================================== */
 * { box-sizing: border-box; }
 
@@ -47,15 +47,15 @@ body {
     font-family: 'Noto Sans JP', sans-serif;
     background-color: var(--bg-sub);
     color: var(--text-main);
-    line-height: 1.8; /* 読みやすい行間 */
+    line-height: 1.8;
     font-size: 16px;
     transition: background-color 0.3s, color 0.3s;
     -webkit-font-smoothing: antialiased;
-    padding-top: var(--header-height); /* ヘッダー分空ける */
+    padding-top: var(--header-height);
 }
 
 a { color: var(--accent); text-decoration: none; transition: 0.2s; }
-a:hover { opacity: 0.8; }
+a:hover { text-decoration: underline; }
 
 img { max-width: 100%; height: auto; border-radius: 8px; }
 
@@ -65,15 +65,15 @@ h1, h2, h3, h4 {
     color: var(--text-main);
 }
 
+/* 引用デザインの微調整 */
 blockquote {
     border-left: 4px solid var(--accent);
-    padding-left: 1rem;
     margin: 1.5rem 0;
-    color: var(--text-sub);
+    color: var(--text-main);
     font-style: italic;
     background: var(--accent-light);
     padding: 1rem;
-    border-radius: 0 8px 8px 0;
+    border-radius: 8px;
 }
 
 /* ==========================================================================
@@ -83,11 +83,13 @@ blockquote {
     position: fixed;
     top: 0; left: 0; width: 100%;
     height: var(--header-height);
-    background-color: var(--card-bg);
+    background-color: var(--bg-color); /* 背景色変数を使用 */
     border-bottom: 1px solid var(--border);
     z-index: 100;
+    /* ダークモード時は影を消す */
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
+body.dark-mode .site-header { box-shadow: none; }
 
 .header-inner {
     max-width: var(--content-width);
@@ -99,11 +101,7 @@ blockquote {
     padding: 0 1rem;
 }
 
-.site-logo {
-    font-size: 1.2rem;
-    font-weight: 700;
-    margin: 0;
-}
+.site-logo { font-size: 1.2rem; font-weight: 700; margin: 0; }
 .site-logo a { color: var(--text-main); }
 
 .icon-btn {
@@ -116,18 +114,19 @@ blockquote {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background-color 0.2s;
 }
-.icon-btn:hover { background-color: var(--bg-sub); }
+.icon-btn:hover { background-color: var(--accent-light); }
 
 /* ==========================================================================
-   4. ドロワーメニュー (目次)
+   4. ドロワーメニュー
    ========================================================================== */
 .drawer {
     position: fixed;
     top: 0; left: 0;
     width: 280px;
     height: 100vh;
-    background-color: var(--card-bg);
+    background-color: var(--bg-color);
     z-index: 200;
     transform: translateX(-100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -140,12 +139,11 @@ blockquote {
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100vh;
-    background-color: rgba(0,0,0,0.5);
+    background-color: rgba(91, 112, 131, 0.4); /* X風のオーバーレイ色 */
     z-index: 150;
     opacity: 0;
     visibility: hidden;
     transition: 0.3s;
-    backdrop-filter: blur(2px);
 }
 .drawer-overlay.open { opacity: 1; visibility: visible; }
 
@@ -158,7 +156,6 @@ blockquote {
 }
 .drawer-header h2 { margin: 0; font-size: 1.2rem; }
 
-/* 外部リンクボタン */
 .external-links {
     padding: 1rem;
     display: flex;
@@ -171,16 +168,15 @@ blockquote {
     align-items: center;
     gap: 0.5rem;
     padding: 0.8rem;
-    border-radius: 8px;
+    border-radius: 9999px; /* 丸みのあるボタン */
     font-weight: bold;
     font-size: 0.9rem;
     text-align: center;
     justify-content: center;
 }
 .nav-btn.primary { background-color: var(--accent); color: #fff; }
-.nav-btn.secondary { background-color: var(--bg-sub); color: var(--text-main); border: 1px solid var(--border); }
+.nav-btn.secondary { background-color: transparent; color: var(--text-main); border: 1px solid var(--border); }
 
-/* 目次リスト */
 .toc-list { padding: 1rem 0; }
 .toc-list ul { list-style: none; padding: 0; margin: 0; }
 .toc-list li a {
@@ -190,41 +186,48 @@ blockquote {
     border-left: 3px solid transparent;
 }
 .toc-list li a:hover {
-    background-color: var(--bg-sub);
+    background-color: var(--accent-light);
     color: var(--accent);
 }
-/* 階層表現 */
 .toc-list li.level-2 a { padding-left: 2.5rem; font-size: 0.95em; color: var(--text-sub); }
 .toc-list li.level-3 a { padding-left: 3.5rem; font-size: 0.9em; }
 
 
 /* ==========================================================================
-   5. メインコンテンツ (記事表示)
+   5. メインコンテンツ
    ========================================================================== */
 .main-container {
     max-width: var(--content-width);
     margin: 0 auto;
     padding: 1rem;
     min-height: calc(100vh - var(--header-height));
+    /* PC表示時に左右にボーダーを入れてXっぽくする */
+    border-left: 1px solid transparent;
+    border-right: 1px solid transparent;
+}
+/* 画面が広いときだけ左右の境界線を表示 */
+@media (min-width: 820px) {
+    .main-container {
+        border-color: var(--border);
+    }
 }
 
-/* 記事カード */
+/* 記事カード（ダークモード時は枠線のみ、影なし） */
 .blog-post {
     background-color: var(--card-bg);
-    padding: 2rem; /* スマホではpaddingを調整 */
-    border-radius: 12px;
+    padding: 2rem;
+    border-radius: 0; /* X風に角丸をなくす、あるいは小さくする */
     box-shadow: var(--card-shadow);
     margin-bottom: 2rem;
-    border: 1px solid var(--border);
+    border-bottom: 1px solid var(--border); /* 下線で区切る */
 }
+/* 最後の要素のマージンなどを調整 */
+.blog-post:last-child { border-bottom: none; }
 
-/* 記事内の見出し調整 */
-.post-content h1 { font-size: 1.8rem; margin-top: 0; border-bottom: 2px solid var(--accent); padding-bottom: 0.5rem; }
-.post-content h2 { font-size: 1.5rem; margin-top: 2.5rem; border-left: 5px solid var(--accent); padding-left: 0.8rem; }
+.post-content h1 { font-size: 1.8rem; margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+.post-content h2 { font-size: 1.5rem; margin-top: 2.5rem; border-left: 4px solid var(--accent); padding-left: 0.8rem; }
 .post-content h3 { font-size: 1.25rem; margin-top: 2rem; font-weight: bold; }
-.post-content p { margin-bottom: 1.5rem; text-align: justify; }
 
-/* 読み込み中アニメーション */
 .loading { text-align: center; padding: 3rem; color: var(--text-sub); }
 .spinner {
     width: 40px; height: 40px; border: 4px solid var(--border);
@@ -232,21 +235,19 @@ blockquote {
     margin: 0 auto 1rem; animation: spin 1s linear infinite;
 }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-/* フェードイン効果 */
-.fade-in { animation: fadeIn 0.5s ease-in; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.fade-in { animation: fadeIn 0.3s ease-in; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* ==========================================================================
-   6. 記事フッターナビゲーション (次へ・前へ)
+   6. ナビゲーション
    ========================================================================== */
 .post-nav {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
     margin-top: 2rem;
+    padding-bottom: 2rem;
 }
-
 .nav-card {
     background-color: var(--card-bg);
     padding: 1rem;
@@ -255,16 +256,15 @@ blockquote {
     display: flex;
     flex-direction: column;
     color: var(--text-main);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: background-color 0.2s;
 }
-.nav-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.nav-card:hover { background-color: var(--accent-light); border-color: var(--accent); }
 .nav-card.next { text-align: right; }
 .nav-card .label { font-size: 0.75rem; color: var(--text-sub); margin-bottom: 0.2rem; }
 .nav-card .title { font-weight: bold; font-size: 0.95rem; line-height: 1.3; }
 
-
 /* ==========================================================================
-   7. コンテンツ内テーブルやボックスの調整
+   7. コンテンツ内装飾
    ========================================================================== */
 .table-container {
     overflow-x: auto;
@@ -274,19 +274,21 @@ blockquote {
 }
 table { width: 100%; border-collapse: collapse; min-width: 500px; }
 th, td { padding: 0.8rem; border-bottom: 1px solid var(--border); text-align: left; }
-th { background-color: var(--bg-sub); font-weight: bold; color: var(--text-sub); }
+th { background-color: var(--accent-light); font-weight: bold; color: var(--text-main); }
 
 /* コラム・注釈ボックス */
 .comment-box, .gm-name-box, .teller-hint-box, .info-card {
-    background-color: var(--bg-sub);
+    background-color: var(--bg-sub); /* 背景色に溶け込ませる */
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 1.2rem;
     margin: 1.5rem 0;
 }
-.teller-hint-box { border-left: 4px solid var(--warning); background-color: #fffbeb; }
-body.dark-mode .teller-hint-box { background-color: #451a03; border-color: #f59e0b; }
-
+/* テラー向けヒントなどは少し目立たせる */
+.teller-hint-box {
+    border-left: 4px solid var(--warning);
+    background-color: rgba(245, 158, 11, 0.05); /* 薄いオレンジ */
+}
 
 /* ==========================================================================
    8. フッター
@@ -297,28 +299,13 @@ body.dark-mode .teller-hint-box { background-color: #451a03; border-color: #f59e
     color: var(--text-sub);
     font-size: 0.8rem;
     border-top: 1px solid var(--border);
-    background-color: var(--card-bg);
-    margin-top: 2rem;
+    background-color: var(--bg-color);
 }
 
-/* ==========================================================================
-   9. レスポンシブ調整 (スマホ向け)
-   ========================================================================== */
+/* モバイル調整 */
 @media (max-width: 600px) {
-    .blog-post {
-        padding: 1.2rem; /* 余白を狭くして画面有効活用 */
-        border-radius: 0; /* 画面端まで広げるなら角丸なしもありだが、今回はカード感を維持 */
-        border-left: none; border-right: none;
-        box-shadow: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-    }
-    
-    .main-container { padding: 0; width: 100%; }
-    
-    .post-nav { grid-template-columns: 1fr; }
+    .blog-post { padding: 1rem; border: none; border-bottom: 1px solid var(--border); box-shadow: none; }
+    .main-container { padding: 0; }
+    .post-nav { grid-template-columns: 1fr; padding: 1rem; }
     .nav-card.next { text-align: left; }
-    
-    /* 文字サイズ調整 */
-    h1 { font-size: 1.5rem; }
-    h2 { font-size: 1.3rem; }
-    body { font-size: 15px; }
 }

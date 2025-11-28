@@ -5,36 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>運命を刻む元帳 ベンチャー of テイルズ TRPG(仮)</title>
     <link rel="stylesheet" href="rulebook.css">
-    <!-- Google Fonts: 読みやすさのためにNoto Sans JPを使用 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-    <!-- アイコンフォント -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 </head>
 <body>
 
-    <!-- ヘッダーエリア -->
     <header class="site-header">
         <div class="header-inner">
             <button id="menu-btn" class="icon-btn" aria-label="メニューを開く">
                 <span class="material-icons-round">menu</span>
             </button>
-            <h1 class="site-logo"><a href="#">Venture of Tales</a></h1>
+            <h1 class="site-logo"><a href="#">ベンチャー of テイルズ TRPG</a></h1>
             <button id="theme-toggle" class="icon-btn" aria-label="テーマ切り替え">
                 <span class="material-icons-round">dark_mode</span>
             </button>
         </div>
     </header>
 
-    <!-- ナビゲーションドロワー -->
     <nav id="drawer-nav" class="drawer">
         <div class="drawer-header">
             <h2>目次</h2>
             <button id="close-menu-btn" class="icon-btn"><span class="material-icons-round">close</span></button>
         </div>
         
-        <!-- 重要な外部リンク -->
         <div class="external-links">
             <a href="https://docs.google.com/spreadsheets/d/1kX945WYVgjSfphGhsXcVXMuqt5awp85m4DUxconb_g4/edit?usp=sharing" target="_blank" class="nav-btn primary">
                 <span class="material-icons-round">description</span> 履歴書 (Google Sheets)
@@ -44,16 +39,12 @@
             </a>
         </div>
 
-        <div id="toc-list" class="toc-list">
-            <!-- JavaScriptで目次を自動生成 -->
-        </div>
+        <div id="toc-list" class="toc-list"></div>
     </nav>
     <div id="drawer-overlay" class="drawer-overlay"></div>
 
-    <!-- メインコンテンツエリア -->
     <main class="main-container">
         <div id="content-area">
-            <!-- ここに記事が動的に表示されます -->
             <div class="loading">
                 <div class="spinner"></div>
                 <p>物語を読み込んでいます...</p>
@@ -61,15 +52,12 @@
         </div>
     </main>
 
-    <!-- フッター -->
     <footer class="site-footer">
         <p>&copy; 2025 Candle's. All rights reserved.</p>
     </footer>
 
-    <!-- JavaScript ロジック -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // 設定: 読み込むファイルリスト (sectionsフォルダ内のパスを指定)
             const files = [
                 'sections/01_introduction.html',
                 'sections/02_player.html',
@@ -82,9 +70,37 @@
             const tocList = document.getElementById('toc-list');
             const drawer = document.getElementById('drawer-nav');
             const overlay = document.getElementById('drawer-overlay');
-            let articles = []; // 全記事データを格納
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeIcon = themeToggle.querySelector('span');
 
-            // 1. ファイル読み込みとパース処理
+            // --- テーマ設定の初期化ロジック ---
+            // 1. システムがダークモードを好んでいるか確認
+            const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
+            
+            // 2. 以前の保存設定があればそれを優先、なければシステム設定に従う
+            // (今回はlocalStorage実装は必須ではないですが、ページ遷移しても状態を保つために推奨)
+            const currentTheme = localStorage.getItem("theme");
+
+            if (currentTheme === "dark" || (!currentTheme && prefersDarkScheme.matches)) {
+                document.body.classList.add("dark-mode");
+                themeIcon.textContent = "light_mode";
+            } else {
+                document.body.classList.remove("dark-mode");
+                themeIcon.textContent = "dark_mode";
+            }
+
+            // ダークモード切り替えボタンの処理
+            themeToggle.addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+                const isDark = document.body.classList.contains('dark-mode');
+                themeIcon.textContent = isDark ? 'light_mode' : 'dark_mode';
+                // 設定を保存
+                localStorage.setItem("theme", isDark ? "dark" : "light");
+            });
+            // -----------------------------------
+
+            let articles = [];
+
             Promise.all(files.map(file => fetch(file).then(res => {
                 if (!res.ok) throw new Error(`Failed to load ${file}`);
                 return res.text();
@@ -92,48 +108,33 @@
             .then(htmlContents => {
                 const fullHtml = htmlContents.join('');
                 parseAndIndexContent(fullHtml);
-                router(); // 初回表示
+                router();
             })
             .catch(err => {
                 console.error(err);
                 contentArea.innerHTML = `<div class="error-msg" style="padding: 2rem; text-align: center;">
-                    <h3 style="color: var(--danger);">読み込みエラー</h3>
-                    <p>コンテンツファイル（sections/*.html）を読み込めませんでした。<br>
-                    ローカル環境で実行している場合、ブラウザのセキュリティ制限(CORS)により外部ファイルを読み込めないことがあります。<br>
-                    VS Codeの「Live Server」拡張機能などを使用するか、Webサーバー経由でアクセスしてください。</p>
+                    <h3>読み込みエラー</h3>
+                    <p>コンテンツを読み込めませんでした。</p>
                 </div>`;
             });
 
-            // 2. HTMLを解析して「記事オブジェクト」の配列を作る
             function parseAndIndexContent(html) {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
-                
-                // 記事として分割する対象のセレクタ (IDを持つsection/article)
                 const targetSelector = 'section[id], article[id]';
-                
-                // 全要素を取得（文書順）
                 const allElements = Array.from(doc.querySelectorAll(targetSelector));
                 
                 articles = allElements.map((el, index) => {
-                    // タイトル取得
                     const titleEl = el.querySelector('h1, h2, h3');
                     const title = titleEl ? titleEl.textContent.trim() : '無題';
-                    
-                    // IDと階層レベル
                     const id = el.id;
                     const level = titleEl ? parseInt(titleEl.tagName.substring(1)) : 2;
 
-                    // --- 修正ポイント: コンテンツの抽出（ネスト除去） ---
-                    // 要素をクローンして操作する
                     const clone = el.cloneNode(true);
-                    
-                    // クローン内の「子記事として分割される要素」を削除する
-                    // これにより、親記事には「導入部分」だけが残る
+                    // 子要素として含まれるsection/articleを削除（これが分割のキモ）
                     const nestedTargets = clone.querySelectorAll(targetSelector);
                     nestedTargets.forEach(child => child.remove());
                     
-                    // 残ったHTMLをこの記事のコンテンツとする
                     const content = clone.innerHTML;
                     
                     return { index, id, title, level, content };
@@ -142,13 +143,10 @@
                 generateTOC();
             }
 
-            // 3. 目次 (TOC) 生成
             function generateTOC() {
                 let html = '<ul>';
                 articles.forEach(article => {
-                    // 章(Level 1)と節(Level 2以降)でスタイルを変える
                     const indentClass = `level-${article.level}`;
-                    
                     html += `<li class="${indentClass}">
                         <a href="#${article.id}" onclick="closeDrawer()">
                             ${article.title}
@@ -159,32 +157,22 @@
                 tocList.innerHTML = html;
             }
 
-            // 4. ルーティング (ハッシュ変更検知)
             window.addEventListener('hashchange', router);
 
             function router() {
-                const hash = window.location.hash.substring(1); // #を除去
+                const hash = window.location.hash.substring(1);
                 
                 if (!hash) {
-                    // ハッシュがない場合はトップページ（最初の記事）を表示
-                    if(articles.length > 0) {
-                        renderArticle(articles[0]);
-                    }
+                    if(articles.length > 0) renderArticle(articles[0]);
                 } else {
                     const targetArticle = articles.find(a => a.id === hash);
-                    if (targetArticle) {
-                        renderArticle(targetArticle);
-                    } else {
-                        contentArea.innerHTML = '<p style="padding:2rem;">指定された記事が見つかりません。</p>';
-                    }
+                    if (targetArticle) renderArticle(targetArticle);
+                    else contentArea.innerHTML = '<p style="padding:2rem;">指定された記事が見つかりません。</p>';
                 }
-                // ページトップへスクロール
                 window.scrollTo(0, 0);
             }
 
-            // 5. 記事の描画
             function renderArticle(article) {
-                // 前後の記事を探す（ナビゲーション用）
                 const prev = articles[article.index - 1];
                 const next = articles[article.index + 1];
 
@@ -210,17 +198,15 @@
                 contentArea.innerHTML = html;
             }
 
-            // 6. UI操作系 (ドロワー、ダークモード)
             const menuBtn = document.getElementById('menu-btn');
             const closeMenuBtn = document.getElementById('close-menu-btn');
-            const themeToggle = document.getElementById('theme-toggle');
-            const themeIcon = themeToggle.querySelector('span');
+            // const drawer = document.getElementById('drawer-nav');
+            // const overlay = document.getElementById('drawer-overlay');
 
             function openDrawer() {
                 drawer.classList.add('open');
                 overlay.classList.add('open');
             }
-            // HTML側のonclick属性から呼べるようにグローバルに登録
             window.closeDrawer = function() { 
                 drawer.classList.remove('open');
                 overlay.classList.remove('open');
@@ -229,13 +215,6 @@
             menuBtn.addEventListener('click', openDrawer);
             closeMenuBtn.addEventListener('click', closeDrawer);
             overlay.addEventListener('click', closeDrawer);
-
-            // ダークモード切り替え
-            themeToggle.addEventListener('click', () => {
-                document.body.classList.toggle('dark-mode');
-                const isDark = document.body.classList.contains('dark-mode');
-                themeIcon.textContent = isDark ? 'light_mode' : 'dark_mode';
-            });
         });
     </script>
 </body>
