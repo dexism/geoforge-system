@@ -1,7 +1,7 @@
 // rulebook.js
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 読み込むファイルリスト
+    // 読み込むHTMLファイルリスト
     const files = [
         'sections/01_introduction.html',
         'sections/02_player.html',
@@ -10,17 +10,14 @@ document.addEventListener('DOMContentLoaded', () => {
         'sections/05_data.html'
     ];
 
+    // DOM要素
     const contentArea = document.getElementById('content-area');
     const tocList = document.getElementById('toc-list');
-    
-    // ナビゲーション関連
     const drawer = document.getElementById('drawer-nav');
     const overlay = document.getElementById('drawer-overlay');
     const menuBtn = document.getElementById('menu-btn');
     const closeMenuBtn = document.getElementById('close-menu-btn');
     const homeBtn = document.getElementById('home-btn');
-
-    // ツール・検索関連
     const tlToolBtn = document.getElementById('tl-tool-btn');
     const tlModal = document.getElementById('tl-modal');
     const searchBtn = document.getElementById('search-btn');
@@ -28,33 +25,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('search-input');
     const searchResults = document.getElementById('search-results');
     const closeModalBtns = document.querySelectorAll('.close-modal');
-
-    // テーマ関連
     const themeToggle = document.getElementById('theme-toggle');
     const themeIcon = themeToggle.querySelector('span');
 
     let articles = [];
+    let tooltipTerms = [];
 
-    // --- ドロワー閉じる関数 ---
-    function closeDrawer() {
-        drawer.classList.remove('open');
-        overlay.classList.remove('open');
-    }
-    window.closeDrawer = closeDrawer;
-
-    // --- モーダル閉じる関数 ---
-    function closeAllModals() {
-        searchModal.classList.remove('active');
-        tlModal.classList.remove('active');
-    }
-
-    // --- ★新規追加：戻るボタンの生成と制御 ---
+    // --- 0. 戻るボタンの生成と制御 ---
     const backBtn = document.createElement('button');
     backBtn.id = 'back-to-top';
+    backBtn.className = 'back-to-top'; // クラスも付与（CSS詳細度対策）
     backBtn.innerHTML = '<span class="material-icons-round">arrow_upward</span>';
     backBtn.title = "ページトップへ戻る";
     document.body.appendChild(backBtn);
 
+    // スクロールイベント（表示・非表示）
     window.addEventListener('scroll', () => {
         if (window.scrollY > 300) {
             backBtn.classList.add('visible');
@@ -70,7 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 1. 最終更新日時の設定 ---
     const lastUpdateEl = document.getElementById('last-update');
     if (lastUpdateEl) {
-        lastUpdateEl.textContent = document.lastModified;
+        // lastModifiedの日付フォーマット整形
+        const date = new Date(document.lastModified);
+        lastUpdateEl.textContent = date.toLocaleString('ja-JP');
     }
 
     // --- 2. テーマ設定の初期化 ---
@@ -92,20 +79,37 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem("theme", isDark ? "dark" : "light");
     });
 
-    // --- 3. データ読み込みと初期化 ---
-    Promise.all(files.map(file => fetch(file).then(res => {
-        if (!res.ok) throw new Error(`Failed to load ${file}`);
-        return res.text();
-    })))
-    .then(htmlContents => {
-        const fullHtml = htmlContents.join('');
-        parseAndIndexContent(fullHtml);
-        router();
-    })
-    .catch(err => {
-        console.error(err);
-        contentArea.innerHTML = '<div class="error-msg"><p>コンテンツを読み込めませんでした。</p></div>';
-    });
+    // --- 3. データ読み込みと初期化（非同期） ---
+    const init = async () => {
+        try {
+            // 3-1. ツールチップ用JSONの読み込み
+            try {
+                const jsonRes = await fetch('rulebook.json');
+                if (jsonRes.ok) {
+                    const jsonData = await jsonRes.json();
+                    tooltipTerms = jsonData.tooltips || [];
+                }
+            } catch (e) {
+                console.warn('rulebook.json not found or invalid:', e);
+            }
+
+            // 3-2. HTMLコンテンツの読み込み
+            const htmlResponses = await Promise.all(files.map(file => fetch(file)));
+            const htmlContents = await Promise.all(htmlResponses.map(res => {
+                if (!res.ok) throw new Error('File load failed');
+                return res.text();
+            }));
+
+            const fullHtml = htmlContents.join('');
+            parseAndIndexContent(fullHtml);
+            router();
+
+        } catch (err) {
+            console.error(err);
+            contentArea.innerHTML = '<div class="error-msg"><p>コンテンツの読み込みに失敗しました。<br>ローカル環境の場合はWebサーバー経由でアクセスしてください。</p></div>';
+        }
+    };
+    init();
 
     // --- 4. HTML解析とインデックス化 ---
     function parseAndIndexContent(html) {
@@ -123,30 +127,38 @@ document.addEventListener('DOMContentLoaded', () => {
             const tagsAttr = el.getAttribute('data-tags');
             const tags = tagsAttr ? tagsAttr.split(',').map(t => t.trim()) : [];
 
+            // ネストされた子要素を除去
             const clone = el.cloneNode(true);
             clone.querySelectorAll(targetSelector).forEach(child => child.remove());
             
-            // ★新規追加：ツールチップ化処理（特定の単語を置換）
             let content = clone.innerHTML;
-            const terms = [
-                { word: '商才', desc: '市場感覚、創造力、交渉力の総称' },
-                { word: '魔石', desc: '魔力の結晶体。エネルギー資源であり貨幣' },
-                { word: 'G', desc: '通貨単位グレイン。1G=銅貨1枚' },
-                { word: 'IP', desc: 'インスピレーション・ポイント' },
-                { word: 'LP', desc: 'レッジャー・ポイント（元帳点）' },
-                { word: 'TL', desc: 'テラー（GM）のこと' }
-            ];
-            
-            terms.forEach(term => {
-                // 既にリンクやタグの中にある場合は除外する簡易正規表現
-                const regex = new RegExp(`(?<!<[^>]*)${term.word}`, 'g');
-                content = content.replace(regex, `<span class="tooltip" data-tip="${term.desc}">${term.word}</span>`);
-            });
+
+            // ★ツールチップ化処理（JSONデータ使用）
+            if (tooltipTerms.length > 0) {
+                tooltipTerms.forEach(term => {
+                    // 正規表現の説明:
+                    // (?<![a-zA-Z]) : 直前にアルファベットがない（TRPGのGなどを回避）
+                    // term.word     : 対象の単語
+                    // (?![a-zA-Z])  : 直後にアルファベットがない
+                    // (?![^<]*>)    : HTMLタグの中（属性値など）ではない
+                    // g             : 全て置換
+                    const regex = new RegExp(`(?<![a-zA-Z])(${escapeRegExp(term.word)})(?![a-zA-Z])(?![^<]*>)`, 'g');
+                    
+                    // 既にリンクやtooltipクラスの中にある場合は除外したいが、
+                    // 簡易的に単純置換する（厳密なパースは重いため）
+                    content = content.replace(regex, `<span class="tooltip" data-tip="${term.desc}">$1</span>`);
+                });
+            }
 
             return { index, id, title, level, content, tags };
         });
 
         generateTOC();
+    }
+
+    // 正規表現のエスケープ関数
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     // --- 5. ルーティング処理 ---
@@ -178,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <p>経営と冒険が交差する物語を始めましょう。</p>
                 </div>
 
-                <!-- 追加: ゲーム紹介とサイトの使い方 -->
+                <!-- 導入とガイド -->
                 <div class="home-introduction">
                     <div class="intro-card main-desc">
                         <h3><span class="material-icons-round">auto_awesome</span> 経営 × 冒険のハイブリッドTRPG</h3>
@@ -186,29 +198,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     
                     <div class="intro-card site-guide">
-                        <h4><span class="material-icons-round">help_outline</span> このサイト（ルールブック）の使い方</h4>
+                        <h4><span class="material-icons-round">help_outline</span> このサイトの使い方</h4>
                         <ul>
                             <li><strong>読み進める：</strong>下のカードメニューから、目的に合わせてページを開いてください。</li>
-                            <li><strong>探す：</strong>左上の <strong><span class="material-icons-round inline-icon">menu</span> メニュー</strong> から目次を、右上の <strong><span class="material-icons-round inline-icon">search</span> 検索</strong> からキーワードを探せます。</li>
+                            <li><strong>探す：</strong>用語はクリックすると解説が出ます（ツールチップ）。右上の検索ボタンも便利です。</li>
                             <li><strong>遊ぶ：</strong>右上の <strong><span class="material-icons-round inline-icon">build</span> ツール</strong> は、セッション中に役立つ判定表などを素早く表示します。</li>
                         </ul>
                     </div>
                 </div>
 
+                <!-- ナビゲーションカード -->
                 <div class="home-section-title">はじめる</div>
                 <div class="home-grid">
                     <div class="home-card accent" onclick="location.hash='#intro-top'">
                         <div class="icon"><span class="material-icons-round">emoji_people</span></div>
                         <div class="text">
                             <h3>はじめての方へ</h3>
-                            <p>ゲームの概要、世界観、遊び方の流れ</p>
+                            <p>ゲームの概要、世界観</p>
                         </div>
                     </div>
                     <div class="home-card" onclick="location.hash='#player-create'">
                         <div class="icon"><span class="material-icons-round">person_add</span></div>
                         <div class="text">
                             <h3>キャラクター作成</h3>
-                            <p>履歴書（CS）の書き方、能力値の決定</p>
+                            <p>履歴書（CS）の作成手順</p>
                         </div>
                     </div>
                 </div>
@@ -239,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="home-card" onclick="location.hash='#player-trpg'">
                         <div class="icon"><span class="material-icons-round">explore</span></div>
-                        <h3>冒険ルール</h3>
+                        <h3>冒険・戦闘</h3>
                     </div>
                     <div class="home-card" onclick="location.hash='#data-top'">
                         <div class="icon"><span class="material-icons-round">library_books</span></div>
@@ -253,14 +266,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="icon"><span class="material-icons-round">auto_stories</span></div>
                         <div class="text">
                             <h3>TLガイド</h3>
-                            <p>マスタリングの手引き、NPC作成</p>
+                            <p>マスタリングの手引き</p>
                         </div>
                     </div>
                     <div class="home-card dark" onclick="location.hash='#scenario-top'">
                         <div class="icon"><span class="material-icons-round">map</span></div>
                         <div class="text">
                             <h3>シナリオ集</h3>
-                            <p>サンプルシナリオ、キャンペーン構成</p>
+                            <p>サンプルシナリオ</p>
                         </div>
                     </div>
                 </div>
@@ -374,6 +387,9 @@ document.addEventListener('DOMContentLoaded', () => {
     menuBtn.addEventListener('click', () => { drawer.classList.add('open'); overlay.classList.add('open'); });
     closeMenuBtn.addEventListener('click', closeDrawer);
     overlay.addEventListener('click', closeDrawer);
+    // グローバルスコープに閉じる関数を登録（onclick用）
+    window.closeDrawer = closeDrawer;
+    window.closeAllModals = closeAllModals;
 
     tlToolBtn.addEventListener('click', () => { tlModal.classList.add('active'); });
     searchBtn.addEventListener('click', () => { 
