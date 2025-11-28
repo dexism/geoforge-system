@@ -1062,10 +1062,93 @@
     </div>
 </article>
 
-<!-- 2.3 TRPGパート（タイトルのみ） -->
-<article id="player-trpg" data-tags="player,rule,combat">
+<!-- 2.3 TRPGパート：冒険と交渉 (PDF内容を反映) -->
+<article id="player-trpg" data-tags="player,rule,combat,magic">
     <h2>2.3 TRPGパート：冒険と交渉</h2>
-    <p>（このセクションの内容は、ルールブックの更新をお待ちください）</p>
+    
+    <div class="summary-box">
+        <h4><span class="material-icons-round">sports_sword</span> TRPGパートのポイント</h4>
+        <ul>
+            <li><strong>判定：</strong>「1d10 + 能力値 + スキル」で目標値以上なら成功。</li>
+            <li><strong>HP：</strong>数値ではなく「6段階の状態」で管理。</li>
+            <li><strong>戦闘：</strong>細かい戦術より「どうカッコよく切り抜けるか」の宣言が重要。</li>
+        </ul>
+    </div>
+
+    <h3>2.3.1 判定（ロール）の基本</h3>
+    <p>運命は君の"宣言"で動きます。基本ルールは超シンプルです。</p>
+    <div class="formula-box">
+        <h4>判定の公式</h4>
+        <p class="math"><strong>1d10の出目 + 能力値 + スキルレベル ≧ 目標値</strong></p>
+        <ul>
+            <li><strong>クリティカル：</strong>出目「10」。自動成功に加え、劇的な良い結果になります。</li>
+            <li><strong>ファンブル：</strong>出目「1」。自動失敗に加え、ピンチに陥ります。</li>
+        </ul>
+        <p><strong>目標値の目安：</strong> 簡単(4)、普通(6)、困難(8)、超困難(10)</p>
+    </div>
+    <p>「どう判定するか」は君のアイデア次第です。「隣で寝ている仲間に気づかれずに部屋を出る」場合、通常は【運動】ですが、「寝言のパターンを熟知しているから【知力】でタイミングを見切る！」と提案すれば、TLはそれを許可するかもしれません。</p>
+
+    <h3>2.3.2 キャラクターの状態（HP）</h3>
+    <p>このゲームにはHPという細かい数値はありません。キャラクターの命の危機は、以下の6段階で管理されます。</p>
+    <div class="table-container">
+        <table>
+            <thead><tr><th>状態</th><th>HP相当</th><th>説明</th></tr></thead>
+            <tbody>
+                <tr><td><strong>万全</strong></td><td>HP 5</td><td>万全の状態。何の不調もない。</td></tr>
+                <tr><td><strong>軽傷</strong></td><td>HP 4</td><td>かすり傷や軽い打撲。行動に支障はない。</td></tr>
+                <tr><td><strong>中傷</strong></td><td>HP 3</td><td>無視できない程度の怪我。治療を考え始めるべき。</td></tr>
+                <tr><td><strong>重傷</strong></td><td>HP 2</td><td>深い傷を負い、動きが鈍っている。全力を出すのは難しい。</td></tr>
+                <tr><td><strong>虚脱</strong></td><td>HP 1</td><td>意識混濁、立っているのもやっと。気力を振り絞らねば動けない。</td></tr>
+                <tr><td><strong>昏睡</strong></td><td>HP 0</td><td>意識を失い、一切の行動ができない危険な状態。</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p>回復ポーションなどのアイテムで回復できますが、重傷以上のダメージや部位欠損は魔法や高度な医療が必要になるかもしれません。</p>
+
+    <h3>2.3.3 戦闘ルール：ヒーローの時間</h3>
+    <p>このゲームの戦闘は、難しい戦術シミュレーションではありません。君たちがヒーローになるための舞台です。</p>
+    <div class="step-flow">
+        <p><strong>1. TLが状況を描写</strong><br>「敵は山賊5人！ 崖の上には弓兵がいて、足元には樽が転がってるぞ！」</p>
+        <p>　↓</p>
+        <p><strong>2. 君が「やりたいこと」を宣言</strong><br>「攻撃します」でもOKですが、もっとカッコよく！<br>「あの樽を蹴り飛ばして敵の体勢を崩し、その隙に弓兵をロープで引きずり下ろす！」</p>
+        <p>　↓</p>
+        <p><strong>3. 判定と結果</strong><br>TL「いいね！じゃあ【運動】で判定して！」<br>成功すれば、君の考えた通りに敵は大混乱し、物語が進みます。</p>
+    </div>
+
+    <h3>2.3.4 この世界の魔法</h3>
+    <p>この世界での魔法はまだ研究段階で、戦闘で「ファイアボール」のような派手な呪文を使える人はほぼいません。魔法は不思議なエネルギーとして、魔道具などで生活に溶け込んでいます。<br>
+    冒険者であるあなたたちは、訓練によって以下の<strong>《生活魔法》</strong>を使うことができます。</p>
+    
+    <details class="accordion">
+        <summary>生活魔法リストを見る</summary>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>魔法名</th><th>効果</th><th>備考</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>着火（キンドル）</strong></td>
+                        <td>指先に小さな火種を生み出す。</td>
+                        <td>1分の集中が必要。乾いた薪などに着火できる。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>洗浄（クレンズ）</strong></td>
+                        <td>汚れた食器や布、身体を綺麗にする。</td>
+                        <td>30秒ほどかかる。魔法的な呪いや古い染みは落ちない。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>集露（ワーラ）</strong></td>
+                        <td>空気中や植物から水分を集め、コップ一杯の水を生成。</td>
+                        <td>10分ほどかかる。喉を潤すには十分。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>風傘（エアコート）</strong></td>
+                        <td>1mほどの風のドームを作り、雨や雪を防ぐ。</td>
+                        <td>1分の集中で10分間維持。横殴りの雨や強風には無力。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
 </article>
 
 <!-- 2.4 経営SLGパート -->
