@@ -239,6 +239,79 @@ body.dark-mode .site-header { box-shadow: none; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* ==========================================================================
+   アコーディオン (詳細メニュー) の改善
+   ========================================================================== */
+/* detailsタグのスタイル */
+details.accordion {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 1rem 0;
+    overflow: hidden; /* 角丸を維持するため */
+    transition: all 0.2s ease;
+}
+
+/* summaryタグ（クリックする部分）のスタイル */
+details.accordion summary {
+    cursor: pointer;
+    padding: 1rem;
+    font-weight: bold;
+    color: var(--text-main);
+    background-color: var(--bg-sub); /* 背景を少し変えてボタンっぽく */
+    list-style: none; /* デフォルトの三角を消す */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color 0.2s;
+    user-select: none; /* テキスト選択を防ぐ */
+}
+
+/* Chrome/Safariなどのデフォルトマーカーを消す */
+details.accordion summary::-webkit-details-marker {
+    display: none;
+}
+
+/* ホバー時の効果 */
+details.accordion summary:hover {
+    background-color: var(--accent-light);
+    color: var(--accent);
+}
+
+/* 開閉アイコン（CSSで疑似要素として追加） */
+details.accordion summary::after {
+    content: '\e5cf'; /* Material Icons の "expand_more" */
+    font-family: 'Material Icons Round';
+    font-size: 1.5rem;
+    color: var(--text-sub);
+    transition: transform 0.3s ease;
+}
+
+/* 開いている状態のスタイル */
+details.accordion[open] summary {
+    border-bottom: 1px solid var(--border);
+}
+
+/* 開いている状態のアイコン回転 */
+details.accordion[open] summary::after {
+    transform: rotate(180deg);
+    color: var(--accent);
+}
+
+/* 中身のコンテンツ */
+details.accordion .table-container,
+details.accordion div {
+    padding: 1rem;
+    background-color: var(--card-bg);
+    animation: slideDown 0.3s ease-out;
+}
+
+/* 開いたときのアニメーション（簡易的） */
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
    6. ナビゲーション
    ========================================================================== */
 .post-nav {
