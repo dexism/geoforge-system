@@ -5,45 +5,108 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>運命を刻む元帳 ベンチャー of テイルズ TRPG(仮)</title>
     <link rel="stylesheet" href="rulebook.css">
+    <!-- フォント読み込み -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <!-- アイコンフォント -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 </head>
 <body>
 
+    <!-- ヘッダーエリア -->
     <header class="site-header">
         <div class="header-inner">
-            <button id="menu-btn" class="icon-btn" aria-label="メニューを開く">
-                <span class="material-icons-round">menu</span>
-            </button>
-            <!-- 修正: ロゴの日本語化 -->
+            <div class="left-controls">
+                <button id="menu-btn" class="icon-btn" aria-label="メニューを開く" title="メニュー">
+                    <span class="material-icons-round">menu</span>
+                </button>
+                <button id="home-btn" class="icon-btn" aria-label="ホームへ戻る" title="ホーム">
+                    <span class="material-icons-round">home</span>
+                </button>
+            </div>
+
             <h1 class="site-logo"><a href="#">ベンチャー of テイルズ TRPG</a></h1>
-            <button id="theme-toggle" class="icon-btn" aria-label="テーマ切り替え">
-                <span class="material-icons-round">dark_mode</span>
-            </button>
+            
+            <div class="right-controls">
+                <button id="search-btn" class="icon-btn" aria-label="検索" title="検索">
+                    <span class="material-icons-round">search</span>
+                </button>
+                <button id="tl-tool-btn" class="icon-btn" aria-label="TLツール" title="TLツール">
+                    <span class="material-icons-round">build</span>
+                </button>
+                <button id="theme-toggle" class="icon-btn" aria-label="テーマ切り替え" title="テーマ切り替え">
+                    <span class="material-icons-round">dark_mode</span>
+                </button>
+            </div>
         </div>
     </header>
 
+    <!-- ナビゲーションドロワー（左側メニュー） -->
     <nav id="drawer-nav" class="drawer">
         <div class="drawer-header">
             <h2>目次</h2>
             <button id="close-menu-btn" class="icon-btn"><span class="material-icons-round">close</span></button>
         </div>
         
+        <!-- 外部リンク -->
         <div class="external-links">
+            <!-- リンク先を更新しました -->
             <a href="https://script.google.com/macros/s/AKfycbwRLJth6_1xB_MVuGwLhbtBbTuA51kyDOO8oehRjRowkEgEE7PWRxP5fEasB1Pu2Tn2/exec" target="_blank" class="nav-btn primary">
-                <span class="material-icons-round">description</span> 履歴書<br><small>キャラクターシート</small>
+                <span class="material-icons-round">description</span> 履歴書 (GAS)
             </a>
             <a href="https://geoforge-system.onrender.com/" target="_blank" class="nav-btn secondary">
                 <span class="material-icons-round">public</span> GeoForge System
             </a>
         </div>
 
+        <!-- 目次リスト（JSで生成） -->
         <div id="toc-list" class="toc-list"></div>
     </nav>
     <div id="drawer-overlay" class="drawer-overlay"></div>
 
+    <!-- 検索モーダル -->
+    <div id="search-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <input type="text" id="search-input" placeholder="キーワードを入力 (例: 判定, 交易, 戦闘)...">
+                <button class="close-modal icon-btn"><span class="material-icons-round">close</span></button>
+            </div>
+            <div id="search-results" class="search-results-list"></div>
+        </div>
+    </div>
+
+    <!-- TLリファレンスモーダル -->
+    <div id="tl-modal" class="modal">
+        <div class="modal-content gm-screen">
+            <div class="modal-header">
+                <h2>TLクイックリファレンス</h2>
+                <button class="close-modal icon-btn"><span class="material-icons-round">close</span></button>
+            </div>
+            <div class="gm-content">
+                <!-- よく使う表などをここに記述 -->
+                <div class="ref-block">
+                    <h3>難易度目安 (2d6+能力値)</h3>
+                    <table>
+                        <tr><th>難易度</th><th>目標値</th></tr>
+                        <tr><td>易しい</td><td>10</td></tr>
+                        <tr><td>普通</td><td>13</td></tr>
+                        <tr><td>困難</td><td>16</td></tr>
+                        <tr><td>超困難</td><td>19</td></tr>
+                    </table>
+                </div>
+                <div class="ref-block">
+                    <h3>行為判定</h3>
+                    <p><strong>判定値 = 2d6 + 能力値 + スキル補正</strong></p>
+                    <p>クリティカル: 出目12 (自動成功)</p>
+                    <p>ファンブル: 出目2 (自動失敗)</p>
+                </div>
+                <!-- 必要に応じて情報を追加してください -->
+            </div>
+        </div>
+    </div>
+
+    <!-- メインコンテンツエリア -->
     <main class="main-container">
         <div id="content-area">
             <div class="loading">
@@ -53,13 +116,13 @@
         </div>
     </main>
 
+    <!-- フッター -->
     <footer class="site-footer">
-        <!-- 修正: 更新日時表示エリアの追加 -->
         <p>Last Update: <span id="last-update"></span></p>
         <p>&copy; 2025 Candle's. All rights reserved.</p>
     </footer>
 
-    <!-- 修正: 外部JSファイルの読み込み -->
+    <!-- JavaScriptファイル読み込み -->
     <script src="rulebook.js"></script>
 </body>
 </html>
