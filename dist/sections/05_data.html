@@ -438,12 +438,79 @@
                 </tbody>
             </table>
         </div>
+    </details>
         
-        <h4>依頼タイプ</h4>
-        <ul>
-            <li><strong>常設依頼：</strong>採取、雑務など。低報酬だがいつでも受けられる。</li>
-            <li><strong>特別依頼：</strong>魔物討伐、遺跡探索など。高報酬だが危険度が高い。</li>
-        </ul>
+    <!-- ★修正箇所：依頼モデルの詳細化★ -->
+    <details class="accordion">
+        <summary>ギルド依頼モデル（詳細データ）</summary>
+        
+        <h4>常設依頼（定常的・低難度）</h4>
+        <p>初心者でも受けやすく、季節ごとに需要がある仕事です。</p>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>依頼名</th><th>依頼主</th><th>報酬目安</th><th>特徴</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>採取依頼</strong></td>
+                        <td>薬師、鍛冶屋</td>
+                        <td>10〜20 G</td>
+                        <td>半日〜1日。季節で需要変動。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>狩猟依頼</strong></td>
+                        <td>食肉商人、村</td>
+                        <td>20〜30 G</td>
+                        <td>害獣駆除や小動物狩り。1〜2日。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>護衛依頼<br>(短距離)</strong></td>
+                        <td>商人、農村</td>
+                        <td>30〜50 G</td>
+                        <td>都市間移動(1日)。市場開催日に集中。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>雑務依頼</strong></td>
+                        <td>役所、商店</td>
+                        <td>5〜15 G</td>
+                        <td>荷運びや清掃。低報酬だが安定。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h4>特別依頼（突発的・高難度）</h4>
+        <p>危険度が高く、成功すれば大きな報酬と名声が得られます。</p>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>依頼名</th><th>依頼主</th><th>報酬目安</th><th>特徴</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>魔物討伐</strong></td>
+                        <td>領主、組合</td>
+                        <td>前金50〜100<br>成功200〜500</td>
+                        <td>3〜7日。危険だがリターン大。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>長距離護衛</strong></td>
+                        <td>ギルド、貴族</td>
+                        <td>前金100<br>成功300〜600</td>
+                        <td>1〜2週間。季節ごとに発生。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>遺跡探索</strong></td>
+                        <td>学者、魔術師</td>
+                        <td>前金200<br>成功500〜1000</td>
+                        <td>希少素材や知識が得られる。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>特殊調達</strong></td>
+                        <td>錬金術師、王侯</td>
+                        <td>前金500<br>成功1000〜</td>
+                        <td>希少素材の収集。金貨単位の報酬。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </details>
 </article>
 
