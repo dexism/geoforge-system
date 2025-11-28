@@ -205,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <h3>経営ルール</h3>
                     </div>
                     <div class="home-card" onclick="location.hash='#player-trpg'">
-                        <div class="icon"><span class="material-icons-round">shield</span></div>
+                        <div class="icon"><span class="material-icons-round">explore</span></div>
                         <h3>冒険・戦闘</h3>
                     </div>
                     <div class="home-card" onclick="location.hash='#data-top'">
