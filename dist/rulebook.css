@@ -521,8 +521,11 @@ details.accordion summary::after {
 }
 details.accordion[open] summary { border-bottom: 1px solid var(--border); }
 details.accordion[open] summary::after { transform: rotate(180deg); color: var(--accent); }
-details.accordion .table-container, details.accordion div {
-    padding: 1rem; background-color: var(--card-bg); animation: slideDown 0.3s ease-out;
+details.accordion .table-container, 
+details.accordion div {
+    padding: 1rem 1.5rem; 
+    background-color: var(--card-bg); 
+    animation: slideDown 0.3s ease-out;
 }
 @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
