@@ -312,6 +312,57 @@ body.dark-mode .site-header { box-shadow: none; }
     justify-content: center;
 }
 
+/* ホーム画面の導入エリア */
+.home-introduction {
+    max-width: 700px;
+    margin: 0 auto 2rem auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.intro-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: var(--card-shadow);
+}
+
+/* メイン説明（ハイライト） */
+.intro-card.main-desc {
+    border-left: 5px solid var(--accent);
+    background-color: var(--bg-sub);
+}
+
+.intro-card h3, .intro-card h4 {
+    margin-top: 0;
+    margin-bottom: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-main);
+}
+.intro-card h3 span { color: var(--accent); }
+.intro-card p { margin: 0; font-size: 0.95rem; line-height: 1.7; color: var(--text-sub); }
+
+/* サイトの使い方リスト */
+.site-guide ul {
+    margin: 0;
+    padding-left: 1.2rem;
+    color: var(--text-sub);
+    font-size: 0.9rem;
+}
+.site-guide li { margin-bottom: 0.5rem; }
+.site-guide strong { color: var(--text-main); }
+
+/* 文中のアイコン調整 */
+.inline-icon {
+    font-size: 1.1em;
+    vertical-align: text-bottom;
+    color: var(--text-sub);
+}
+
 /* ==========================================================================
    7. 関連記事 & ナビゲーション
    ========================================================================== */

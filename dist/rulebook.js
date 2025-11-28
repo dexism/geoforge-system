@@ -143,6 +143,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     <p>経営と冒険が交差する物語を始めましょう。</p>
                 </div>
 
+                <!-- 追加: ゲーム紹介とサイトの使い方 -->
+                <div class="home-introduction">
+                    <div class="intro-card main-desc">
+                        <h3><span class="material-icons-round">auto_awesome</span> 経営 × 冒険のハイブリッドTRPG</h3>
+                        <p>『ベンチャー of テイルズ』は、セッションのない日にスマホで進める<strong>「経営SLGパート」</strong>と、仲間と集まって挑む<strong>「TRPG冒険パート」</strong>を往復して遊ぶ、新しいスタイルのゲームです。<br>あなたがスキマ時間で育てた会社の資産や人脈が、冒険の最大の武器となります。</p>
+                    </div>
+                    
+                    <div class="intro-card site-guide">
+                        <h4><span class="material-icons-round">help_outline</span> このサイト（ルールブック）の使い方</h4>
+                        <ul>
+                            <li><strong>読み進める：</strong>下のカードメニューから、目的に合わせてページを開いてください。</li>
+                            <li><strong>探す：</strong>左上の <strong><span class="material-icons-round inline-icon">menu</span> メニュー</strong> から目次を、右上の <strong><span class="material-icons-round inline-icon">search</span> 検索</strong> からキーワードを探せます。</li>
+                            <li><strong>遊ぶ：</strong>右上の <strong><span class="material-icons-round inline-icon">build</span> ツール</strong> は、セッション中に役立つ判定表などを素早く表示します。</li>
+                        </ul>
+                    </div>
+                </div>
+
                 <div class="home-section-title">目的から探す</div>
                 <div class="home-grid">
                     <div class="home-card accent" onclick="location.hash='#intro-top'">
@@ -171,7 +188,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="icon"><span class="material-icons-round">explore</span></div>
                         <h3>冒険ルール</h3>
                     </div>
-                    <!-- 修正箇所: リンク先を #data-top に変更 -->
                     <div class="home-card" onclick="location.hash='#data-top'">
                         <div class="icon"><span class="material-icons-round">library_books</span></div>
                         <h3>データ一覧</h3>
