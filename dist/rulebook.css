@@ -724,29 +724,6 @@ body.dark-mode .noel-text h4 { color: #ffcc80; }
     cursor: pointer;
     box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     opacity: 0;
-    visibility: hidden;
-    transition: 0.3s;
-    z-index: 999;
-    border: none;
-}
-#back-to-top.visible { opacity: 1; visibility: visible; }
-
-/* --- フローティング戻るボタン --- */
-#back-to-top {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background-color: var(--accent);
-    color: white;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    opacity: 0;
     visibility: hidden; /* 初期状態は隠す */
     transition: opacity 0.3s, visibility 0.3s, transform 0.2s;
     z-index: 9999; /* 最前面に */
