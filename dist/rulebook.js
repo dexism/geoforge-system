@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <h3>経営ルール</h3>
                     </div>
                     <div class="home-card" onclick="location.hash='#player-trpg'">
-                        <div class="icon"><span class="material-icons-round">shield</span></div>
+                        <div class="icon"><span class="material-icons-round">explore</span></div>
                         <h3>冒険ルール</h3>
                     </div>
                     <!-- 修正箇所: リンク先を #data-top に変更 -->
