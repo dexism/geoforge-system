@@ -599,3 +599,134 @@ details.accordion > .table-container {
     .nav-card.next { text-align: left; }
     .home-hero h2 { font-size: 1.5rem; }
 }
+
+/* --- ノエルのガイド（フレーバーテキスト） --- */
+.noel-guide {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    background-color: #fff8e1; /* 薄い黄色 */
+    border: 2px solid #ffb74d;
+    border-radius: 12px;
+    padding: 1rem;
+    margin: 2rem 0;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+body.dark-mode .noel-guide {
+    background-color: #3e2723;
+    border-color: #ffb74d;
+    color: #ffe0b2;
+}
+.noel-avatar {
+    width: 60px;
+    height: 60px;
+    background-color: #ffb74d;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    flex-shrink: 0;
+}
+.noel-text h4 {
+    margin: 0 0 0.5rem 0;
+    color: #e65100;
+    font-size: 1rem;
+    border: none; padding: 0;
+}
+body.dark-mode .noel-text h4 { color: #ffcc80; }
+.noel-text p { margin: 0; font-size: 0.95rem; line-height: 1.6; }
+
+/* --- ツールチップ（用語解説） --- */
+.tooltip {
+    border-bottom: 1px dotted var(--accent);
+    cursor: help;
+    position: relative;
+    color: var(--text-main);
+}
+.tooltip::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0,0,0,0.9);
+    color: #fff;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: 0.2s;
+    z-index: 1000;
+    width: max-content;
+    max-width: 250px;
+    white-space: normal;
+    text-align: center;
+}
+.tooltip:hover::after { opacity: 1; bottom: 130%; }
+
+/* --- 戦闘：3すくみ図解 --- */
+.rps-diagram {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin: 2rem 0;
+    text-align: center;
+}
+.rps-card {
+    background: var(--card-bg);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    width: 30%;
+    min-width: 150px;
+    position: relative;
+}
+.rps-card.attack { border-color: #e57373; background: rgba(229, 115, 115, 0.1); }
+.rps-card.maneuver { border-color: #64b5f6; background: rgba(100, 181, 246, 0.1); }
+.rps-card.observe { border-color: #81c784; background: rgba(129, 199, 132, 0.1); }
+.rps-icon { font-size: 2rem; margin-bottom: 0.5rem; display: block; }
+.rps-win { color: var(--success); font-weight: bold; font-size: 0.8rem; display: block; margin-top: 0.5rem; }
+.rps-lose { color: var(--danger); font-weight: bold; font-size: 0.8rem; display: block; }
+
+/* --- 戦闘：距離マトリクス --- */
+.battle-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+}
+.battle-matrix th, .battle-matrix td {
+    border: 1px solid var(--border);
+    padding: 0.5rem;
+    text-align: center;
+}
+.battle-matrix th { background-color: var(--accent-light); color: var(--accent); }
+.battle-matrix .highlight { background-color: rgba(29, 155, 240, 0.1); font-weight: bold; }
+
+/* --- フローティング戻るボタン --- */
+#back-to-top {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: var(--accent);
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    opacity: 0;
+    visibility: hidden;
+    transition: 0.3s;
+    z-index: 999;
+    border: none;
+}
+#back-to-top.visible { opacity: 1; visibility: visible; }

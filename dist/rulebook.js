@@ -358,4 +358,23 @@ document.addEventListener('DOMContentLoaded', () => {
     searchInput.addEventListener('input', (e) => performSearch(e.target.value));
     
     window.addEventListener('hashchange', router);
+
+    // --- 戻るボタンの制御 ---
+    const backBtn = document.createElement('button');
+    backBtn.id = 'back-to-top';
+    backBtn.innerHTML = '<span class="material-icons-round">arrow_upward</span>';
+    backBtn.title = "ページトップへ戻る";
+    document.body.appendChild(backBtn);
+
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 300) {
+            backBtn.classList.add('visible');
+        } else {
+            backBtn.classList.remove('visible');
+        }
+    });
+
+    backBtn.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
 });
