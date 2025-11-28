@@ -1,5 +1,3 @@
-// rulebook.js
-
 document.addEventListener('DOMContentLoaded', () => {
     // 読み込むファイルリスト
     const files = [
