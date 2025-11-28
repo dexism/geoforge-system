@@ -68,25 +68,6 @@ document.addEventListener('DOMContentLoaded', () => {
         tlModal.classList.remove('active');
     }
 
-    // --- ★新規追加：戻るボタンの生成と制御 ---
-    const backBtn = document.createElement('button');
-    backBtn.id = 'back-to-top';
-    backBtn.innerHTML = '<span class="material-icons-round">arrow_upward</span>';
-    backBtn.title = "ページトップへ戻る";
-    document.body.appendChild(backBtn);
-
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 300) {
-            backBtn.classList.add('visible');
-        } else {
-            backBtn.classList.remove('visible');
-        }
-    });
-
-    backBtn.addEventListener('click', () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-
     // --- 1. 最終更新日時の設定 ---
     const lastUpdateEl = document.getElementById('last-update');
     if (lastUpdateEl) {
