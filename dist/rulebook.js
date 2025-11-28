@@ -1,7 +1,7 @@
 // rulebook.js
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 読み込むファイルリスト (sectionsフォルダ内のパス)
+    // 読み込むファイルリスト
     const files = [
         'sections/01_introduction.html',
         'sections/02_player.html',
@@ -34,6 +34,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeIcon = themeToggle.querySelector('span');
 
     let articles = [];
+
+    // --- ドロワー閉じる関数 (先に定義) ---
+    function closeDrawer() {
+        drawer.classList.remove('open');
+        overlay.classList.remove('open');
+    }
+    // グローバルスコープに登録（HTML内のonclickから呼ぶため）
+    window.closeDrawer = closeDrawer;
+
+    // --- モーダル閉じる関数 ---
+    function closeAllModals() {
+        searchModal.classList.remove('active');
+        tlModal.classList.remove('active');
+    }
 
     // --- 1. 最終更新日時の設定 ---
     const lastUpdateEl = document.getElementById('last-update');
@@ -89,11 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const id = el.id;
             const level = titleEl ? parseInt(titleEl.tagName.substring(1)) : 2;
             
-            // data-tags 属性を取得
             const tagsAttr = el.getAttribute('data-tags');
             const tags = tagsAttr ? tagsAttr.split(',').map(t => t.trim()) : [];
 
-            // ネストされた子要素を除去して、この記事自体のコンテンツだけにする
             const clone = el.cloneNode(true);
             clone.querySelectorAll(targetSelector).forEach(child => child.remove());
             const content = clone.innerHTML;
@@ -107,10 +119,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 5. ルーティング処理 ---
     function router() {
         const hash = window.location.hash.substring(1);
-        closeAllModals(); // 画面遷移時にモーダルを閉じる
+        closeAllModals();
+        closeDrawer(); // 画面遷移時にドロワーも閉じる
         
         if (!hash) {
-            renderHome(); // ホーム画面
+            renderHome(); 
         } else {
             const targetArticle = articles.find(a => a.id === hash);
             if (targetArticle) {
@@ -124,24 +137,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 6. ホーム画面の描画 ---
     function renderHome() {
+        // ID修正: HTMLファイルの整理に伴うID変更を反映
         const html = `
             <div class="home-view fade-in">
                 <div class="home-hero">
-                    <p>運命を刻む元帳</p>
+                    <p class="sub-title">運命を刻む元帳</p>
                     <h2>ベンチャー of テイルズ TRPG</h2>
-                    <p>ベンチャー of テイルズへようこそ。<br>経営と冒険が交差する物語を始めましょう。</p>
+                    <p>経営と冒険が交差する物語を始めましょう。</p>
                 </div>
 
                 <div class="home-section-title">目的から探す</div>
                 <div class="home-grid">
-                    <div class="home-card accent" onclick="location.hash='#hajimeni'">
+                    <div class="home-card accent" onclick="location.hash='#intro-top'">
                         <div class="icon"><span class="material-icons-round">emoji_people</span></div>
                         <div class="text">
                             <h3>はじめての方へ</h3>
                             <p>ゲームの概要、世界観、遊び方の流れ</p>
                         </div>
                     </div>
-                    <div class="home-card" onclick="location.hash='#create-char'">
+                    <div class="home-card" onclick="location.hash='#player-create'">
                         <div class="icon"><span class="material-icons-round">person_add</span></div>
                         <div class="text">
                             <h3>キャラクター作成</h3>
@@ -156,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="icon"><span class="material-icons-round">store</span></div>
                         <h3>経営ルール</h3>
                     </div>
-                    <div class="home-card" onclick="location.hash='#trpg-part'">
+                    <div class="home-card" onclick="location.hash='#player-trpg'">
                         <div class="icon"><span class="material-icons-round">sports_sword</span></div>
                         <h3>冒険ルール</h3>
                     </div>
@@ -168,14 +182,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 <div class="home-section-title">テラー (TL) 向け</div>
                 <div class="home-grid">
-                    <div class="home-card dark" onclick="location.hash='#teller-section'">
+                    <div class="home-card dark" onclick="location.hash='#teller-top'">
                         <div class="icon"><span class="material-icons-round">auto_stories</span></div>
                         <div class="text">
                             <h3>TLガイド</h3>
                             <p>マスタリングの手引き、NPC作成</p>
                         </div>
                     </div>
-                    <div class="home-card dark" onclick="location.hash='#scenario-section'">
+                    <div class="home-card dark" onclick="location.hash='#scenario-top'">
                         <div class="icon"><span class="material-icons-round">map</span></div>
                         <div class="text">
                             <h3>シナリオ集</h3>
@@ -190,7 +204,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 7. 記事詳細の描画 ---
     function renderArticle(article) {
-        // 関連記事の特定（タグの一致数が多いものを3件）
         let relatedArticles = [];
         if (article.tags.length > 0) {
             relatedArticles = articles
@@ -207,7 +220,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const prev = articles[article.index - 1];
         const next = articles[article.index + 1];
 
-        // 関連記事HTML
         let relatedHtml = '';
         if (relatedArticles.length > 0) {
             relatedHtml = `
@@ -263,12 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tocList.innerHTML = html;
     }
 
-    // --- 9. モーダル制御・検索 ---
-    function closeAllModals() {
-        searchModal.classList.remove('active');
-        tlModal.classList.remove('active');
-    }
-
+    // --- 9. 検索機能 ---
     const performSearch = (query) => {
         if (!query) { searchResults.innerHTML = ''; return; }
         const results = articles.filter(a => 
@@ -281,7 +288,6 @@ document.addEventListener('DOMContentLoaded', () => {
             searchResults.innerHTML = '<p>見つかりません</p>';
         } else {
             searchResults.innerHTML = results.map(a => {
-                // 本文の抜粋を作る
                 const text = a.content.replace(/<[^>]+>/g, "");
                 const idx = text.indexOf(query);
                 const snippet = idx > -1 ? text.substring(idx - 10, idx + 40) + "..." : text.substring(0, 50) + "...";
@@ -296,12 +302,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // イベント登録
+    // --- イベントリスナー登録 ---
     homeBtn.addEventListener('click', () => { location.hash = ''; });
+    
+    // ドロワー開閉
     menuBtn.addEventListener('click', () => { drawer.classList.add('open'); overlay.classList.add('open'); });
-    closeMenuBtn.addEventListener('click', window.closeDrawer);
-    overlay.addEventListener('click', window.closeDrawer);
+    closeMenuBtn.addEventListener('click', closeDrawer); // 修正: 関数定義済みなので参照できる
+    overlay.addEventListener('click', closeDrawer);
 
+    // ツール・検索モーダル
     tlToolBtn.addEventListener('click', () => { tlModal.classList.add('active'); });
     searchBtn.addEventListener('click', () => { 
         searchModal.classList.add('active');
@@ -309,7 +318,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     closeModalBtns.forEach(btn => btn.addEventListener('click', closeAllModals));
     
-    // モーダル背景クリック
     window.onclick = function(event) {
         if (event.target == searchModal || event.target == tlModal) {
             closeAllModals();
@@ -318,13 +326,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     searchInput.addEventListener('input', (e) => performSearch(e.target.value));
     
-    // ハッシュ変更監視
     window.addEventListener('hashchange', router);
-
-    // グローバル関数定義 (onclick属性用)
-    window.closeDrawer = function() {
-        drawer.classList.remove('open');
-        overlay.classList.remove('open');
-    };
-    window.closeAllModals = closeAllModals;
 });
