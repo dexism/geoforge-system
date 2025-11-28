@@ -180,9 +180,121 @@
     </div>
 </article>
 
-<!-- 5.4 事業一覧 -->
+<!-- (前略：5.3 魔法・アビリティ一覧 の後に追加してください) -->
+
+<!-- 5.4 武器・防具データ -->
+<article id="data-equipment" data-tags="data,item,combat,reference">
+    <h2>5.4 武器・防具データ</h2>
+    <p>武器や防具は、戦闘における4つの行動（✊攻撃、✌位置取り、✋見極め、🛡️防御）に対してそれぞれ得意・不得意を持っています。</p>
+
+    <details class="accordion" open>
+        <summary>武器リスト</summary>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>武器名</th>
+                        <th>Dmg</th>
+                        <th>✊ 攻撃技</th>
+                        <th>✌ 位置技</th>
+                        <th>✋ 見極技</th>
+                        <th>特徴・価格帯</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>小型ナイフ<br>格闘</strong></td>
+                        <td>1</td>
+                        <td>打ち-2<br>突き-1</td>
+                        <td>踏込+1<br>体捌+1</td>
+                        <td>誘い+1</td>
+                        <td>【低価格】軽量で隠密向き。位置取りに優れるが火力不足。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>短剣</strong></td>
+                        <td>1</td>
+                        <td>薙ぎ-1</td>
+                        <td>踏込+1<br>崩し+1</td>
+                        <td>誘い+1</td>
+                        <td>【中価格】バランス型。近距離でのカウンターや受け流しが得意。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>長剣</strong></td>
+                        <td>2</td>
+                        <td>打ち+1</td>
+                        <td>崩し+1</td>
+                        <td>牽制+1<br>誘い+1</td>
+                        <td>【高価格】攻防のバランスが良い。正面からの戦闘に強い。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>槍<br>長柄武器</strong></td>
+                        <td>2</td>
+                        <td>突き+2<br>薙ぎ+1</td>
+                        <td>踏込+1<br>掴み-2</td>
+                        <td>牽制+2</td>
+                        <td>【中〜高】リーチが長い。先制しやすいが、懐に入られると脆い。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>戦斧<br>大槌</strong></td>
+                        <td>3</td>
+                        <td>打ち+3<br>薙ぎ+2</td>
+                        <td>踏込-1<br>崩し+2</td>
+                        <td>牽制-2</td>
+                        <td>【高価格】破壊力特化。当たれば強いが、速度と防御に難あり。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>弓<br>クロスボウ</strong></td>
+                        <td>2</td>
+                        <td>突き+2<br>投げ-2</td>
+                        <td>踏込+2<br>掴み-2</td>
+                        <td>狙い+2</td>
+                        <td>【中〜高】遠距離特化。《狙い》からの射撃が強力。接近戦は苦手。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+
+    <details class="accordion">
+        <summary>防具リスト</summary>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>防具名</th>
+                        <th>防御</th>
+                        <th>耐性など</th>
+                        <th>特徴</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>布衣<br>軽革</strong></td>
+                        <td>1</td>
+                        <td>位置取り+1<br>打撃に弱い</td>
+                        <td>【低価格】軽量で動きやすい。回避や離脱にボーナス。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>鎖帷子<br>硬革</strong></td>
+                        <td>2</td>
+                        <td>斬撃・刺突○<br>機動性±0</td>
+                        <td>【中価格】バランス型。一般的な兵士の装備。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>板金鎧<br>大鎧</strong></td>
+                        <td>3</td>
+                        <td>打撃・刺突◎<br>位置取り-1</td>
+                        <td>【高価格】防御力は最強だが、重くて動きにくい。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+</article>
+
+<!-- 5.5 事業一覧 -->
 <article id="data-business" data-tags="data,management,reference">
-    <h2>5.4 事業一覧</h2>
+    <h2>5.5 事業一覧</h2>
     <p>プレイヤーが経営SLGパートで設立・運営できる事業のデータです。各事業はそれぞれ異なるリソースを産出し、特有のリスクを持ちます。</p>
 
     <details class="accordion" open>
@@ -239,9 +351,9 @@
     </div>
 </article>
 
-<!-- 5.5 イベント一覧 -->
+<!-- 5.6 イベント一覧 -->
 <article id="data-event" data-tags="data,event,management">
-    <h2>5.5 イベント一覧</h2>
+    <h2>5.6 イベント一覧</h2>
     <p>経営フェーズや移動中に発生するランダムイベントの表です。</p>
     
     <div class="comment-box">
@@ -255,9 +367,9 @@
     </div>
 </article>
 
-<!-- 5.6 用語集 -->
+<!-- 5.7 用語集 -->
 <article id="data-glossary" data-tags="data,glossary,reference">
-    <h2>5.6 用語集</h2>
+    <h2>5.7 用語集</h2>
     <p>『運命を刻む元帳』で使用される独自の用語についての解説です。</p>
 
     <details class="accordion">

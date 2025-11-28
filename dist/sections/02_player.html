@@ -1106,13 +1106,132 @@
     <p>回復ポーションなどのアイテムで回復できますが、重傷以上のダメージや部位欠損は魔法や高度な医療が必要になるかもしれません。</p>
 
     <h3>2.3.3 戦闘ルール：ヒーローの時間</h3>
-    <p>このゲームの戦闘は、難しい戦術シミュレーションではありません。君たちがヒーローになるための舞台です。</p>
+    <p>冒険に戦いはつきものです。このゲームの戦闘は、難しい戦術シミュレーションではありません。<strong>君たちがヒーローになるための最高の舞台</strong>なのです！<br>
+    しかし、闇雲に武器を振るうだけでは勝てません。敵との「間合い」を読み、適切な「戦闘技術」を選び取ることで、戦いを支配することができます。</p>
+
+    <div class="summary-box">
+        <h4><span class="material-icons-round">sports_martial_arts</span> 戦闘のシステム</h4>
+        <ul>
+            <li><strong>間合い：</strong>「エンカウント距離」で接敵し、「間合い」で勝負が決まります。</li>
+            <li><strong>3すくみ：</strong>「攻撃・位置取り・見極め」の3属性で判定を行います。</li>
+            <li><strong>防御：</strong>判定は「負け」扱いになりますが、ダメージを軽減し態勢を立て直せます。</li>
+        </ul>
+    </div>
+
+    <h4>1. 距離と間合い（レンジ）</h4>
+    <p>戦闘は、敵と遭遇した「エンカウント距離」から始まり、武器が届く「間合い（短距離）」での攻防へと移行します。</p>
+    <div class="table-container">
+        <table>
+            <thead><tr><th>区分</th><th>距離</th><th>状況・できること</th></tr></thead>
+            <tbody>
+                <tr><td><strong>遠距離</strong></td><td>30m〜</td><td>敵意が届く範囲。戦闘準備や、気付かれていなければ奇襲が可能。</td></tr>
+                <tr><td><strong>中距離</strong></td><td>10〜30m</td><td>短弓の有効範囲。警戒状態なら牽制が始まる。</td></tr>
+                <tr><td><strong>近距離</strong></td><td>5〜10m</td><td>投擲武器や槍の有効範囲。一足飛びで殴り合いに移行できる距離。</td></tr>
+                <tr><td><strong>短距離<br>（間合い）</strong></td><td>0〜5m</td><td><strong>戦闘の本領域。</strong>以下の細かい「間合い」の取り合いになる。<br>・穂先（3m）：長柄武器の領域<br>・剣先：剣の領域<br>・当て身：拳の領域<br>・懐：組み付きの領域</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h4>2. 戦闘技術と3すくみ（ジャンケンシステム）</h4>
+    <p>プレイヤーは毎ラウンド、以下のカテゴリから具体的な「戦闘技術」を選択して宣言します。<br>
+    これらは3すくみの関係にあり、<strong>勝てば判定ボーナス、負ければペナルティ</strong>を受けます。</p>
+    
+    <h4>2. 戦闘技術と3すくみ（ジャンケンシステム）</h4>
+    <p>プレイヤーは毎ラウンド、以下のカテゴリから具体的な「戦闘技術」を選択して宣言します。<br>
+    これらは3すくみの関係にあり、<strong>勝てば判定ボーナス、負ければペナルティ</strong>を受けます。</p>
+    
+    <!-- 戦闘技術の詳細リスト -->
+    <details class="accordion" open>
+        <summary>✊ 攻撃（アタック）の技術</summary>
+        <p><strong>目的：</strong>敵に損害を与えることを最優先する。<br><strong>相性：</strong>✌位置取りに強く、✋見極めに弱い。</p>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>技術名</th><th>説明・対象武器</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>《打ち》</strong></td><td>拳、斧、メイス、剣による打撃。または投擲。</td></tr>
+                    <tr><td><strong>《薙ぎ》</strong></td><td>ナイフ、剣、槍による切断軌道。（※獣皮など素材価値を下げる副作用あり）</td></tr>
+                    <tr><td><strong>《突き》</strong></td><td>槍、矢、ボルト、投げナイフ、剣による刺突。</td></tr>
+                    <tr><td><strong>《投げ》</strong></td><td>突進、突き飛ばし、プレス攻撃などを含む。</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+
+    <details class="accordion" open>
+        <summary>✌ 位置取り（マニューバ）の技術</summary>
+        <p><strong>目的：</strong>有利な間合いを作り出す、または退路を確保する。<br><strong>相性：</strong>✋見極めに強く、✊攻撃に弱い。</p>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>技術名</th><th>説明・効果</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>《踏み込み》</strong></td><td>有利な間合いを作り、一撃を加える。</td></tr>
+                    <tr><td><strong>《体捌き》</strong></td><td>間合いをずらし、敵の攻撃判定に-2のペナルティを与える。</td></tr>
+                    <tr><td><strong>《崩し》</strong></td><td>攻撃範囲内で相手の体勢を崩し、転倒判定を誘発する。</td></tr>
+                    <tr><td><strong>《掴み》</strong></td><td>突き放しや組み付きによって、強制的に間合いを制御する。</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+
+    <details class="accordion" open>
+        <summary>✋ 見極め（オブザーブ）の技術</summary>
+        <p><strong>目的：</strong>敵の動きや意図を観察し、次ラウンドに備える。<br><strong>相性：</strong>✊攻撃に強く、✌位置取りに弱い。</p>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>技術名</th><th>説明・効果</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>《牽制》</strong></td><td>攻撃範囲内にとどまり、間合いを変化させずに相手を釘付けにする。</td></tr>
+                    <tr><td><strong>《誘い》</strong></td><td>フェイント。カウンターによる攻撃機会を創出する。</td></tr>
+                    <tr><td><strong>《狙い》</strong></td><td>弓を引き絞るなどして、次ラウンドで強力な攻撃を可能にする。</td></tr>
+                    <tr><td><strong>《予備動作》</strong></td><td>武器の持ち替えなどを行う（捨てるだけなら宣言不要）。</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+
+    <h4>3. その他の行動（防御と一般）</h4>
+    <p>3すくみに属さない特殊な行動です。</p>
+    <details class="accordion" open>
+        <summary>🛡️ 防御と一般行動</summary>
+        <dl>
+            <dt>🛡️ 防御（ガード）</dt>
+            <dd><strong>「負け」扱いとなる行動です。</strong>判定上の勝負は放棄し、相手に押し込まれますが、その代わり<strong>「ダメージの軽減」</strong>や<strong>「致命傷の回避」</strong>といった効果を確実に得ることができます。</dd>
+        </dl>
+        <div class="table-container">
+            <table>
+                <thead><tr><th>技術名</th><th>説明</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>《防護》</strong></td><td>急所を守り、耐える。</td></tr>
+                    <tr><td><strong>《避け》</strong></td><td>足運びによる回避。</td></tr>
+                    <tr><td><strong>《受け流し》</strong></td><td>武器や盾で攻撃軌道を逸らす。</td></tr>
+                    <tr><td><strong>《受け身》</strong></td><td>格差のある打撃を、跳ぶなどしてダメージ分散する。</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <dl>
+            <dt>👟 一般行動</dt>
+            <dd>戦闘技術以外の行動です。<br>
+            <strong>例：</strong>《移動》（戦場内の位置変更）、《逃走》（戦闘から離脱）、《会話》、《アイテム使用》など</dd>
+        </dl>
+    </details>
+
+    <h4>4. 基本的な戦闘の流れ（ラウンドフロー）</h4>
     <div class="step-flow">
-        <p><strong>1. TLが状況を描写</strong><br>「敵は山賊5人！ 崖の上には弓兵がいて、足元には樽が転がってるぞ！」</p>
-        <p>　↓</p>
-        <p><strong>2. 君が「やりたいこと」を宣言</strong><br>「攻撃します」でもOKですが、もっとカッコよく！<br>「あの樽を蹴り飛ばして敵の体勢を崩し、その隙に弓兵をロープで引きずり下ろす！」</p>
-        <p>　↓</p>
-        <p><strong>3. 判定と結果</strong><br>TL「いいね！じゃあ【運動】で判定して！」<br>成功すれば、君の考えた通りに敵は大混乱し、物語が進みます。</p>
+        <p><strong>① TLの状況描写</strong><br>
+        「魔物は牙を剥き、唸りながら距離を詰めてくる（敵意剥き出し・近距離）」</p>
+        <p class="step-arrow">↓</p>
+        <p><strong>② 行動宣言（目的と技術）</strong><br>
+        PL：「懐に飛び込んで短剣を突き立てたい！ <strong>✌位置取り</strong>で<strong>《踏み込み》</strong>ます！」<br>
+        敵：（TLは心の中で<strong>✊攻撃</strong>を選択）</p>
+        <p class="step-arrow">↓</p>
+        <p><strong>③ 判定と効果適用</strong><br>
+        <strong>結果：攻撃（グー） vs 位置取り（チョキ） → 敵の勝ち！</strong><br>
+        PLは判定にペナルティ（-2など）を受け、敵はボーナスを得て判定します。<br>
+        ダメージ処理後、勝った側の意図通りに間合いが変化します。</p>
+        <p class="step-arrow">↓</p>
+        <p><strong>④ 結果描写</strong><br>
+        TL：「君は飛び込もうとしたが、魔物の突進の方が早かった！ 押し込まれてダメージを受けるが、結果的に間合いは『懐』になったぞ！」</p>
     </div>
 
     <h3>2.3.4 この世界の魔法</h3>
