@@ -1,3 +1,5 @@
+// rulebook.js
+
 document.addEventListener('DOMContentLoaded', () => {
     // 読み込むファイルリスト
     const files = [
@@ -32,9 +34,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeIcon = themeToggle.querySelector('span');
 
     let articles = [];
-    let tooltipTerms = [];
 
-    // --- [追加] 戻るボタンの生成と制御 ---
+    // --- ドロワー閉じる関数 ---
+    function closeDrawer() {
+        drawer.classList.remove('open');
+        overlay.classList.remove('open');
+    }
+    window.closeDrawer = closeDrawer;
+
+    // --- モーダル閉じる関数 ---
+    function closeAllModals() {
+        searchModal.classList.remove('active');
+        tlModal.classList.remove('active');
+    }
+
+    // --- ★新規追加：戻るボタンの生成と制御 ---
     const backBtn = document.createElement('button');
     backBtn.id = 'back-to-top';
     backBtn.innerHTML = '<span class="material-icons-round">arrow_upward</span>';
@@ -52,19 +66,6 @@ document.addEventListener('DOMContentLoaded', () => {
     backBtn.addEventListener('click', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
-
-    // --- ドロワー閉じる関数 ---
-    function closeDrawer() {
-        drawer.classList.remove('open');
-        overlay.classList.remove('open');
-    }
-    window.closeDrawer = closeDrawer;
-
-    // --- モーダル閉じる関数 ---
-    function closeAllModals() {
-        searchModal.classList.remove('active');
-        tlModal.classList.remove('active');
-    }
 
     // --- 1. 最終更新日時の設定 ---
     const lastUpdateEl = document.getElementById('last-update');
@@ -91,41 +92,22 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem("theme", isDark ? "dark" : "light");
     });
 
-    // --- [置換] データ読み込み〜解析ロジック ---
+    // --- 3. データ読み込みと初期化 ---
+    Promise.all(files.map(file => fetch(file).then(res => {
+        if (!res.ok) throw new Error(`Failed to load ${file}`);
+        return res.text();
+    })))
+    .then(htmlContents => {
+        const fullHtml = htmlContents.join('');
+        parseAndIndexContent(fullHtml);
+        router();
+    })
+    .catch(err => {
+        console.error(err);
+        contentArea.innerHTML = '<div class="error-msg"><p>コンテンツを読み込めませんでした。</p></div>';
+    });
 
-    // 初期化関数（JSONとHTMLを非同期で読み込む）
-    const init = async () => {
-        try {
-            // rulebook.json の読み込み
-            try {
-                const jsonRes = await fetch('rulebook.json');
-                if (jsonRes.ok) {
-                    const jsonData = await jsonRes.json();
-                    tooltipTerms = jsonData.tooltips || [];
-                }
-            } catch (e) {
-                console.warn('rulebook.json load failed:', e);
-            }
-
-            // HTMLコンテンツの読み込み
-            const htmlResponses = await Promise.all(files.map(file => fetch(file)));
-            const htmlContents = await Promise.all(htmlResponses.map(res => {
-                if (!res.ok) throw new Error('File load failed');
-                return res.text();
-            }));
-
-            const fullHtml = htmlContents.join('');
-            parseAndIndexContent(fullHtml);
-            router();
-
-        } catch (err) {
-            console.error(err);
-            contentArea.innerHTML = '<div class="error-msg"><p>コンテンツを読み込めませんでした。</p></div>';
-        }
-    };
-    init(); // 実行
-
-    // HTML解析とインデックス化
+    // --- 4. HTML解析とインデックス化 ---
     function parseAndIndexContent(html) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
@@ -144,21 +126,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const clone = el.cloneNode(true);
             clone.querySelectorAll(targetSelector).forEach(child => child.remove());
             
+            // ★新規追加：ツールチップ化処理（特定の単語を置換）
             let content = clone.innerHTML;
-
-            // ツールチップ置換処理
-            if (tooltipTerms.length > 0) {
-                tooltipTerms.forEach(term => {
-                    // 正規表現: アルファベットに囲まれていない単語のみヒットさせる
-                    // (?<![a-zA-Z]) : 直前がアルファベットでない
-                    // (?![a-zA-Z])  : 直後がアルファベットでない
-                    // (?![^<]*>)    : HTMLタグ内を除外
-                    const escapedWord = term.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const regex = new RegExp(`(?<![a-zA-Z])(${escapedWord})(?![a-zA-Z])(?![^<]*>)`, 'g');
-                    
-                    content = content.replace(regex, `<span class="tooltip" data-tip="${term.desc}">$1</span>`);
-                });
-            }
+            const terms = [
+                { word: '商才', desc: '市場感覚、創造力、交渉力の総称' },
+                { word: '魔石', desc: '魔力の結晶体。エネルギー資源であり貨幣' },
+                { word: 'G', desc: '通貨単位グレイン。1G=銅貨1枚' },
+                { word: 'IP', desc: 'インスピレーション・ポイント' },
+                { word: 'LP', desc: 'レッジャー・ポイント（元帳点）' },
+                { word: 'TL', desc: 'テラー（GM）のこと' }
+            ];
+            
+            terms.forEach(term => {
+                // 既にリンクやタグの中にある場合は除外する簡易正規表現
+                const regex = new RegExp(`(?<!<[^>]*)${term.word}`, 'g');
+                content = content.replace(regex, `<span class="tooltip" data-tip="${term.desc}">${term.word}</span>`);
+            });
 
             return { index, id, title, level, content, tags };
         });
