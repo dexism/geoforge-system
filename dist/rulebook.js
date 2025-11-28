@@ -178,15 +178,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
 
-                <div class="home-section-title">ルール・データ</div>
+                <!-- 主要ルールへのショートカット -->
+                <div class="home-section-title">主要ルール（ショートカット）</div>
+                <div class="home-grid">
+                    <div class="home-card" onclick="location.hash='#data-fate'">
+                        <div class="icon"><span class="material-icons-round">auto_awesome</span></div>
+                        <div class="text">
+                            <h3>運命介入</h3>
+                            <p>MPを使って奇跡を起こす</p>
+                        </div>
+                    </div>
+                    <div class="home-card" onclick="location.hash='#data-self-control'">
+                        <div class="icon"><span class="material-icons-round">psychology</span></div>
+                        <div class="text">
+                            <h3>自制心ロール</h3>
+                            <p>特徴（欠点）の暴走判定</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- データ・ルール -->
+                <div class="home-section-title">ルール・データ詳細</div>
                 <div class="home-grid three-col">
                     <div class="home-card" onclick="location.hash='#keiei'">
                         <div class="icon"><span class="material-icons-round">store</span></div>
                         <h3>経営ルール</h3>
                     </div>
                     <div class="home-card" onclick="location.hash='#player-trpg'">
-                        <div class="icon"><span class="material-icons-round">explore</span></div>
-                        <h3>冒険ルール</h3>
+                        <div class="icon"><span class="material-icons-round">shield</span></div>
+                        <h3>冒険・戦闘</h3>
                     </div>
                     <div class="home-card" onclick="location.hash='#data-top'">
                         <div class="icon"><span class="material-icons-round">library_books</span></div>

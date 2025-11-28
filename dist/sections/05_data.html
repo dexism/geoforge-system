@@ -3,6 +3,7 @@
   タグ定義:
   - data: データ集
   - reference: 参照用
+  - fate: 運命介入
   - class: クラス・ポジションデータ
   - skill: スキルデータ
   - magic: 魔法データ
@@ -30,7 +31,10 @@
             <div class="icon"><span class="material-icons-round">bolt</span></div>
             <h3>スキル一覧</h3>
         </div>
-        <!-- 修正: 経済データのリンクを追加 -->
+        <div class="home-card" onclick="location.hash='#data-fate'">
+            <div class="icon"><span class="material-icons-round">auto_awesome</span></div>
+            <h3>運命介入</h3>
+        </div>
         <div class="home-card" onclick="location.hash='#data-economy'">
             <div class="icon"><span class="material-icons-round">savings</span></div>
             <h3>経済・物価</h3>
@@ -175,9 +179,99 @@
     </div>
 </article>
 
-<!-- 5.4 武器・防具データ -->
+<!-- ★新規追加：5.4 運命介入リスト（独立化）★ -->
+<article id="data-fate" data-tags="data,fate,rule,reference">
+    <h2>5.4 運命介入リスト</h2>
+    <div class="summary-box">
+        <h4><span class="material-icons-round">auto_awesome</span> 運命介入とは</h4>
+        <p>MP（初期値5）を消費して発動するプレイヤーの切り札です。<br>
+        「なぜその奇跡が起きたか」をカッコよくロールプレイすることで効果が発揮されます。</p>
+    </div>
+
+    <div class="info-card">
+        <h4>消費 1 MP：小さな奇跡</h4>
+        <ul>
+            <li><strong>もう一回！：</strong>失敗した判定を振り直す。</li>
+            <li><strong>難易度緩和：</strong>判定前に宣言し、目標値を下げてもらう。</li>
+        </ul>
+        <p class="comment">例：「今のは練習だ、本番はここからだ！」</p>
+    </div>
+
+    <div class="info-card">
+        <h4>消費 2 MP：幸運な偶然</h4>
+        <ul>
+            <li><strong>結果の上書き：</strong>失敗を成功に変える（TLの許可が必要）。</li>
+            <li><strong>都合よく持ってました！：</strong>その場を乗り切るのに便利な小道具（鍵、油、ロープなど）を所持していたことにする。</li>
+        </ul>
+        <p class="comment">例：「そういえば、旅商人から『どんな錆も落とせる油』を買わされたんだった！」</p>
+    </div>
+
+    <div class="info-card">
+        <h4>消費 3 MP：運命的な遭遇</h4>
+        <ul>
+            <li><strong>助っ人登場：</strong>旧知の友人や、情報をくれそうなNPCが通りかかる。</li>
+            <li><strong>情報の入手：</strong>敵の会話を立ち聞きする、重要なメモを拾うなど。</li>
+        </ul>
+        <p class="comment">例：「こんな所で会うなんて！ 俺たち、腐れ縁だな！」</p>
+    </div>
+
+    <div class="info-card">
+        <h4>消費 4 MP：物語の伏線回収</h4>
+        <ul>
+            <li><strong>過去が繋がった！：</strong>ライフパス（生まれ・育ち・契機）や過去のセッションでの出来事を根拠に、大ピンチをチャンスに変える。</li>
+        </ul>
+        <p class="comment">例：「この紋章は…！ 俺は『傭兵団育ち』だから知っている、奴らの弱点はここだ！」</p>
+    </div>
+
+    <div class="info-card">
+        <h4>消費 5 MP：デウス・エクス・マキナ</h4>
+        <ul>
+            <li><strong>奇跡の顕現：</strong>致命的なダメージの無効化、状況の強制変更など、セッションのクライマックスを覆す究極の奇跡。</li>
+        </ul>
+        <p class="comment">例：「巨大な岩が落ちてきて、魔物だけを押しつぶした！ 僕らは奇跡的に隙間にいて助かったんだ！」</p>
+    </div>
+</article>
+
+<!-- ★新規追加：5.5 自制心ロール（プレイヤーセクションから移動）★ -->
+<article id="data-self-control" data-tags="data,rule,roleplay,reference">
+    <h2>5.5 自制心ロール</h2>
+    
+    <div class="summary-box">
+        <h4><span class="material-icons-round">psychology</span> ルール概要</h4>
+        <p>キャラクターの「特徴（癖や性格）」が暴走しそうな時に行う判定です。<br>
+        失敗すると、プレイヤーの意図とは裏腹に、キャラクターらしい行動（トラブル）を起こしてしまいます。</p>
+    </div>
+
+    <div class="formula-box">
+        <h4>判定ルール</h4>
+        <p><strong>判定方法：</strong> 1d10 （10面ダイス1個）<br>
+        <strong>目標値：</strong> <strong>6 以上</strong>で成功（成功率 50%）</p>
+        <dl>
+            <dt>成功（6〜10）</dt>
+            <dd>理性が衝動を抑え込みました。あなたは自分の意志通りに行動できます。</dd>
+            <dt>失敗（1〜5）</dt>
+            <dd>衝動に負けました！ キャラクターは「特徴」に基づいた行動をとらなくてはなりません（TLが指定、または強制ロールプレイ）。</dd>
+        </dl>
+    </div>
+
+    <div class="example-box">
+        <h5>プレイ例：特徴【大雑把】の場合</h5>
+        <p><strong>状況：</strong>繊細な魔導装置を操作して扉を開けるシーン。</p>
+        <p><strong>TL：</strong>「君は【大雑把】だよね？ イライラして叩きたくならない？ 《自制心ロール》をお願い！」</p>
+        <p><strong>結果：</strong>失敗（出目3）</p>
+        <p><strong>PL：</strong>「くそっ！ 『ええい、面倒くさい！』と叫んで装置をバンバン叩きます！」</p>
+        <p><strong>TL：</strong>「警報が鳴り響いた！（笑）」</p>
+    </div>
+
+    <div class="teller-hint-box">
+        <h4>テラーへのヒント</h4>
+        <p>《自制心ロール》は罰則ではなく、ドラマを生むスパイスです。「酒好き」が美酒を我慢できるか、「正直者」が嘘をつけるかなど、失敗しても面白い展開になる場面で提案しましょう。</p>
+    </div>
+</article>
+
+<!-- 5.6 武器・防具データ -->
 <article id="data-equipment" data-tags="data,item,combat,reference">
-    <h2>5.4 武器・防具データ</h2>
+    <h2>5.6 武器・防具データ</h2>
     <p>武器や防具は、戦闘における4つの行動（✊攻撃、✌位置取り、✋見極め、🛡️防御）に対してそれぞれ得意・不得意を持っています。</p>
 
     <details class="accordion">
@@ -285,9 +379,9 @@
     </details>
 </article>
 
-<!-- 5.5 経済・生活データ（新規追加） -->
+<!-- 5.7 経済・生活データ（新規追加） -->
 <article id="data-economy" data-tags="data,economy,world,reference">
-    <h2>5.5 経済・生活データ</h2>
+    <h2>5.7 経済・生活データ</h2>
     
     <div class="summary-box">
         <h4><span class="material-icons-round">monetization_on</span> 経済の概要</h4>
@@ -295,7 +389,7 @@
         冒険者市場は特殊であり、一般市民の感覚とは異なる高額な取引が行われます。</p>
     </div>
 
-    <h3>5.5.1 貨幣と価値基準</h3>
+    <h3>5.7.1 貨幣と価値基準</h3>
     <div class="table-container">
         <table>
             <thead><tr><th>貨幣</th><th>価値 (G)</th><th>備考</th></tr></thead>
@@ -328,42 +422,80 @@
         </div>
     </details>
 
-    <h3>5.5.2 生活水準と階級</h3>
-    <p>この世界の住民がどのような経済状況で暮らしているかの目安です。</p>
+    <h3>5.7.2 階級別生活モデル（詳細）</h3>
+    <p>この世界の住人がどのような経済状況で暮らしているかの詳細データです。</p>
     
     <details class="accordion">
-        <summary>階級別生活モデル表</summary>
-        <div class="table-container">
-            <table>
-                <thead><tr><th>階級</th><th>平均月収</th><th>生活実態</th></tr></thead>
-                <tbody>
-                    <tr>
-                        <td><strong>農民</strong></td>
-                        <td>30〜50 G</td>
-                        <td>自給自足が基本。現金収入は少なく、武具を買う余裕はない。</td>
-                    </tr>
-                    <tr>
-                        <td><strong>都市民</strong></td>
-                        <td>100〜200 G</td>
-                        <td>職人・商人。簡易武器は買えるが、防具は高嶺の花。</td>
-                    </tr>
-                    <tr>
-                        <td><strong>軍人</strong></td>
-                        <td>80〜150 G</td>
-                        <td>衣食住が保障される。安定的だが贅沢はできない。</td>
-                    </tr>
-                    <tr>
-                        <td><strong>傭兵</strong></td>
-                        <td>200〜1000 G</td>
-                        <td>戦時は高収入だが、装備維持費や平時の困窮リスクがある。</td>
-                    </tr>
-                    <tr>
-                        <td><strong>冒険者</strong></td>
-                        <td>50〜1000 G</td>
-                        <td>依頼次第で変動。報酬の半分は生活費と装備維持費に消える。</td>
-                    </tr>
-                </tbody>
-            </table>
+        <summary>階級ごとの収支詳細を見る</summary>
+        
+        <div class="info-card">
+            <h4>農民（農村生活者）</h4>
+            <ul>
+                <li><strong>平均月収：</strong>30〜50 G（銅貨〜銀貨程度）<br>
+                ※自給自足が基本。現金収入は余剰作物の販売や季節労働で得る。</li>
+                <li><strong>生活支出：</strong>20〜40 G
+                    <ul>
+                        <li>食費：10〜20G（自家生産が主）</li>
+                        <li>衣服・日用品：5〜10G</li>
+                        <li>税・地代：5〜10G</li>
+                    </ul>
+                </li>
+                <li><strong>特徴：</strong>現金で武器や防具を買う余裕はほぼない。農具は自作。</li>
+            </ul>
+        </div>
+
+        <div class="info-card">
+            <h4>都市生活者（職人・商人）</h4>
+            <ul>
+                <li><strong>平均月収：</strong>100〜200 G（銀貨〜小金貨2枚程度）</li>
+                <li><strong>生活支出：</strong>80〜150 G
+                    <ul>
+                        <li>食費：30〜50G（市場で購入）</li>
+                        <li>住居・家賃：20〜40G</li>
+                        <li>衣服・日用品：20〜30G</li>
+                        <li>税・組合費：10〜20G</li>
+                    </ul>
+                </li>
+                <li><strong>特徴：</strong>余剰資金で簡易武器（短剣や弓）を買えるが、防具は高価すぎて手が出ない。</li>
+            </ul>
+        </div>
+
+        <div class="info-card">
+            <h4>冒険者</h4>
+            <ul>
+                <li><strong>依頼報酬：</strong>
+                    <ul>
+                        <li>小規模（盗賊退治など）：50〜200G</li>
+                        <li>中規模（魔物討伐など）：300〜1000G</li>
+                    </ul>
+                </li>
+                <li><strong>最低生活費（月）：</strong>150〜300 G
+                    <ul>
+                        <li>食費：月300〜450G（外食のみの場合。自炊や野宿で節約可能）</li>
+                        <li>宿代：安宿で月150〜300G</li>
+                        <li>装備維持費：月50〜100G（修理・消耗品）</li>
+                    </ul>
+                </li>
+                <li><strong>特徴：</strong>依頼がないとすぐ生活が苦しくなる。武器や防具は「報酬を貯めて買う」スタイル。</li>
+            </ul>
+        </div>
+
+        <div class="info-card">
+            <h4>軍人（職業軍人）</h4>
+            <ul>
+                <li><strong>平均月収：</strong>80〜150 G</li>
+                <li><strong>生活支出：</strong>60〜100 G（食料・住居の保障あり）</li>
+                <li><strong>特徴：</strong>安定した収入と生活保障があるが、贅沢は難しい。</li>
+            </ul>
+        </div>
+
+        <div class="info-card">
+            <h4>傭兵</h4>
+            <ul>
+                <li><strong>平均月収：</strong>200〜1000 G（契約次第）</li>
+                <li><strong>生活支出：</strong>100〜400 G（装備維持費が高額）</li>
+                <li><strong>特徴：</strong>戦時は高収入だが、平時は収入ゼロで困窮しやすい。</li>
+            </ul>
         </div>
     </details>
 
@@ -386,7 +518,7 @@
         </dl>
     </details>
 
-    <h3>5.5.3 冒険者の経済</h3>
+    <h3>5.7.3 冒険者の経済</h3>
     <p>冒険者は「ハイリスク・ハイリターン」な経済圏に生きています。</p>
 
     <details class="accordion">
@@ -409,7 +541,7 @@
         <summary>ギルド依頼モデル（ランク別）</summary>
         <div class="table-container">
             <table>
-                <thead><tr><th>ランク</th><th>依頼内容</th><th>報酬目安</th><th>月収支イメージ</th></tr></thead>
+                <thead><tr><th>ランク</th><th>依頼内容</th><th>月収目安</th><th>月収支イメージ</th></tr></thead>
                 <tbody>
                     <tr>
                         <td><strong>F (見習い)</strong></td>
@@ -514,9 +646,9 @@
     </details>
 </article>
 
-<!-- 5.6 アイテムリスト（新規追加） -->
+<!-- 5.8 アイテムリスト（新規追加） -->
 <article id="data-item-list" data-tags="data,item,price,reference">
-    <h2>5.6 アイテムリスト（標準価格）</h2>
+    <h2>5.8 アイテムリスト（標準価格）</h2>
     <p>冒険生活に必要な物品の標準価格リストです。地域や状況により変動します。</p>
 
     <!-- 食費・宿泊・移動 -->
@@ -567,36 +699,66 @@
         </div>
     </details>
 
-    <!-- 装備品（武器・防具） -->
+    <!-- 装備品（武器・防具）詳細版 -->
     <details class="accordion">
-        <summary>武器・防具（購入価格）</summary>
+        <summary>武器・防具リスト（詳細価格）</summary>
         <p>※これらは新品の価格です。中古品は6〜8割程度で買えることがあります。</p>
+        
         <div class="table-container">
             <table>
-                <thead><tr><th>装備名</th><th>価格</th><th>備考</th></tr></thead>
+                <thead><tr><th>カテゴリ</th><th>名称</th><th>価格</th><th>備考</th></tr></thead>
                 <tbody>
-                    <tr><td colspan="3"><strong>【武器】</strong></td></tr>
-                    <tr><td>棍棒 / メイス</td><td>5〜50 G</td><td>安価な打撃武器。</td></tr>
-                    <tr><td>短剣（鉄製）</td><td>200 G</td><td>歩兵の副武装。</td></tr>
-                    <tr><td>長剣（鉄製）</td><td>500 G</td><td>騎士の象徴。</td></tr>
-                    <tr><td>槍</td><td>150〜250 G</td><td>安価で強力。</td></tr>
-                    <tr><td>短弓</td><td>200〜300 G</td><td>狩猟用。</td></tr>
-                    <tr><td>矢束 (20本)</td><td>30〜50 G</td><td>消耗品。</td></tr>
-                    <tr><td colspan="3"><strong>【防具】</strong></td></tr>
-                    <tr><td>革チュニック</td><td>40〜80 G</td><td>服を兼ねた軽防具。</td></tr>
-                    <tr><td>革鎧（強化）</td><td>150〜250 G</td><td>鋲などで補強。</td></tr>
-                    <tr><td>鎖帷子</td><td>600〜800 G</td><td>一般的な兵士装備。</td></tr>
-                    <tr><td>板金鎧</td><td>1000 G〜</td><td>騎士用。非常に高価。</td></tr>
-                    <tr><td>小型盾</td><td>150〜200 G</td><td>木製。</td></tr>
+                    <!-- 近接武器 -->
+                    <tr><td rowspan="7"><strong>近接武器</strong></td><td>木製棍棒（杖）</td><td>5 G</td><td>最も安価な武器。</td></tr>
+                    <tr><td>メイス / 棍棒</td><td>5〜50 G</td><td>農民兵や傭兵の廉価武器。打撃用。</td></tr>
+                    <tr><td>ウォーハンマー</td><td>500〜700 G</td><td>鎧破壊用。騎士や重歩兵が使用。</td></tr>
+                    <tr><td>短剣（鉄製）</td><td>200 G</td><td>歩兵の副武装。止め刺しや近接用。</td></tr>
+                    <tr><td>長剣（鉄製）</td><td>500 G</td><td>騎士・騎兵の象徴。</td></tr>
+                    <tr><td>槍</td><td>150〜250 G</td><td>主力武器。安価で量産可能。</td></tr>
+                    <tr><td>ランス / 騎槍</td><td>400〜600 G</td><td>騎兵突撃用。長大で威力大。</td></tr>
+                    <tr><td>斧（片手）</td><td>150〜300 G</td><td>木こりや軽歩兵が流用。盾破壊に有効。</td></tr>
+
+                    <!-- 射撃武器 -->
+                    <tr><td rowspan="8"><strong>射撃武器</strong></td><td>短弓（ショートボウ）</td><td>200〜300 G</td><td>狩猟、歩兵用。</td></tr>
+                    <tr><td>強化短弓</td><td>400〜600 G</td><td>角材・獣腱補強。</td></tr>
+                    <tr><td>長弓（ロングボウ）</td><td>500〜700 G</td><td>歩兵精鋭用。</td></tr>
+                    <tr><td>強化ロングボウ</td><td>800〜1200 G</td><td>威力・耐久性が高い。</td></tr>
+                    <tr><td>軽クロスボウ</td><td>300〜400 G</td><td>小型で片手でも扱える。冒険者向け。</td></tr>
+                    <tr><td>クロスボウ</td><td>500〜700 G</td><td>歩兵用の一般的な型。</td></tr>
+                    <tr><td>重クロスボウ</td><td>800〜1200 G</td><td>鎧貫通力が高い。都市防衛用。</td></tr>
+                    <tr><td>矢束 / ボルト (20本)</td><td>30〜50 G</td><td>消耗品。鉄鏃は倍額。</td></tr>
+
+                    <!-- 投擲武器 -->
+                    <tr><td rowspan="7"><strong>投擲・特殊</strong></td><td>投石器（スリング）</td><td>20〜50 G</td><td>安価。弾は石や鉛球。</td></tr>
+                    <tr><td>投げナイフ</td><td>50〜100 G/本</td><td>隠し武器にもなる。</td></tr>
+                    <tr><td>投槍（ジャベリン）</td><td>100〜200 G</td><td>槍を軽量化した投擲用。</td></tr>
+                    <tr><td>投げ斧</td><td>150〜250 G</td><td>近距離で威力大。</td></tr>
+                    <tr><td>火炎瓶</td><td>30〜80 G</td><td>油瓶に布を詰めた簡易火器。</td></tr>
+                    <tr><td>特殊玉（煙・匂い）</td><td>20〜50 G</td><td>撹乱用。</td></tr>
+                    <tr><td>毒（10回分）</td><td>50〜150 G</td><td>鏃や罠に塗布。</td></tr>
+
+                    <!-- 防具 -->
+                    <tr><td rowspan="10"><strong>防具</strong></td><td>革製チュニック</td><td>40〜80 G</td><td>軽防具兼衣服。</td></tr>
+                    <tr><td>革小手 / 革脛当て</td><td>50〜150 G</td><td>部分防具。</td></tr>
+                    <tr><td>強化革鎧（鋲付き）</td><td>150〜250 G</td><td>防御力を高めた革鎧。</td></tr>
+                    <tr><td>鎖帷子（チェイン）</td><td>600〜800 G</td><td>防御と柔軟性のバランスが良い。</td></tr>
+                    <tr><td>鱗鎧（スケイル）</td><td>800〜1200 G</td><td>金属片を重ねた防具。耐久性高。</td></tr>
+                    <tr><td>胸甲（ブレスト）</td><td>500〜700 G</td><td>胸部を守る鉄製防具。</td></tr>
+                    <tr><td>板金鎧（プレート）</td><td>1000〜2000 G</td><td>騎士専用。高価で重い。</td></tr>
+                    <tr><td>兜（ヘルム）</td><td>200〜400 G</td><td>鉄製。視界制限あり。</td></tr>
+                    <tr><td>小型盾</td><td>150〜200 G</td><td>木製。鉄縁強化は400G〜。</td></tr>
+                    <tr><td>大盾</td><td>700〜1000 G</td><td>歩兵防衛用。重量大。</td></tr>
                 </tbody>
             </table>
         </div>
+        
         <div class="info-card">
             <h4>装備の維持費</h4>
-            <p>武器や防具は、毎月メンテナンス費用がかかります。</p>
+            <p>武器や防具は「買ったら終わり」ではありません。継続的なメンテナンスが必要です。</p>
             <ul>
-                <li>武器研磨：10〜30G/月</li>
-                <li>防具補修：50〜100G/月</li>
+                <li><strong>武器：</strong>研磨・修繕（月10〜30G）</li>
+                <li><strong>防具：</strong>打ち直し・補強（月50〜100G）</li>
+                <li><strong>消耗品：</strong>矢の補充、革油など（月20〜50G）</li>
             </ul>
         </div>
     </details>
@@ -636,9 +798,9 @@
     </details>
 </article>
 
-<!-- 5.7 事業一覧 -->
+<!-- 5.9 事業一覧 -->
 <article id="data-business" data-tags="data,management,reference">
-    <h2>5.7 事業一覧</h2>
+    <h2>5.9 事業一覧</h2>
     <p>プレイヤーが経営SLGパートで設立・運営できる事業のデータです。各事業はそれぞれ異なるリソースを産出し、特有のリスクを持ちます。</p>
 
     <details class="accordion">
@@ -695,9 +857,9 @@
     </div>
 </article>
 
-<!-- 5.8 イベント一覧 -->
+<!-- 5.10 イベント一覧 -->
 <article id="data-event" data-tags="data,event,management">
-    <h2>5.8 イベント一覧</h2>
+    <h2>5.10 イベント一覧</h2>
     <p>経営フェーズや移動中に発生するランダムイベントの表です。</p>
     
     <div class="comment-box">
@@ -711,9 +873,9 @@
     </div>
 </article>
 
-<!-- 5.9 用語集 -->
+<!-- 5.11 用語集 -->
 <article id="data-glossary" data-tags="data,glossary,reference">
-    <h2>5.9 用語集</h2>
+    <h2>5.11 用語集</h2>
     <p>『運命を刻む元帳』で使用される独自の用語についての解説です。</p>
 
     <details class="accordion">
