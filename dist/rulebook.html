@@ -5,106 +5,71 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>運命を刻む元帳 ベンチャー of テイルズ TRPG(仮)</title>
     <link rel="stylesheet" href="rulebook.css">
+    <!-- Google Fonts: 読みやすさのためにNoto Sans JPを使用 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <!-- アイコンフォント -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 </head>
 <body>
-    <script src="//accaii.com/ventureoftales/script.js" async></script><noscript><img src="//accaii.com/ventureoftales/script?guid=on"></noscript>
-    
-    <input type="checkbox" id="menu-toggle" class="menu-toggle-checkbox">
-    <label for="menu-toggle" class="menu-toggle-label">
-        <span></span>
-    </label>
 
-    <header>
-        <div class="header-content">
-            <h2>運命を刻む元帳</h2>
-            <h1>ベンチャー of テイルズ TRPG<small>(仮)</small></h1>
-            <h2>～Pilot Season: 黄金と砂塵のモノローグ～</h2>
-            <p class="sub-title">基本ルールブック</p>
-            <p>TRPG開発プロジェクト Candle's.</p>
-            <p>2025.11.231950</p>
+    <!-- ヘッダーエリア -->
+    <header class="site-header">
+        <div class="header-inner">
+            <button id="menu-btn" class="icon-btn" aria-label="メニューを開く">
+                <span class="material-icons-round">menu</span>
+            </button>
+            <h1 class="site-logo"><a href="#">Venture of Tales</a></h1>
+            <button id="theme-toggle" class="icon-btn" aria-label="テーマ切り替え">
+                <span class="material-icons-round">dark_mode</span>
+            </button>
         </div>
     </header>
 
-    <div class="container">
-        <!-- サイドバー（目次） -->
-        <nav class="sidebar">
-            <h3>目次</h3>
-            <ul>
-                <li>
-                    <details open>
-                        <summary><a href="#hajimeni">1 はじめに</a></summary>
-                        <ul>
-                            <li><a href="#trailer">1.1 トレーラー</a></li>
-                            <li><a href="#welcome">1.2 ようこそ</a></li>
-                            <li><a href="#replay">1.3 イメージリプレイ</a></li>
-                            <li><a href="#gaiyou">1.4 ゲームの概要</a></li>
-                            <li><a href="#sekai">1.5 舞台となる世界</a></li>
-                            <li><a href="#keiei">1.6 この世界における「経営」とは</a></li>
-                        </ul>
-                    </details>
-                </li>
-                <li>
-                    <details open>
-                        <summary><a href="#player-section">2 プレイヤーセクション</a></summary>
-                         <ul>
-                            <li><a href="#template-char">2.1 テンプレートキャラクター</a></li>
-                            <li><a href="#create-char">2.2 キャラクターの創造</a></li>
-                            <li><a href="#trpg-part">2.3 TRPGパート</a></li>
-                            <li><a href="#slg-part">2.4 経営SLGパート</a></li>
-                        </ul>
-                    </details>
-                </li>
-                <li>
-                    <details open>
-                        <summary><a href="#teller-section">3 テラーセクション</a></summary>
-                        <ul>
-                            <li><a href="#teller-prepare">3.1 セッションの準備</a></li>
-                            <li><a href="#teller-npc">3.2 世界を彩る人々（NPC）</a></li>
-                            <li><a href="#teller-manage">3.3 TRPGパートの進行管理</a></li>
-                            <li><a href="#teller-enemy">3.4 プレイヤーの前に立ちはだかるもの</a></li>
-                        </ul>
-                    </details>
-                </li>
-                 <li>
-                    <details open>
-                        <summary><a href="#scenario-section">4 シナリオセクション</a></summary>
-                        <ul>
-                           <li><a href="#scenario-sample">4.1 サンプルシナリオ『暁のキャラバン』</a></li>
-                           <li><a href="#scenario-sample-2">4.2 サンプルシナリオ②</a></li>
-                        </ul>
-                    </details>
-                </li>
-                <li>
-                    <details open>
-                        <summary><a href="#data-section">5 データセクション</a></summary>
-                         <ul>
-                           <li><a href="#class-list">5.1 クラス一覧</a></li>
-                           <li><a href="#skill-list">5.2 スキル一覧</a></li>
-                           <li><a href="#jigyo-list">5.3 事業一覧</a></li>
-                           <li><a href="#event-list">5.4 イベント一覧</a></li>
-                           <li><a href="#glossary">5.5 用語集</a></li>
-                        </ul>
-                    </details>
-                </li>
-            </ul>
-        </nav>
+    <!-- ナビゲーションドロワー -->
+    <nav id="drawer-nav" class="drawer">
+        <div class="drawer-header">
+            <h2>目次</h2>
+            <button id="close-menu-btn" class="icon-btn"><span class="material-icons-round">close</span></button>
+        </div>
+        
+        <!-- 重要な外部リンク -->
+        <div class="external-links">
+            <a href="https://docs.google.com/spreadsheets/d/1kX945WYVgjSfphGhsXcVXMuqt5awp85m4DUxconb_g4/edit?usp=sharing" target="_blank" class="nav-btn primary">
+                <span class="material-icons-round">description</span> 履歴書 (Google Sheets)
+            </a>
+            <a href="https://geoforge-system.onrender.com/" target="_blank" class="nav-btn secondary">
+                <span class="material-icons-round">public</span> GeoForge System
+            </a>
+        </div>
 
-        <!-- コンテンツ表示エリア -->
-        <main id="main-content">
-            <p style="text-align: center; padding: 2rem;">コンテンツを読み込み中...</p>
-        </main>
-    </div>
+        <div id="toc-list" class="toc-list">
+            <!-- JavaScriptで目次を自動生成 -->
+        </div>
+    </nav>
+    <div id="drawer-overlay" class="drawer-overlay"></div>
 
-    <footer>
+    <!-- メインコンテンツエリア -->
+    <main class="main-container">
+        <div id="content-area">
+            <!-- ここに記事が動的に表示されます -->
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>物語を読み込んでいます...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- フッター -->
+    <footer class="site-footer">
         <p>&copy; 2025 Candle's. All rights reserved.</p>
     </footer>
 
-    <!-- コンテンツ合成用スクリプト -->
+    <!-- JavaScript ロジック -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const mainContent = document.getElementById('main-content');
-            
-            // 読み込むファイルのリスト（順番通りに結合されます）
+            // 設定: 読み込むファイルリスト (sectionsフォルダ内のパスを指定)
             const files = [
                 'sections/01_introduction.html',
                 'sections/02_player.html',
@@ -113,29 +78,157 @@
                 'sections/05_data.html'
             ];
 
-            // Promiseを使って順番に読み込み
+            const contentArea = document.getElementById('content-area');
+            const tocList = document.getElementById('toc-list');
+            const drawer = document.getElementById('drawer-nav');
+            const overlay = document.getElementById('drawer-overlay');
+            let articles = []; // 全記事データを格納
+
+            // 1. ファイル読み込みとパース処理
             Promise.all(files.map(file => fetch(file).then(res => {
                 if (!res.ok) throw new Error(`Failed to load ${file}`);
                 return res.text();
             })))
             .then(htmlContents => {
-                // ローディング表示を消去して結合したHTMLを挿入
-                mainContent.innerHTML = htmlContents.join('');
-                
-                // URLにハッシュ(#id)がある場合、その位置へスクロール
-                if(window.location.hash) {
-                    const id = window.location.hash.substring(1);
-                    const element = document.getElementById(id);
-                    if(element) element.scrollIntoView();
-                }
+                const fullHtml = htmlContents.join('');
+                parseAndIndexContent(fullHtml);
+                router(); // 初回表示
             })
             .catch(err => {
                 console.error(err);
-                mainContent.innerHTML = `<div class="failure-color" style="padding:1rem;">
-                    <h3>読み込みエラー</h3>
-                    <p>ローカル環境で実行している場合、ブラウザのセキュリティ制限(CORS)によりファイルを読み込めない可能性があります。<br>
-                    VS Codeの「Live Server」拡張機能などを使用するか、ローカルサーバー経由でアクセスしてください。</p>
+                contentArea.innerHTML = `<div class="error-msg" style="padding: 2rem; text-align: center;">
+                    <h3 style="color: var(--danger);">読み込みエラー</h3>
+                    <p>コンテンツファイル（sections/*.html）を読み込めませんでした。<br>
+                    ローカル環境で実行している場合、ブラウザのセキュリティ制限(CORS)により外部ファイルを読み込めないことがあります。<br>
+                    VS Codeの「Live Server」拡張機能などを使用するか、Webサーバー経由でアクセスしてください。</p>
                 </div>`;
+            });
+
+            // 2. HTMLを解析して「記事オブジェクト」の配列を作る
+            function parseAndIndexContent(html) {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // section, article を抽出 (これらを1つの「記事」として扱う)
+                const elements = doc.querySelectorAll('section[id], article[id]');
+                
+                articles = Array.from(elements).map((el, index) => {
+                    // タイトル取得 (h1 > h2 > h3 の優先順位)
+                    const titleEl = el.querySelector('h1, h2, h3');
+                    const title = titleEl ? titleEl.textContent : '無題のセクション';
+                    
+                    // 自分のID
+                    const id = el.id;
+
+                    // 目次表示用の階層レベル判定 (h1=1, h2=2...)
+                    const level = titleEl ? parseInt(titleEl.tagName.substring(1)) : 2;
+
+                    // 記事の中身 (HTML)
+                    // 画像パスの補正などはここで行えますが、
+                    // rulebook.htmlがルートにあるなら images/ へのパスはそのままで通じるはずです。
+                    
+                    return { index, id, title, level, content: el.innerHTML };
+                });
+
+                generateTOC();
+            }
+
+            // 3. 目次 (TOC) 生成
+            function generateTOC() {
+                let html = '<ul>';
+                articles.forEach(article => {
+                    // 章(Level 1)と節(Level 2以降)でスタイルを変える
+                    // h1タグを持つセクションは親階層、それ以外は子階層として扱う簡易ロジック
+                    const indentClass = `level-${article.level}`;
+                    
+                    html += `<li class="${indentClass}">
+                        <a href="#${article.id}" onclick="closeDrawer()">
+                            ${article.title}
+                        </a>
+                    </li>`;
+                });
+                html += '</ul>';
+                tocList.innerHTML = html;
+            }
+
+            // 4. ルーティング (ハッシュ変更検知)
+            window.addEventListener('hashchange', router);
+
+            function router() {
+                const hash = window.location.hash.substring(1); // #を除去
+                
+                if (!hash) {
+                    // ハッシュがない場合はトップページ（最初の記事）を表示
+                    if(articles.length > 0) {
+                        renderArticle(articles[0]);
+                    }
+                } else {
+                    const targetArticle = articles.find(a => a.id === hash);
+                    if (targetArticle) {
+                        renderArticle(targetArticle);
+                    } else {
+                        contentArea.innerHTML = '<p style="padding:2rem;">指定された記事が見つかりません。</p>';
+                    }
+                }
+                // ページトップへスクロール
+                window.scrollTo(0, 0);
+            }
+
+            // 5. 記事の描画
+            function renderArticle(article) {
+                // 前後の記事を探す（ナビゲーション用）
+                // ただし、単なるデータだけのarticleなどは飛ばすなどのロジックも追加可能ですが、
+                // ここでは単純に配列の前後を取得します。
+                const prev = articles[article.index - 1];
+                const next = articles[article.index + 1];
+
+                let html = `
+                    <article class="blog-post fade-in">
+                        <div class="post-content">
+                            ${article.content}
+                        </div>
+                    </article>
+                    
+                    <nav class="post-nav">
+                        ${prev ? `<a href="#${prev.id}" class="nav-card prev">
+                            <span class="label">前の記事</span>
+                            <span class="title">${prev.title}</span>
+                        </a>` : '<span></span>'}
+                        
+                        ${next ? `<a href="#${next.id}" class="nav-card next">
+                            <span class="label">次の記事</span>
+                            <span class="title">${next.title}</span>
+                        </a>` : '<span></span>'}
+                    </nav>
+                `;
+                contentArea.innerHTML = html;
+            }
+
+            // 6. UI操作系 (ドロワー、ダークモード)
+            const menuBtn = document.getElementById('menu-btn');
+            const closeMenuBtn = document.getElementById('close-menu-btn');
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeIcon = themeToggle.querySelector('span');
+
+            function openDrawer() {
+                drawer.classList.add('open');
+                overlay.classList.add('open');
+            }
+            // HTML側のonclick属性から呼べるようにグローバルに登録
+            window.closeDrawer = function() { 
+                drawer.classList.remove('open');
+                overlay.classList.remove('open');
+            };
+
+            menuBtn.addEventListener('click', openDrawer);
+            closeMenuBtn.addEventListener('click', closeDrawer);
+            overlay.addEventListener('click', closeDrawer);
+
+            // ダークモード切り替え
+            themeToggle.addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+                const isDark = document.body.classList.contains('dark-mode');
+                themeIcon.textContent = isDark ? 'light_mode' : 'dark_mode';
             });
         });
     </script>

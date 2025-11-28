@@ -18,6 +18,12 @@ document.addEventListener('DOMContentLoaded', () => {
     bindEventListeners();
     updateAllCalculations();
     loadCharacterList();
+
+    // ▼▼▼ 追加: 直接リンクでIDが指定されていた場合、そのデータを読み込む ▼▼▼
+    if (TARGET_CHARACTER_ID) {
+        // 既存の読み込み関数を再利用
+        loadCharacterData(TARGET_CHARACTER_ID);
+    }
 });
 
 // =========================================================================
@@ -49,8 +55,10 @@ function bindEventListeners() {
     // --- ボタン ---
     document.getElementById('save-new-btn').addEventListener('click', saveCharacter);
     document.getElementById('update-btn').addEventListener('click', updateCharacter);
+    document.getElementById('duplicate-btn').addEventListener('click', duplicateCharacter);
     document.getElementById('clear-btn').addEventListener('click', clearForm);
     document.getElementById('delete-btn').addEventListener('click', deleteCharacter);
+    document.getElementById('ccfolia-copy-btn').addEventListener('click', copyToCcfolia);
     
     // --- 認証関連のイベントリスナー (追加) ---
     const passcodeInput = document.getElementById('auth-passcode');
@@ -58,6 +66,18 @@ function bindEventListeners() {
     
     document.getElementById('auth-change-btn').addEventListener('click', enterChangePasscodeMode);
     document.getElementById('auth-register-btn').addEventListener('click', registerNewPasscode);
+
+    // --- 画像関連 ---
+    document.getElementById('btn-trigger-file').addEventListener('click', function() {
+        document.getElementById('char-image-input').click();
+    });
+    
+    document.getElementById('char-image-input').addEventListener('change', handleImageSelect);
+
+    document.getElementById('clear-image-btn').addEventListener('click', clearImageSelection);
+
+    // --- メモコピー機能 ---
+    document.getElementById('copy-memo-btn').addEventListener('click', copyMemoToClipboard);
 
     // --- アコーディオン ---
     document.body.addEventListener('click', (event) => {
@@ -271,123 +291,115 @@ function populateLifepathSelects() {
  * この関数はHTMLの描画のみに責任を持つ。イベントリスナーの登録は行わない。
  */
 function populateSkillList() {
-    const skillListContainer = document.querySelector('.skill-list');
-    skillListContainer.innerHTML = ''; 
-    Object.keys(SKILLS).forEach(category => {
-        const accordion = document.createElement('div');
-        accordion.className = 'accordion';
-        const summary = document.createElement('summary');
-        summary.className = 'accordion-trigger';
-        summary.innerHTML = `<span class="arrow"></span> ${category}`;
-        accordion.appendChild(summary);
-        const contentWrapper = document.createElement('div');
-        contentWrapper.className = 'accordion-content';
-        const contentDiv = document.createElement('div'); 
-        contentDiv.style.padding = "1rem"; 
-        SKILLS[category].forEach(skill => {
-            const card = document.createElement('div');
-            card.className = 'skill-card';
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.name = 'skills';
-            checkbox.value = skill.name;
-            checkbox.setAttribute('data-level', skill.level);
-            checkbox.setAttribute('data-r', skill.r);
-            checkbox.setAttribute('data-a', skill.a);
-            const header = document.createElement('div');
-            header.className = 'skill-card-header';
-            const h5 = document.createElement('h5');
-            h5.textContent = skill.name;
-            const span = document.createElement('span');
-            const r_val = skill.r >= 0 ? `+${skill.r}` : skill.r;
-            const a_val = skill.a >= 0 ? `+${skill.a}` : skill.a;
-            span.textContent = `《L ${skill.level} / R ${r_val} / A ${a_val}》`;
-            const description = document.createElement('p');
-            description.className = 'skill-description';
-            description.textContent = skill.description;
-            header.appendChild(h5);
-            header.appendChild(span);
-            card.appendChild(checkbox);
-            card.appendChild(header);
-            card.appendChild(description);
-            contentDiv.appendChild(card);
+    var container = document.querySelector('.skill-list');
+    container.innerHTML = '';
+    Object.keys(SKILLS).forEach(function(cat) {
+        // 修正: バッククォート廃止
+        var html = '<div class="accordion"><summary class="accordion-trigger"><span class="arrow"></span> ' + cat + '</summary>';
+        html += '<div class="accordion-content"><div style="padding:1rem;">';
+        SKILLS[cat].forEach(function(s) {
+            var r_val = s.r >= 0 ? '+' + s.r : s.r;
+            var a_val = s.a >= 0 ? '+' + s.a : s.a;
+            html += '<div class="skill-card">';
+            html += '<input type="checkbox" name="skills" value="' + s.name + '" data-level="' + s.level + '" data-r="' + s.r + '" data-a="' + s.a + '">';
+            html += '<div class="skill-card-header"><h5>' + s.name + '</h5><span>《L ' + s.level + ' / R ' + r_val + ' / A ' + a_val + '》</span></div>';
+            html += '<p class="skill-description">' + s.description + '</p></div>';
         });
-        contentWrapper.appendChild(contentDiv);
-        const closeTrigger = document.createElement('div');
-        closeTrigger.className = 'accordion-close-trigger';
-        closeTrigger.innerHTML = '▲ 閉じる';
-        contentWrapper.appendChild(closeTrigger);
-        accordion.appendChild(contentWrapper);
-        skillListContainer.appendChild(accordion);
+        html += '</div><div class="accordion-close-trigger">▲ 閉じる</div></div></div>';
+        container.insertAdjacentHTML('beforeend', html);
     });
 }
 
 function populateFeaturesList() {
-    const container = document.getElementById('features-selection-accordions');
-    container.innerHTML = ''; 
-    Object.keys(FEATURES_DATA).forEach(category => {
-        const accordion = document.createElement('div');
-        accordion.className = 'accordion';
-        const summary = document.createElement('summary');
-        summary.className = 'accordion-trigger';
-        summary.innerHTML = `<span class="arrow"></span> ${category}`;
-        accordion.appendChild(summary);
-        const contentWrapper = document.createElement('div');
-        contentWrapper.className = 'accordion-content';
-        const contentDiv = document.createElement('div'); 
-        contentDiv.style.padding = "1rem"; 
-        FEATURES_DATA[category].forEach((pair, index) => {
-            const pairCard = document.createElement('div');
-            pairCard.className = 'feature-pair-card';
-            const radioGroupName = `feature_pair_${category}_${index}`;
-            const primeDiv = document.createElement('div');
-            primeDiv.className = 'feature-option prime';
-            primeDiv.innerHTML = `
-                <input type="radio" name="${radioGroupName}" value="${pair.prime_name}" data-type="prime" data-name="${pair.prime_name}" data-desc="${pair.prime_desc}" data-pro="${pair.prime_pro}" data-con="${pair.prime_con}">
-                    <h5>${pair.prime_name}</h5>
-                    <p>${pair.prime_desc}</p>
-                    <p class="pro"><b>利点:</b> ${pair.prime_pro}</p>
-                    <p class="con"><b>欠点:</b> ${pair.prime_con}</p>
-            `;
-            const fallenDiv = document.createElement('div');
-            fallenDiv.className = 'feature-option fallen';
-            fallenDiv.innerHTML = `
-                <input type="radio" name="${radioGroupName}" value="${pair.fallen_name}" data-type="fallen" data-name="${pair.fallen_name}" data-desc="${pair.fallen_desc}" data-pro="${pair.fallen_pro}" data-con="${pair.fallen_con}">
-                    <h5>${pair.fallen_name}</h5>
-                    <p>${pair.fallen_desc}</p>
-                    <p class="pro"><b>利点:</b> ${pair.fallen_pro}</p>
-                    <p class="con"><b>欠点:</b> ${pair.fallen_con}</p>
-            `;
-            pairCard.appendChild(primeDiv);
-            pairCard.appendChild(fallenDiv);
-            contentDiv.appendChild(pairCard);
-            [primeDiv, fallenDiv].forEach(div => {
-                div.addEventListener('click', () => {
-                    const radio = div.querySelector('input');
-                    const wasChecked = radio.checked;
-                    primeDiv.classList.remove('selected');
-                    fallenDiv.classList.remove('selected');
-                    primeDiv.querySelector('input').checked = false;
-                    fallenDiv.querySelector('input').checked = false;
-                    if (!wasChecked) {
-                        div.classList.add('selected');
-                        radio.checked = true;
-                    }
-                    primeDiv.querySelector('input').dispatchEvent(new Event('change'));
-                });
-            });
+    var container = document.getElementById('features-selection-accordions');
+    container.innerHTML = '';
+    Object.keys(FEATURES_DATA).forEach(function(cat, i) {
+        var html = '<div class="accordion"><summary class="accordion-trigger"><span class="arrow"></span> ' + cat + '</summary>';
+        html += '<div class="accordion-content"><div style="padding:1rem;">';
+        FEATURES_DATA[cat].forEach(function(pair, j) {
+            var name = 'feature_pair_' + cat + '_' + j;
+            
+            html += '<div class="feature-pair-card">';
+            
+            // Prime
+            html += '<div class="feature-option prime"><input type="radio" name="' + name + '" value="' + pair.prime_name + '" data-type="prime" ';
+            html += 'data-name="' + pair.prime_name + '" data-desc="' + pair.prime_desc + '" data-pro="' + pair.prime_pro + '" data-con="' + pair.prime_con + '">';
+            html += '<h5>' + pair.prime_name + '</h5><p>' + pair.prime_desc + '</p><p class="pro">利点: ' + pair.prime_pro + '</p><p class="con">欠点: ' + pair.prime_con + '</p></div>';
+            
+            // Fallen
+            html += '<div class="feature-option fallen"><input type="radio" name="' + name + '" value="' + pair.fallen_name + '" data-type="fallen" ';
+            html += 'data-name="' + pair.fallen_name + '" data-desc="' + pair.fallen_desc + '" data-pro="' + pair.fallen_pro + '" data-con="' + pair.fallen_con + '">';
+            html += '<h5>' + pair.fallen_name + '</h5><p>' + pair.fallen_desc + '</p><p class="pro">利点: ' + pair.fallen_pro + '</p><p class="con">欠点: ' + pair.fallen_con + '</p></div>';
+            
+            html += '</div>';
         });
-        contentWrapper.appendChild(contentDiv);
-        const closeTrigger = document.createElement('div');
-        closeTrigger.className = 'accordion-close-trigger';
-        closeTrigger.innerHTML = '▲ 閉じる';
-        contentWrapper.appendChild(closeTrigger);
-        accordion.appendChild(contentWrapper);
-        container.appendChild(accordion);
+        html += '</div><div class="accordion-close-trigger">▲ 閉じる</div></div></div>';
+        container.insertAdjacentHTML('beforeend', html);
     });
-    document.querySelectorAll('input[name^="feature_pair_"]').forEach(radio => {
-        radio.addEventListener('change', updateSelectedFeatures);
+    
+    // 変更検知リスナー
+    document.querySelectorAll('input[name^="feature_pair_"]').forEach(function(r) {
+        r.addEventListener('change', updateSelectedFeatures);
     });
+    
+    // ▼▼▼ 修正箇所: 選択/解除のトグルロジックを復活 ▼▼▼
+    document.querySelectorAll('.feature-option').forEach(function(div) {
+        div.addEventListener('click', function(e) {
+            // ラジオボタン自体をクリックした場合は重複処理を防ぐ
+            if (e.target.type === 'radio') return;
+
+            var radio = div.querySelector('input');
+            var group = radio.name;
+            
+            // 「クリックする前の状態」を保存しておく（ここが重要）
+            var wasChecked = radio.checked;
+
+            // 同じグループ（Prime/Fallenのペア）を一度すべて解除する
+            document.querySelectorAll('input[name="' + group + '"]').forEach(function(r) {
+                r.checked = false;
+                r.parentElement.classList.remove('selected');
+            });
+
+            // 「以前チェックされていなかった」場合のみ、チェックを入れる
+            // （以前チェックされていたなら、解除されたままになる＝トグル動作）
+            if (!wasChecked) {
+                radio.checked = true;
+                div.classList.add('selected');
+            }
+            
+            updateSelectedFeatures();
+        });
+    });
+}
+
+/**
+ * ▼ 追加: キャラクターメモをクリップボードにコピーする
+ */
+async function copyMemoToClipboard() {
+    const memoText = document.getElementById('char-memo').value;
+    
+    if (!memoText) {
+        showLoaderMessage("メモが空です。", { isSuccess: false });
+        return;
+    }
+
+    try {
+        // モダンブラウザ向け (HTTPS環境必須)
+        await navigator.clipboard.writeText(memoText);
+        showLoaderMessage("メモをクリップボードにコピーしました。", { isSuccess: true });
+    } catch (err) {
+        // 失敗時（非SSL環境など）のフォールバック
+        try {
+            const textarea = document.getElementById('char-memo');
+            textarea.select();
+            document.execCommand('copy');
+            window.getSelection().removeAllRanges(); // 選択解除
+            showLoaderMessage("メモをコピーしました。", { isSuccess: true });
+        } catch (fallbackErr) {
+            console.error('Copy failed:', err, fallbackErr);
+            showLoaderMessage("コピーに失敗しました。", { isSuccess: false });
+        }
+    }
 }
 
 // =========================================================================
@@ -635,21 +647,42 @@ async function getFormData() {
     const stats = {};
     ALL_STATS.forEach(stat => {
         const statElement = document.getElementById(`stat-${stat}`);
+        // 基礎能力値は "体力: 5" のような形式のままなので split 必要
         const statValue = statElement ? statElement.value.split(': ')[1] : '0';
         stats[stat] = statValue !== undefined ? statValue : '0';
     });
     const selectedFeatures = Array.from(document.querySelectorAll('input[name^="feature_pair_"]:checked')).map(r => r.value);
     const characterId = document.getElementById('character-id-hidden').value;
 
-    // ▼▼▼ パスコードの処理 (追加) ▼▼▼
-    // 新規保存時は入力されたコード、空なら0000をハッシュ化して送信
     let passcodeHash = document.getElementById('auth-hash-hidden').value;
-    if (!passcodeHash) { // 新規の場合
+    if (!passcodeHash) {
         const inputCode = document.getElementById('auth-passcode').value || '0000';
         if (!/^\d{4}$/.test(inputCode)) {
             throw new Error("パスコードは4桁の数字である必要があります。");
         }
         passcodeHash = await digestMessage(inputCode);
+    }
+
+    // ▼▼▼ 画像アップロード処理の割り込み ▼▼▼
+    const base64Data = document.getElementById('char-image-base64-hidden').value;
+    let finalImageUrl = document.getElementById('char-image-url-hidden').value;
+
+    // 新しい画像が選択されている場合のみアップロードを実行
+    if (base64Data) {
+        showLoaderMessage("画像をアップロード中...", { loader: true });
+        try {
+            // GAS側の関数をPromise化して呼び出すヘルパーが必要ですが、
+            // ここでは簡易的に google.script.run を Promise でラップして待機します
+            finalImageUrl = await new Promise((resolve, reject) => {
+                const fileName = `char_${Date.now()}.jpg`;
+                google.script.run
+                    .withSuccessHandler(url => resolve(url))
+                    .withFailureHandler(err => reject(err))
+                    .saveImageToDrive(base64Data, fileName);
+            });
+        } catch (e) {
+            throw new Error("画像のアップロードに失敗: " + e.message);
+        }
     }
 
     const formData = {
@@ -659,6 +692,26 @@ async function getFormData() {
         birth: document.getElementById('lifepath-birth').value,
         upbringing: document.getElementById('lifepath-upbringing').value,
         trigger: document.getElementById('lifepath-trigger').value,
+        
+        // ▼ 追加項目
+        ambition: document.getElementById('ambition').value,
+        
+        // ▼ 状態 (数値として取得)
+        hp: document.getElementById('hit-point').value,
+        mp: document.getElementById('mental-point').value,
+        ip: document.getElementById('inspiration-point').value,
+
+        // ▼ リソース (ID変更に対応)
+        resHuman: document.getElementById('resource-human').value,
+        resAsset: document.getElementById('resource-asset').value,
+        resFund: document.getElementById('resource-fund').value,
+        money: document.getElementById('money').value,
+
+        imageUrl: finalImageUrl,
+
+        // ▼ メモ
+        memo: document.getElementById('char-memo').value,
+        
         skills: skills,
         stats: stats,
         vectorR: document.getElementById('stat-vector-r').textContent,
@@ -670,7 +723,6 @@ async function getFormData() {
         fame: document.getElementById('fuhyo-fame').value.split(': ')[1] || '0',
         notoriety: document.getElementById('fuhyo-notoriety').value.split(': ')[1] || '0',
         features: selectedFeatures,
-        // ▼▼▼
         passcodeHash: passcodeHash
     };
     return formData;
@@ -685,44 +737,77 @@ function setFormData(data) {
     document.getElementById('char-name').value = data.charName || '';
     document.getElementById('nickname').value = data.nickname || '';
     document.getElementById('use-nickname').checked = data.useNickname || false;
-    document.getElementById('fuhyo-credit').value = `信用: ${data.credit || 0}`;
-    document.getElementById('fuhyo-fame').value = `名声: ${data.fame || 0}`;
-    document.getElementById('fuhyo-notoriety').value = `悪名: ${data.notoriety || 0}`;
+    document.getElementById('ambition').value = data.ambition || '';
+    document.getElementById('hit-point').value = data.hp || '5';
+    document.getElementById('mental-point').value = data.mp || '5';
+    document.getElementById('inspiration-point').value = data.ip || '0';
+    document.getElementById('resource-human').value = data.resHuman || '0';
+    document.getElementById('resource-asset').value = data.resAsset || '0';
+    document.getElementById('resource-fund').value = data.resFund || '0';
+    document.getElementById('money').value = data.money || '0';
+    document.getElementById('char-memo').value = data.memo || '';
+    
+    // 修正: バッククォート廃止
+    document.getElementById('fuhyo-credit').value = '信用: ' + (data.credit||0);
+    document.getElementById('fuhyo-fame').value = '名声: ' + (data.fame||0);
+    document.getElementById('fuhyo-notoriety').value = '悪名: ' + (data.notoriety||0);
+
     document.getElementById('lifepath-birth').value = data.birth || '';
     document.getElementById('lifepath-upbringing').value = data.upbringing || '';
     document.getElementById('lifepath-trigger').value = data.trigger || '';
-    
-    document.querySelectorAll('.feature-option').forEach(div => div.classList.remove('selected'));
-    document.querySelectorAll('input[name^="feature_pair_"]').forEach(radio => {
-        radio.checked = (data.features || []).includes(radio.value);
-        if (radio.checked) {
+
+    document.querySelectorAll('.feature-option').forEach(function(div) { div.classList.remove('selected'); });
+    document.querySelectorAll('input[name^="feature_pair_"]').forEach(function(r) { r.checked = false; });
+    (data.features || []).forEach(function(val) {
+        var radio = document.querySelector('input[name^="feature_pair_"][value="' + val + '"]');
+        if (radio) {
+            radio.checked = true;
             radio.parentElement.classList.add('selected');
         }
     });
     updateSelectedFeatures();
 
     selectedSkills.clear();
-    (data.skills || []).forEach(skillName => {
-        selectedSkills.add(skillName);
-    });
-
+    (data.skills || []).forEach(function(s) { selectedSkills.add(s); });
     updateAllCalculations();
 
-    // ▼▼▼ ボタン・認証状態の制御 (追加) ▼▼▼
+    // 画像復元とURL正規化
+    var imgUrl = data.imageUrl || '';
+    if (imgUrl) {
+        var fid = null;
+        var m1 = imgUrl.match(/\/d\/([^/]+)/);
+        if (m1) fid = m1[1];
+        else if (imgUrl.includes('id=')) {
+            var m2 = imgUrl.match(/id=([^&]+)/);
+            if (m2) fid = m2[1];
+        }
+        if (fid) imgUrl = 'https://drive.google.com/thumbnail?id=' + fid + '&sz=s4000';
+    }
+    
+     document.getElementById('char-image-url-hidden').value = imgUrl;
+    
+    var statusSpan = document.getElementById('char-image-status');
+    
+    if (imgUrl) {
+        document.getElementById('char-image-preview').src = imgUrl;
+        statusSpan.textContent = ""; // 登録済みならプレビューに出るので文字は消す（すっきりさせる）
+    } else {
+        document.getElementById('char-image-preview').removeAttribute('src');
+        statusSpan.textContent = "【未設定】";
+        statusSpan.style.color = "#666";
+    }
+    
+    document.getElementById('char-image-base64-hidden').value = '';
+
     document.getElementById('save-new-btn').style.display = 'none';
     document.getElementById('update-btn').style.display = 'inline-block';
     document.getElementById('delete-btn').style.display = 'inline-block';
+    document.getElementById('duplicate-btn').style.display = 'inline-block';
 
-    // 読み込み時はロック状態にする
-    lockButtons(); 
+    lockButtons();
     
-    // 認証用ハッシュを隠しフィールドにセット
-    document.getElementById('auth-hash-hidden').value = data.passcodeHash || ''; 
-    
-    // 認証入力欄をクリア
-    const passInput = document.getElementById('auth-passcode');
-    passInput.value = '';
-    passInput.placeholder = ''; 
+    document.getElementById('auth-hash-hidden').value = data.passcodeHash || '';
+    document.getElementById('auth-passcode').value = '';
 }
 
 
@@ -736,13 +821,24 @@ function clearForm() {
     document.getElementById('character-id-hidden').value = ''; 
     document.querySelectorAll('.feature-option').forEach(div => div.classList.remove('selected'));
     updateSelectedFeatures();
+    
+    // 値のリセット (reset()で初期値に戻らないものを明示的に)
     document.getElementById('fuhyo-credit').value = "信用: 0";
     document.getElementById('fuhyo-fame').value = "名声: 0";
     document.getElementById('fuhyo-notoriety').value = "悪名: 0";
+    
+    // ID変更したリソースなども念の為リセット(resetでvalue属性値に戻るが確実にするため)
+    document.getElementById('hit-point').value = 5;
+    document.getElementById('mental-point').value = 5;
+    document.getElementById('inspiration-point').value = 0;
+    document.getElementById('resource-human').value = 0;
+    document.getElementById('resource-asset').value = 0;
+    document.getElementById('resource-fund').value = 0;
 
     updateAllCalculations();
+
+    clearImageSelection();
     
-    // ▼▼▼ ボタン・認証状態の初期化 (追加) ▼▼▼
     document.getElementById('update-btn').style.display = 'none';
     document.getElementById('delete-btn').style.display = 'none';
     document.getElementById('save-new-btn').style.display = 'inline-block';
@@ -750,13 +846,58 @@ function clearForm() {
     document.getElementById('auth-register-btn').style.display = 'none';
     document.getElementById('auth-status-icon').textContent = '';
     
-    // 認証入力欄のリセット
     const passInput = document.getElementById('auth-passcode');
     passInput.value = '';
-    passInput.placeholder = '0000'; // 新規保存時のデフォルト
+    passInput.placeholder = '0000'; 
     document.getElementById('auth-hash-hidden').value = '';
 
     window.scrollTo(0, 0);
+}
+
+// =========================================================================
+// 画像処理ロジック
+// =========================================================================
+
+/**
+ * 画像選択時にリサイズしてプレビュー＆Base64化する
+ */
+function handleImageSelect(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    
+    // ▼ 追加: 選択されたファイル名を表示する
+    var statusSpan = document.getElementById('char-image-status');
+    statusSpan.textContent = "画像: " + file.name;
+    statusSpan.style.color = "#d32f2f";
+
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+        var img = new Image();
+        img.onload = function() {
+            var cvs = document.createElement('canvas');
+            var MAX = 600;
+            var w = img.width, h = img.height;
+            if (w > h) { if (w > MAX) { h *= MAX/w; w = MAX; } }
+            else { if (h > MAX) { w *= MAX/h; h = MAX; } }
+            cvs.width = w; cvs.height = h;
+            cvs.getContext('2d').drawImage(img, 0, 0, w, h);
+            var data = cvs.toDataURL('image/jpeg', 0.8);
+            document.getElementById('char-image-preview').src = data;
+            document.getElementById('char-image-base64-hidden').value = data;
+        };
+        img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearImageSelection() {
+    document.getElementById('char-image-input').value = '';
+    document.getElementById('char-image-preview').src = '';
+    document.getElementById('char-image-base64-hidden').value = ''; // 新規データをクリア
+    document.getElementById('char-image-url-hidden').value = '';    // 既存URLもクリア
+
+    // ▼ 追加: ステータス更新
+    document.getElementById('char-image-status').textContent = "【未設定】";
 }
 
 // =========================================================================
@@ -776,27 +917,42 @@ function loadCharacterList() {
     loaderElement.style.display = 'block';
 
     google.script.run
-        .withSuccessHandler(characterDataList => { 
+        .withSuccessHandler(characterDataList => {
             loaderElement.style.display = 'none';
-            if (characterDataList.length === 0) {
+
+            // ▼▼▼ 修正箇所: characterDataList が null の場合のガードを追加 ▼▼▼
+            if (!characterDataList || characterDataList.length === 0) {
                 listElement.innerHTML = '<li>保存されたキャラクターはいません。</li>';
             } else {
-                characterDataList.forEach(char => { 
+                characterDataList.forEach(char => {
                     const li = document.createElement('li');
+                    let dateStr = '';
+                    if (char.updatedAt) {
+                        const d = new Date(char.updatedAt);
+                        if (!isNaN(d.getTime())) {
+                            const y = d.getFullYear();
+                            const m = (d.getMonth() + 1).toString().padStart(2, '0');
+                            const day = d.getDate().toString().padStart(2, '0');
+                            dateStr = `${y}/${m}/${day}`;
+                        }
+                    }
                     const textSpan = document.createElement('span');
                     textSpan.innerHTML = `
                         <small>ID:${char.id}</small> <strong>${char.charName}</strong><br>
-                        <small>${char.playerName}</small>
+                        <small>${char.playerName} <span style="color:#888; margin-left:0.5em;">🔄 ${dateStr}</span></small>
                     `;
                     li.appendChild(textSpan);
+                    
                     const viewButton = document.createElement('button');
                     viewButton.textContent = '表示';
                     viewButton.className = 'button-secondary';
-                    viewButton.onclick = () => loadCharacterData(char.id); 
+                    viewButton.onclick = () => loadCharacterData(char.id);
+                    
                     li.appendChild(viewButton);
                     listElement.appendChild(li);
                 });
             }
+
             if (triggerElement.classList.contains('active')) {
                 contentElement.style.maxHeight = contentElement.scrollHeight + "px";
             }
@@ -864,6 +1020,8 @@ async function updateCharacter() { // asyncに変更
  * キャラクターデータをIDで読み込むように変更
  */
 function loadCharacterData(characterId) {
+    if (!characterId) return;
+    
     showLoaderMessage("キャラクターを読み込み中です...", { loader: true });
     google.script.run
         .withSuccessHandler(data => {
@@ -882,6 +1040,31 @@ function loadCharacterData(characterId) {
             showLoaderMessage(`データ読み込み失敗: ${error.message}`, { isSuccess: false });
         })
         .getCharacterData(characterId);
+}
+
+/**
+ * 現在表示中のデータを元に、新規保存モードへ移行する（複製）
+ */
+function duplicateCharacter() {
+    // IDをクリア（これで新規扱いになる）
+    document.getElementById('character-id-hidden').value = '';
+    
+    // 認証情報をクリア（新しいパスコードを設定させるため）
+    document.getElementById('auth-hash-hidden').value = '';
+    document.getElementById('auth-passcode').value = '';
+    document.getElementById('auth-status-icon').textContent = '';
+    
+    // ボタン表示の切り替え（複製ボタンは隠さない）
+    document.getElementById('save-new-btn').style.display = 'inline-block';
+    document.getElementById('update-btn').style.display = 'none';
+    document.getElementById('delete-btn').style.display = 'none';
+    
+    // 認証関連ボタンの非表示
+    document.getElementById('auth-change-btn').style.display = 'none';
+    document.getElementById('auth-register-btn').style.display = 'none';
+
+    showLoaderMessage("複製しました。内容を編集して「新規保存」してください。", { isSuccess: true });
+    window.scrollTo(0, 0);
 }
 
 /**
@@ -910,6 +1093,97 @@ function deleteCharacter() {
             showLoaderMessage(`削除失敗: ${error.message}`, { isSuccess: false });
         })
         .deleteCharacterSheet(characterId);
+}
+
+// =========================================================================
+// ココフォリア連携機能
+// =========================================================================
+
+/**
+ * キャラクターデータをココフォリア形式のJSONに変換し、クリップボードにコピーする
+ * (シンタックスエラー回避のため、文字列結合を + に変更した修正版)
+ */
+async function copyToCcfolia() {
+    try {
+        var name = document.getElementById('char-name').value || '名称未設定';
+        var pl = document.getElementById('player-name').value || '未設定';
+        var nick = document.getElementById('nickname').value;
+        var useNick = document.getElementById('use-nickname').checked;
+        var id = document.getElementById('character-id-hidden').value;
+        var img = document.getElementById('char-image-url-hidden').value || null;
+        
+        // 修正: バッククォート廃止
+        var dispName = (useNick && nick) ? '[' + nick + '] ' + name : name;
+
+        var extUrl = "";
+        if (id && typeof DEPLOY_URL !== 'undefined' && DEPLOY_URL) {
+            extUrl = DEPLOY_URL + "?id=" + id;
+        }
+
+        var parse = function(id) {
+            var v = document.getElementById(id).value;
+            var m = v.match(/-?\d+/);
+            return m ? parseInt(m[0]) : 0;
+        };
+        var hp = parse('hit-point');
+        var mp = parse('mental-point');
+
+        var params = [];
+        var cmds = [];
+        ALL_STATS.forEach(function(k) {
+            var v = parse('stat-' + k);
+            params.push({ label: k, value: String(v) });
+            // 修正: バッククォート廃止
+            cmds.push('1d10+{' + k + '}>=6 ' + k + '判定');
+        });
+        
+        var addParam = function(k, id) {
+            params.push({ label: k, value: String(parse(id)) });
+        };
+        addParam('IP', 'inspiration-point');
+        addParam('信用', 'fuhyo-credit');
+        addParam('名声', 'fuhyo-fame');
+        addParam('悪名', 'fuhyo-notoriety');
+        addParam('人材', 'resource-human');
+        addParam('資産', 'resource-asset');
+        addParam('資金', 'resource-fund');
+        
+        cmds.push('1d10+{IP}>=6 IP判定');
+        cmds.push('1d10+{信用}>=6 信用判定');
+
+        var r = parseInt(document.getElementById('stat-vector-r').textContent||0);
+        var a = parseInt(document.getElementById('stat-vector-a').textContent||0);
+        params.push({label:'R',value:String(r)}, {label:'A',value:String(a)});
+
+        var skills = Array.from(selectedSkills).join(' / ');
+        var feats = [];
+        document.querySelectorAll('.selected-feature-card h5').forEach(function(e){ feats.push(e.textContent); });
+        var pos = document.getElementById('stat-position').textContent;
+        
+        // 修正: バッククォート廃止（最も重要）
+        var memo = 'PL: ' + pl + '\n' +
+                   'ポジション: ' + pos + '\n' +
+                   '【特徴】\n' + feats.join(' / ') + '\n' +
+                   '【スキル】\n' + skills + '\n\n' +
+                   "Generated by Candle's EntrySheet";
+
+        var json = {
+            kind: "character",
+            data: {
+                name: dispName, memo: memo, initiative: 0, externalUrl: extUrl,
+                status: [{label:"HP",value:hp,max:hp}, {label:"MP",value:mp,max:mp}],
+                params: params, iconUrl: img, faces: [], x:0, y:0, angle:0, width:4, height:4,
+                active:true, secret:false, invisible:false, hideStatus:false, color:"",
+                commands: cmds.join('\n'), owner:null
+            }
+        };
+        
+        await navigator.clipboard.writeText(JSON.stringify(json));
+        showLoaderMessage("クリップボードにコピーしました", { isSuccess: true });
+    } catch(e) {
+        console.error(e);
+        showLoaderMessage("コピー失敗: " + e.message, { isSuccess: false });
+    }
 }
 
 // =========================================================================
