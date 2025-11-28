@@ -127,8 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const html = `
             <div class="home-view fade-in">
                 <div class="home-hero">
-                    <h2>Venture of Tales TRPG</h2>
-                    <p>運命を刻む元帳へようこそ。<br>経営と冒険が交差する物語を始めましょう。</p>
+                    <p>運命を刻む元帳</p>
+                    <h2>ベンチャー of テイルズ TRPG</h2>
+                    <p>ベンチャー of テイルズへようこそ。<br>経営と冒険が交差する物語を始めましょう。</p>
                 </div>
 
                 <div class="home-section-title">目的から探す</div>
