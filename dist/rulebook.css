@@ -500,34 +500,87 @@ body.dark-mode .summary-box {
 .summary-box li { margin-bottom: 0.4rem; line-height: 1.6; }
 .summary-box p { margin: 0; line-height: 1.6; }
 
+/* ==========================================================================
+   アコーディオン (詳細メニュー) の修正版
+   ========================================================================== */
 
-/* アコーディオン */
+/* 外枠の設定 */
 details.accordion {
-    background-color: var(--card-bg); border: 1px solid var(--border);
-    border-radius: 8px; margin: 1rem 0; overflow: hidden;
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 1rem 0;
+    overflow: hidden;
     transition: all 0.2s ease;
 }
+
+/* ヘッダー（クリックする部分） */
 details.accordion summary {
-    cursor: pointer; padding: 1rem; font-weight: bold;
-    color: var(--text-main); background-color: var(--bg-sub);
-    list-style: none; display: flex; justify-content: space-between;
-    align-items: center; transition: background-color 0.2s; user-select: none;
+    cursor: pointer;
+    padding: 1rem;
+    font-weight: bold;
+    color: var(--text-main);
+    background-color: var(--bg-sub);
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color 0.2s;
+    user-select: none;
+    /* 開いたときに境界線を引く */
+    border-bottom: 1px solid transparent; 
 }
+
+details.accordion[open] summary {
+    border-bottom: 1px solid var(--border);
+}
+
+/* Chrome/Safariなどのデフォルトマーカーを消す */
 details.accordion summary::-webkit-details-marker { display: none; }
-details.accordion summary:hover { background-color: var(--accent-light); color: var(--accent); }
-details.accordion summary::after {
-    content: '\e5cf'; font-family: 'Material Icons Round';
-    font-size: 1.5rem; color: var(--text-sub); transition: transform 0.3s ease;
+
+/* ホバー時 */
+details.accordion summary:hover {
+    background-color: var(--accent-light);
+    color: var(--accent);
 }
-details.accordion[open] summary { border-bottom: 1px solid var(--border); }
-details.accordion[open] summary::after { transform: rotate(180deg); color: var(--accent); }
-details.accordion .table-container, 
-details.accordion div {
-    padding: 1rem 1.5rem; 
-    background-color: var(--card-bg); 
+
+/* 開閉アイコン */
+details.accordion summary::after {
+    content: '\e5cf';
+    font-family: 'Material Icons Round';
+    font-size: 1.5rem;
+    color: var(--text-sub);
+    transition: transform 0.3s ease;
+}
+details.accordion[open] summary::after { 
+    transform: rotate(180deg); 
+    color: var(--accent); 
+}
+
+/* 中身の要素（summary以外すべて）に対して余白を強制する */
+details.accordion > :not(summary) {
+    /* 上下 1rem, 左右 1.5rem の隙間を空ける */
+    margin: 1rem 1.5rem !important;
+    
+    /* コンテンツの幅を、隙間の分だけ小さくして「はみ出し」を防ぐ */
+    width: calc(100% - 3rem) !important;
+    
+    /* アニメーション */
     animation: slideDown 0.3s ease-out;
 }
-@keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* 特にテーブルコンテナは個別のスタイル(marginなど)を持っているので上書きする */
+details.accordion > .table-container {
+    margin: 1rem 1.5rem !important;
+    width: calc(100% - 3rem) !important;
+    box-sizing: border-box;
+}
+
+/* 開いたときのアニメーション */
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
 /* ==========================================================================
    10. フッター
