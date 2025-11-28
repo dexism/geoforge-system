@@ -1,139 +1,125 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8" />
-    <title>GeoForge System - World Map</title>
-    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>運命を刻む元帳 ベンチャー of テイルズ TRPG(仮)</title>
+    <link rel="stylesheet" href="rulebook.css">
+    <!-- フォント読み込み -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <!-- アイコンフォント -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 </head>
+
 <body>
-    <script src="//accaii.com/geoforge/script.js" async></script><noscript><img src="//accaii.com/geoforge/script?guid=on"></noscript>
-    <div id="loading-overlay">
-        <div class="loading-content">
-        <h1 id="loading-title">GeoForge SYSTEM v2.1.2<br>世界を創造しています！</h1>
-        <div id="progress-bar-container" class="progress-bar-container" style="display: none;">
-            <div id="progress-bar" class="progress-bar"></div>
+    <!--解析タグ-->
+    <script src="//accaii.com/ventureoftales/script.js" async></script><noscript><img src="//accaii.com/ventureoftales/script?guid=on"></noscript>
+
+    <!-- ヘッダーエリア -->
+    <header class="site-header">
+        <div class="header-inner">
+            <div class="left-controls">
+                <button id="menu-btn" class="icon-btn" aria-label="メニューを開く" title="メニュー">
+                    <span class="material-icons-round">menu</span>
+                </button>
+                <button id="home-btn" class="icon-btn" aria-label="ホームへ戻る" title="ホーム">
+                    <span class="material-icons-round">home</span>
+                </button>
+            </div>
+
+            <h1 class="site-logo"><a href="#">ベンチャー of テイルズ TRPG</a></h1>
+            
+            <div class="right-controls">
+                <button id="search-btn" class="icon-btn" aria-label="検索" title="検索">
+                    <span class="material-icons-round">search</span>
+                </button>
+                <button id="tl-tool-btn" class="icon-btn" aria-label="TLツール" title="TLツール">
+                    <span class="material-icons-round">build</span>
+                </button>
+                <button id="theme-toggle" class="icon-btn" aria-label="テーマ切り替え" title="テーマ切り替え">
+                    <span class="material-icons-round">dark_mode</span>
+                </button>
+            </div>
         </div>
-        <div id="loading-log"></div>
+    </header>
+
+    <!-- ナビゲーションドロワー -->
+    <nav id="drawer-nav" class="drawer">
+        <div class="drawer-header">
+            <h2>目次</h2>
+            <button id="close-menu-btn" class="icon-btn"><span class="material-icons-round">close</span></button>
+        </div>
+        
+        <div class="external-links">
+            <a href="https://script.google.com/macros/s/AKfycbwRLJth6_1xB_MVuGwLhbtBbTuA51kyDOO8oehRjRowkEgEE7PWRxP5fEasB1Pu2Tn2/exec" target="_blank" class="nav-btn primary">
+                <span class="material-icons-round">description</span> 履歴書 (GAS)
+            </a>
+            <a href="https://geoforge-system.onrender.com/" target="_blank" class="nav-btn secondary">
+                <span class="material-icons-round">public</span> GeoForge System
+            </a>
+        </div>
+
+        <div id="toc-list" class="toc-list"></div>
+    </nav>
+    <div id="drawer-overlay" class="drawer-overlay"></div>
+
+    <!-- 検索モーダル -->
+    <div id="search-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <input type="text" id="search-input" placeholder="キーワードを入力 (例: 判定, 交易, 戦闘)...">
+                <button class="close-modal icon-btn"><span class="material-icons-round">close</span></button>
+            </div>
+            <div id="search-results" class="search-results-list"></div>
         </div>
     </div>
 
-    <input type="checkbox" id="menu-toggle" class="menu-toggle-checkbox" checked>
-    <label for="menu-toggle" class="menu-toggle-label">
-        <span></span>
-    </label>
-
-    <div class="container">
-        <aside class="sidebar">
-            <details id="overall-info-container" open>
-                <summary>全体情報</summary>
-                <div id="info-global-stats">
-                    <div class="info-line">
-                        <span>総人口</span>
-                        <span id="info-total-population">---</span>
-                    </div>
-                    <div class="info-line">
-                        <span>国家数</span>
-                        <span id="info-nation-count">---</span>
-                    </div>
-                    <div id="info-settlement-summary" class="info-line">
-                        <!-- ここに集落概要が入る -->
-                    </div>
+    <!-- TLリファレンスモーダル -->
+    <div id="tl-modal" class="modal">
+        <div class="modal-content gm-screen">
+            <div class="modal-header">
+                <h2>TLクイックリファレンス</h2>
+                <button class="close-modal icon-btn"><span class="material-icons-round">close</span></button>
+            </div>
+            <div class="gm-content">
+                <div class="ref-block">
+                    <h3>目標値の難易度目安 (1d10+能力値)</h3>
+                    <table>
+                        <tr><th>難易度</th><th>目標値</th></tr>
+                        <tr><td>易しい</td><td>4</td></tr>
+                        <tr><td>普通</td><td>6</td></tr>
+                        <tr><td>困難</td><td>8</td></tr>
+                        <tr><td>超困難</td><td>10</td></tr>
+                    </table>
                 </div>
-                <!-- 国家ごとの詳細情報がここに入る -->
-                <div id="info-nations-details"></div>
-            </details>
-            <h3>表示切替</h3>
-
-            <!-- 1. 基本地図 (択一) -->
-            <details open>
-                <summary>基本地図</summary>
-                <div class="map-type-selector">
-                    <input type="radio" id="map-type-terrain" name="map-type" value="terrain" checked>
-                    <label for="map-type-terrain">地形図</label>
-                    <input type="radio" id="map-type-white" name="map-type" value="white">
-                    <label for="map-type-white">白地図</label>
+                <div class="ref-block">
+                    <h3>行為判定</h3>
+                    <p><strong>判定値 = 1d10 + 能力値 + スキル補正</strong></p>
+                    <p>出目10: クリティカル (自動成功)</p>
+                    <p>出目1: ファンブル (自動失敗)</p>
                 </div>
-            </details>
-            
-            <!-- 2. レイヤー (重ねがけ) -->
-            <details open>
-                <summary>レイヤー</summary>
-                <ul>
-                    <li><button id="toggleVegetationLayer" class="active">植生</button></li>
-                    <li><button id="toggleReliefLayer" class="active">レリーフ</button></li>
-                    <li><button id="toggleContourLayer" class="active">等高線</button></li>
-                    <li><button id="toggleSettlementLayer" class="active">集落・国境</button></li>
-                    <li><button id="toggleRoadLayer" class="active">道路網</button></li>
-                    <li><button id="toggleTerritoryLayer">領地</button></li>
-                    <li><button id="toggleRidgeWaterSystemLayer">稜線水系図</button></li>
-                    <li><button id="toggleHexBorderLayer" class="active">ヘックス境界</button></li>
-                </ul>
-            </details>
-
-            <!-- 3. 地理情報 -->
-            <details>
-                <summary>地理情報</summary>
-                <ul>
-                    <li><button id="toggleTempLayer">気温</button></li>
-                    <li><button id="togglePrecipLayer">降水量</button></li>
-                    <li><button id="toggleClimateZoneLayer">気候帯</button></li>
-                    <li><button id="togglePopulationLayer">人口分布</button></li>
-                    <li><button id="toggleMonsterLayer">魔物分布</button></li>
-                </ul>
-            </details>
-            
-            <!-- 4. 資源 -->
-            <details>
-                <summary>資源</summary>
-                <ul>
-                    <li><button id="toggleManaLayer">魔力 (龍脈)</button></li>
-                    <li><button id="toggleAgriLayer">農業適性</button></li>
-                    <li><button id="toggleForestLayer">林業適性</button></li>
-                    <li><button id="toggleMiningLayer">鉱業適性</button></li>
-                    <li><button id="toggleFishingLayer">漁業適性</button></li>
-                    <li><button id="toggleHuntingLayer">狩猟適性</button></li>
-                    <li><button id="togglePastoralLayer">牧畜適性</button></li>
-                    <li><button id="toggleLivestockLayer">家畜適性</button></li>
-                </ul>
-                <p class="note">※酪農は現在未実装です。</p>
-            </details>
-
-            <div id="legend-container" class="legend-container"></div>
-
-            <details>
-                <summary>システム</summary>
-                <ul>
-                        <li><button id="force-regenerate-btn">強制再生成</button></li>
-                </ul>
-                <div class="generation-controls">
-                    <p class="note">ステップごとに世界を生成します。<br>各ステップで再生成が可能です。</p>
-                    <ul>
-                        <li><button id="step1-continent-btn">① 大陸・河川生成</button></li>
-                        <li><button id="step2-climate-btn" disabled>② 気候・植生生成</button></li>
-                        <li><button id="step3-settlement-btn" disabled>③ 集落生成</button></li>
-                        <li><button id="step4-nation-btn" disabled>④ 道路・国家生成</button></li>
-                        <li><button id="step5-save-btn" disabled>⑤ 保存</button></li>
-                    </ul>
-              </div>
-            </details>
-            
-            <p>&copy; 2025 Candle's. All rights reserved.</p>
-        </aside>
-
-        <main class="main-content">
-            <svg id="hexmap"></svg>
-        </main>
-    </div>
-
-    <div id="info-window" class="hidden">
-        <div class="info-window-header">
-        <span id="info-coord">Information</span>
-        <button id="info-close-btn" title="閉じる">×</button>
-        </div>
-        <div id="info-window-content">
+            </div>
         </div>
     </div>
 
-    <script type="module" src="./main.js"></script>
+    <!-- メインコンテンツ -->
+    <main class="main-container">
+        <div id="content-area">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>物語を読み込んでいます...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- フッター -->
+    <footer class="site-footer">
+        <p>Last Update: <span id="last-update"></span></p>
+        <p>&copy; 2025 Candle's. All rights reserved.</p>
+    </footer>
+
+    <script src="rulebook.js"></script>
 </body>
 </html>
