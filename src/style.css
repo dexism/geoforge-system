@@ -5,7 +5,8 @@
     --text-color: #eee;
 }
 
-html, body {
+html,
+body {
     margin: 0;
     padding: 0;
     overflow: hidden;
@@ -35,11 +36,13 @@ button {
     margin-bottom: 5px;
     transition: background-color 0.2s, border-color 0.2s;
 }
+
 button.active {
     background-color: var(--primary-color);
     border-color: var(--primary-color);
     color: #fff;
 }
+
 button.active:hover {
     background-color: #45abf5;
 }
@@ -48,8 +51,9 @@ button.active:hover {
 .container {
     width: 100vw;
     height: 100dvh;
-    perspective: 2000px; 
+    perspective: 2000px;
 }
+
 .main-content {
     width: 100%;
     height: 100%;
@@ -64,6 +68,7 @@ button.active:hover {
     height: 130%;
     translate: -10% -18%;
 }
+
 .hex-group {
     transition: transform 0.1s linear;
 }
@@ -73,7 +78,8 @@ button.active:hover {
    ================================================================ */
 /* --- サイドバー --- */
 .sidebar {
-    position: fixed; /* 全画面固定 */
+    position: fixed;
+    /* 全画面固定 */
     top: 0;
     left: 0;
     /* flex: 0 0 var(--sidebar-width); */
@@ -86,37 +92,45 @@ button.active:hover {
     height: 100dvh;
     max-height: 100dvh;
     overflow-y: auto;
-    z-index: 20; /* 常にメインコンテンツより手前 */
-    
+    z-index: 20;
+    /* 常にメインコンテンツより手前 */
+
     /* デフォルトの表示状態 (チェックボックス非チェック時: 非表示) */
-    transform: translateX(-100%); 
+    transform: translateX(-100%);
     transition: transform 0.3s ease-out;
 }
-.sidebar h3 { 
-    margin-top: 0; 
+
+.sidebar h3 {
+    margin-top: 0;
     text-align: center;
     font-size: 18px;
 }
-.sidebar ul { 
-    list-style: none; 
-    padding: 0; 
-    margin: 0.5rem 0; 
+
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0;
 }
-.sidebar ul li { 
-    margin-bottom: 0.2rem; 
+
+.sidebar ul li {
+    margin-bottom: 0.2rem;
 }
-.sidebar details { 
-    margin-bottom: 1rem; 
+
+.sidebar details {
+    margin-bottom: 1rem;
 }
-.sidebar summary { 
-    cursor: pointer; 
-    font-weight: bold; 
-    padding: 0.2rem 0; 
+
+.sidebar summary {
+    cursor: pointer;
+    font-weight: bold;
+    padding: 0.2rem 0;
     font-size: 18px;
 }
-.sidebar details[open] summary { 
-    color: var(--primary-color); 
+
+.sidebar details[open] summary {
+    color: var(--primary-color);
 }
+
 /* 注釈用のスタイル */
 .sidebar .note {
     font-size: 12px;
@@ -131,9 +145,12 @@ button.active:hover {
     gap: 5px;
     margin: 0.5rem 0;
 }
+
 .map-type-selector input[type="radio"] {
-    display: none; /* デフォルトのラジオボタンを隠す */
+    display: none;
+    /* デフォルトのラジオボタンを隠す */
 }
+
 .map-type-selector label {
     flex-grow: 1;
     padding: 8px 0;
@@ -147,7 +164,8 @@ button.active:hover {
     font-weight: bold;
     transition: all 0.2s;
 }
-.map-type-selector input[type="radio"]:checked + label {
+
+.map-type-selector input[type="radio"]:checked+label {
     background-color: var(--primary-color);
     border-color: var(--primary-color);
     color: #fff;
@@ -162,13 +180,16 @@ button.active:hover {
     border-radius: 5px;
     margin: 0 0 20px 0;
 }
+
 #overall-info-container summary {
     padding-bottom: 5px;
     border-bottom: 2px solid #667;
 }
+
 #info-global-stats {
     margin-top: 10px;
 }
+
 .info-line {
     display: flex;
     justify-content: space-between;
@@ -176,36 +197,48 @@ button.active:hover {
     margin-bottom: 6px;
     padding: 0 5px;
 }
+
 .info-line span:last-child {
     font-weight: bold;
     color: #fff;
 }
+
 #info-settlement-summary {
     font-weight: bold;
     font-size: 13px;
     color: #fff;
-    justify-content: flex-start; /* 左寄せにする */
-    gap: 8px; /* 各項目の間にスペース */
+    justify-content: flex-start;
+    /* 左寄せにする */
+    gap: 8px;
+    /* 各項目の間にスペース */
 }
 
 /* 国家ごとの詳細スタイル */
 #info-nations-details {
     margin-top: 15px;
 }
+
 .nation-info-block {
     padding-top: 10px;
     margin-top: 10px;
     border-top: 2px solid #445;
 }
+
 .nation-info-block h5 {
-    display: flex;              /* Flexboxを有効化 */
-    justify-content: space-between; /* 両端揃え */
-    align-items: baseline;      /* 文字のベースラインを揃える */
-    margin: 0 5px 8px 5px;      /* marginを調整 */
+    display: flex;
+    /* Flexboxを有効化 */
+    justify-content: space-between;
+    /* 両端揃え */
+    align-items: baseline;
+    /* 文字のベースラインを揃える */
+    margin: 0 5px 8px 5px;
+    /* marginを調整 */
     font-size: 15px;
     color: var(--primary-color);
-    font-weight: bold;          /* h5なので太字を明示 */
+    font-weight: bold;
+    /* h5なので太字を明示 */
 }
+
 /* 座標を表示するspan要素のスタイル */
 .nation-info-block h5 span {
     font-size: 13px;
@@ -217,12 +250,15 @@ button.active:hover {
    強制再生成ボタンのスタイル
    ================================================================ */
 #force-regenerate-btn {
-    background-color: #a00; /* 暗めの赤 */
+    background-color: #a00;
+    /* 暗めの赤 */
     border-color: #c00;
     color: #fff;
 }
+
 #force-regenerate-btn:hover {
-    background-color: #c00; /* ホバー時に少し明るい赤に */
+    background-color: #c00;
+    /* ホバー時に少し明るい赤に */
     border-color: #e00;
 }
 
@@ -244,14 +280,14 @@ button.active:hover {
 /* 無効化されたボタンの見た目 */
 .generation-controls button[disabled] {
     /* 背景色を暗くし、半透明にする */
-    background-color: #223; 
+    background-color: #223;
     opacity: 0.5;
     /* クリックできないことを明示 */
-    cursor: not-allowed; 
+    cursor: not-allowed;
     /* 文字の色も少し灰色に */
-    color: #889; 
+    color: #889;
     /* マウスオーバーしても変化させない */
-    transition: none; 
+    transition: none;
     border: 1px solid #445;
 }
 
@@ -271,6 +307,7 @@ button.active:hover {
     border-radius: 5px;
     display: none;
 }
+
 .legend-container h4 {
     margin: 0 0 10px 0;
     font-size: 16px;
@@ -278,12 +315,14 @@ button.active:hover {
     border-bottom: 1px solid #667;
     padding-bottom: 5px;
 }
+
 .legend-item {
     display: flex;
     align-items: center;
     margin-bottom: 5px;
     font-size: 13px;
 }
+
 .legend-color-box {
     width: 20px;
     height: 20px;
@@ -291,11 +330,13 @@ button.active:hover {
     border: 1px solid #888;
     flex-shrink: 0;
 }
+
 .legend-gradient-bar {
     width: 100%;
     height: 20px;
     border: 1px solid #888;
 }
+
 .legend-gradient-labels {
     display: flex;
     justify-content: space-between;
@@ -311,7 +352,7 @@ button.active:hover {
     position: absolute;
     top: 10px;
     left: 10px;
-    z-index: 30; 
+    z-index: 30;
     width: 40px;
     height: 40px;
     cursor: pointer;
@@ -322,6 +363,7 @@ button.active:hover {
     justify-content: center;
     transition: left 0.3s ease-out;
 }
+
 .menu-toggle-label span,
 .menu-toggle-label span::before,
 .menu-toggle-label span::after {
@@ -333,20 +375,39 @@ button.active:hover {
     border-radius: 2px;
     transition: all 0.3s;
 }
-.menu-toggle-label span::before { top: -8px; }
-.menu-toggle-label span::after { top: 8px; }
+
+.menu-toggle-label span::before {
+    top: -8px;
+}
+
+.menu-toggle-label span::after {
+    top: 8px;
+}
+
 .menu-toggle-checkbox {
     display: none;
 }
 
 /* メニュー開閉時の動作 */
-.menu-toggle-checkbox:checked ~ .container .sidebar {
-    transform: translateX(0); /* 表示 */
+.menu-toggle-checkbox:checked~.container .sidebar {
+    transform: translateX(0);
+    /* 表示 */
 }
+
 /* ハンバーガーメニューアイコンの回転 */
-.menu-toggle-checkbox:checked + .menu-toggle-label span { transform: rotate(45deg); }
-.menu-toggle-checkbox:checked + .menu-toggle-label span::before { top: 0; transform: rotate(0); }
-.menu-toggle-checkbox:checked + .menu-toggle-label span::after { top: 0; transform: rotate(90deg); }
+.menu-toggle-checkbox:checked+.menu-toggle-label span {
+    transform: rotate(45deg);
+}
+
+.menu-toggle-checkbox:checked+.menu-toggle-label span::before {
+    top: 0;
+    transform: rotate(0);
+}
+
+.menu-toggle-checkbox:checked+.menu-toggle-label span::after {
+    top: 0;
+    transform: rotate(90deg);
+}
 
 /* ================================================================
    ローディング画面 スタイル
@@ -383,8 +444,10 @@ button.active:hover {
 
 /* ログメッセージのコンテナ */
 #loading-log {
-    max-height: 90dvh; /* 画面の90%までの高さにする */
-    overflow-y: auto; /* メッセージが増えたらスクロールさせる */
+    max-height: 90dvh;
+    /* 画面の90%までの高さにする */
+    overflow-y: auto;
+    /* メッセージが増えたらスクロールさせる */
     text-align: left;
     background-color: #0008;
     border-radius: 10px;
@@ -396,20 +459,229 @@ button.active:hover {
     color: #e0e0e0;
     font-size: 1.2em;
     margin: 8px 0;
-    animation: fadeIn 0.5s ease-out; /* フェードインアニメーション */
+    animation: fadeIn 0.5s ease-out;
+    /* フェードインアニメーション */
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* ================================================================
    ヘックス内情報 スタイル
    ================================================================ */
 /* ラベル共通設定 */
-.hex-label, 
-.settlement-label, 
+.hex-label,
+.settlement-label,
+.property-label {
+    pointer-events: none;
+    user-select: none;
+    margin: 0;
+    padding: 0;
+    font-size: 5px;
+    fill: #222;
+    paint-order: stroke;
+    stroke: #fff;
+    stroke-width: 0.5px;
+    stroke-linecap: butt;
+    stroke-linejoin: miter;
+}
+
+/* 居住区ラベル (都, 街) */
+.settlement-label {
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.legend-container {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #0008;
+    border-radius: 5px;
+    display: none;
+}
+
+.legend-container h4 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: var(--primary-color);
+    border-bottom: 1px solid #667;
+    padding-bottom: 5px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+    font-size: 13px;
+}
+
+.legend-color-box {
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+    border: 1px solid #888;
+    flex-shrink: 0;
+}
+
+.legend-gradient-bar {
+    width: 100%;
+    height: 20px;
+    border: 1px solid #888;
+}
+
+.legend-gradient-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* ================================================================
+ハンバーガーメニュー スタイル
+================================================================ */
+/* --- ハンバーガーメニュー --- */
+.menu-toggle-label {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 30;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    background-color: var(--sidebar-bg);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: left 0.3s ease-out;
+}
+
+.menu-toggle-label span,
+.menu-toggle-label span::before,
+.menu-toggle-label span::after {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 3px;
+    background-color: #fff;
+    border-radius: 2px;
+    transition: all 0.3s;
+}
+
+.menu-toggle-label span::before {
+    top: -8px;
+}
+
+.menu-toggle-label span::after {
+    top: 8px;
+}
+
+.menu-toggle-checkbox {
+    display: none;
+}
+
+/* メニュー開閉時の動作 */
+.menu-toggle-checkbox:checked~.container .sidebar {
+    transform: translateX(0);
+    /* 表示 */
+}
+
+/* ハンバーガーメニューアイコンの回転 */
+.menu-toggle-checkbox:checked+.menu-toggle-label span {
+    transform: rotate(45deg);
+}
+
+.menu-toggle-checkbox:checked+.menu-toggle-label span::before {
+    top: 0;
+    transform: rotate(0);
+}
+
+.menu-toggle-checkbox:checked+.menu-toggle-label span::after {
+    top: 0;
+    transform: rotate(90deg);
+}
+
+/* ================================================================
+ローディング画面 スタイル
+================================================================ */
+/* --- ローディング画面 --- */
+#loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100dvh;
+    /* background-color: rgba(10, 20, 40, 0.95); */
+    background-color: #113d;
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.5s ease-out;
+    text-align: center;
+}
+
+.loading-content {
+    max-width: 80%;
+}
+
+/* ローディング画面のメインタイトル */
+#loading-title {
+    color: #fff;
+    font-size: 2.5em;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px #000;
+    margin-bottom: 20px;
+}
+
+/* ログメッセージのコンテナ */
+#loading-log {
+    max-height: 90dvh;
+    /* 画面の90%までの高さにする */
+    overflow-y: auto;
+    /* メッセージが増えたらスクロールさせる */
+    text-align: left;
+    background-color: #0008;
+    border-radius: 10px;
+    padding: 10px 20px;
+}
+
+/* 個々のログメッセージ */
+.log-entry {
+    color: #e0e0e0;
+    font-size: 1.2em;
+    margin: 8px 0;
+    animation: fadeIn 0.5s ease-out;
+    /* フェードインアニメーション */
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ================================================================
+ヘックス内情報 スタイル
+================================================================ */
+/* ラベル共通設定 */
+.hex-label,
+.settlement-label,
 .property-label {
     pointer-events: none;
     user-select: none;
@@ -444,23 +716,25 @@ button.active:hover {
 }
 
 /* ================================================================
-   フローティング情報ウィンドウ スタイル
-   ================================================================ */
+フローティング情報ウィンドウ スタイル
+================================================================ */
 #info-window {
     position: fixed;
     bottom: 10px;
     right: 10px;
-    width: auto; 
+    width: auto;
+    max-width: 95vw;
     height: auto;
     background-color: var(--sidebar-bg);
     color: #eee;
     border: 2px solid #fff;
     border-radius: 8px;
-    z-index: 20; /* UIボタンより手前に表示 */
+    z-index: 20;
+    /* UIボタンより手前に表示 */
     box-shadow: 0 0 10px #000;
     font-size: 14px;
     overflow: hidden;
-    
+
     /* 表示・非表示のアニメーション */
     transition: opacity 0.2s ease-out, transform 0.2s ease-out;
     transition: opacity 0.2s ease-out, transform 0.2s ease-out;
@@ -471,7 +745,8 @@ button.active:hover {
 #info-window.hidden {
     opacity: 0;
     transform: translateY(20px);
-    pointer-events: none; /* 非表示時はクリックイベントを受け付けない */
+    pointer-events: none;
+    /* 非表示時はクリックイベントを受け付けない */
 }
 
 .info-window-header {
@@ -495,53 +770,60 @@ button.active:hover {
     opacity: 0.7;
     text-align: right;
 }
+
 #info-close-btn:hover {
     opacity: 1;
 }
 
 #info-window-content {
-    padding: 12px;
-    overflow-y: auto;
-    /* (max-height - ヘッダーの高さ) で計算 */
-    max-height: calc(100dvh - 285px); 
-    /* \n などの改行を正しく表示するための設定 */
-    white-space: pre-wrap;
-    line-height: 1.6;
+    padding: 10px;
+    overflow: hidden;
+    max-height: 80vh;
+    white-space: normal;
+    line-height: 1.4;
     box-sizing: border-box;
 }
 
 /* ================================================================
-   等高線レイヤー スタイル
-   ================================================================ */
+等高線レイヤー スタイル
+================================================================ */
 .contour-path {
     fill: none;
-    stroke: #642; /* 茶色系の線 */
-    stroke-opacity: 0.5; /* 透過50% */
+    stroke: #642;
+    /* 茶色系の線 */
+    stroke-opacity: 0.5;
+    /* 透過50% */
     pointer-events: none;
 }
+
 /* 主曲線 (200mごと) */
 .contour-intermediate {
     stroke-width: 0.1px;
 }
+
 /* 計曲線 (1000mごと) */
 .contour-index {
     stroke-width: 0.2px;
 }
 
 /* ================================================================
-   ヘックス境界線 スタイル
-   ================================================================ */
+ヘックス境界線 スタイル
+================================================================ */
 /* ヘックス境界線のスタイル */
 .hex-border {
-    fill: none; /* 塗りつぶしはしない */
-    stroke: #0003; /* 境界線の色 */
-    stroke-width: 1.0px; /* 境界線の太さ */
-    pointer-events: none; /* クリックイベントを透過させる */
+    fill: none;
+    /* 塗りつぶしはしない */
+    stroke: #0003;
+    /* 境界線の色 */
+    stroke-width: 1.0px;
+    /* 境界線の太さ */
+    pointer-events: none;
+    /* クリックイベントを透過させる */
 }
 
 /* ================================================================
-   プログレスバーのスタイル
-   ================================================================ */
+プログレスバーのスタイル
+================================================================ */
 /* プログレスバーのスタイル */
 .progress-bar-container {
     width: 50%;
@@ -550,7 +832,8 @@ button.active:hover {
     background-color: #0008;
     border-radius: 5px;
     margin: 20px auto;
-    overflow: hidden; /* はみ出したバーを隠す */
+    overflow: hidden;
+    /* はみ出したバーを隠す */
 }
 
 .progress-bar {
@@ -558,7 +841,7 @@ button.active:hover {
     height: 100%;
     background-color: var(--primary-color);
     border-radius: 10px;
-    
+
     /* アニメーションの定義 */
     animation: indeterminate-progress 2s infinite linear;
 }
@@ -568,6 +851,7 @@ button.active:hover {
     0% {
         transform: translateX(-100%);
     }
+
     100% {
         transform: translateX(100%);
     }
@@ -575,12 +859,13 @@ button.active:hover {
 
 /* 河川パス */
 .river-segment {
-    fill: none; /* 塗りつぶしを無効化 */
+    fill: none;
+    /* 塗りつぶしを無効化 */
 }
 
 /* ================================
    スクロールバーのカスタムスタイル
-================================ */
+   ================================ */
 
 /* モダンブラウザ向け (Firefoxなど) */
 * {
@@ -623,7 +908,8 @@ button.active:hover {
     box-shadow: 0 0 10px #000;
     background-color: #000;
     z-index: 10;
-    display: none; /* 初期状態では非表示 */
+    display: none;
+    /* 初期状態では非表示 */
     overflow: hidden;
 }
 
@@ -634,7 +920,127 @@ button.active:hover {
 
 /* ミニマップ内のビューポート矩形 */
 #minimap-viewport {
-    fill: #0ff1; /* 半透明の白 */
+    fill: #0ff1;
+    /* 半透明の白 */
     stroke: cyan;
-    stroke-width: 3px; /* SVG座標系での太さ */
+    stroke-width: 3px;
+    /* SVG座標系での太さ */
+}
+
+/* ================================================================
+   情報ウィンドウ (カードUI)
+   ================================================================ */
+.info-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    gap: 10px;
+    padding-bottom: 10px;
+    /* スクロールバーのスペース */
+    max-width: 100%;
+}
+
+.info-card {
+    flex: 0 0 260px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid #445;
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.info-card.wide-card {
+    flex: 0 0 320px;
+}
+
+.card-header {
+    background: rgba(50, 60, 80, 0.8);
+    padding: 8px 12px;
+    font-weight: bold;
+    border-bottom: 1px solid #667;
+    display: flex;
+    align-items: center;
+    color: #cdf;
+}
+
+.card-content {
+    padding: 10px;
+    font-size: 13px;
+    overflow-y: auto;
+    max-height: 300px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #445;
+    padding-bottom: 2px;
+}
+
+.info-row span:first-child {
+    color: #aaa;
+}
+
+.info-row span:last-child {
+    font-weight: bold;
+    color: #eee;
+}
+
+/* 産業構造・領地詳細用 */
+.industry-group {
+    margin-bottom: 8px;
+    padding-left: 8px;
+    border-left: 2px solid #556;
+}
+
+.group-title {
+    font-size: 12px;
+    color: #8ac;
+    margin-bottom: 2px;
+}
+
+.industry-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2px;
+}
+
+.industry-item .label {
+    color: #ccc;
+}
+
+.industry-item .value {
+    font-weight: bold;
+}
+
+.sector-block {
+    margin-bottom: 10px;
+}
+
+.sector-block h6 {
+    margin: 5px 0;
+    color: #cdf;
+    border-bottom: 1px solid #445;
+    font-size: 14px;
+}
+
+.food-balance {
+    margin-top: 10px;
+    font-weight: bold;
+    text-align: center;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.food-balance.surplus {
+    background: rgba(20, 50, 20, 0.6);
+    color: #8f8;
+    border: 1px solid #262;
+}
+
+.food-balance.shortage {
+    background: rgba(50, 20, 20, 0.6);
+    color: #f88;
+    border: 1px solid #622;
 }
