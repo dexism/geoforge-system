@@ -579,7 +579,7 @@ function getInfoText(d) {
 
     // 集落・拠点
     if (p.settlement) {
-        basicInfoHtml += createRow('location_city', '拠　点', p.settlement);
+        basicInfoHtml += createRow('location_city', '集落規模', p.settlement);
     }
 
     // 上位拠点
@@ -631,6 +631,10 @@ function getInfoText(d) {
     envInfoHtml += createRow('grass', '農　業', (p.agriPotential * 100).toFixed(0), '%');
     envInfoHtml += createRow('forest', '林　業', (p.forestPotential * 100).toFixed(0), '%');
     envInfoHtml += createRow('construction', '鉱　業', (p.miningPotential * 100).toFixed(0), '%');
+    envInfoHtml += createRow('phishing', '漁　業', (p.fishingPotential * 100).toFixed(0), '%');
+    envInfoHtml += createRow('pets', '牧　畜', (p.pastoralPotential * 100).toFixed(0), '%');
+    envInfoHtml += createRow('egg', '畜　産', (p.livestockPotential * 100).toFixed(0), '%');
+    envInfoHtml += createRow('pest_control', '狩　猟', (p.huntingPotential * 100).toFixed(0), '%');
 
     const envCard = `
         <div class="info-card">
@@ -694,6 +698,8 @@ function getInfoText(d) {
         industryHtml += formatSector('第一次産業', 'agriculture', p.industry.primary, 't');
         industryHtml += formatSector('第二次産業', 'factory', p.industry.secondary, '');
         industryHtml += formatSector('第三次産業', 'store', p.industry.tertiary, 'G');
+        industryHtml += formatSector('第四次産業', 'school', p.industry.quaternary, 'pt');
+        industryHtml += formatSector('第五次産業', 'account_balance', p.industry.quinary, 'pt');
 
         // 食料収支
         if (p.surplus && p.surplus['食料']) {
