@@ -555,175 +555,206 @@ async function drawBeaches(hexes) {
  * クリックされたヘックスの詳細情報を整形して返す関数。
  * 情報ウィンドウの表示内容を生成します。
  * @param {object} d - ヘックスデータ
- * @returns {string} - 整形された情報テキスト
+ * @returns {string} - 整形された情報テキスト (HTML)
  */
 function getInfoText(d) {
     const p = d.properties;
 
-    // --- 【既存維持】上位集落情報 ---
-    let superiorText = 'なし';
+    // --- ヘルパー: アイコン付き行の生成 ---
+    const createRow = (icon, label, value, unit = '') => {
+        return `
+            <div class="info-row">
+                <span class="label"><span class="material-icons-round" style="font-size: 14px; vertical-align: middle; margin-right: 4px;">${icon}</span>${label}</span>
+                <span class="value">${value}${unit}</span>
+            </div>`;
+    };
+
+    // --- 1. 基本情報カード ---
+    let basicInfoHtml = '';
+
+    // 位置・所属
+    const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺　境';
+    basicInfoHtml += createRow('flag', '所　属', nationName);
+    basicInfoHtml += createRow('place', '座　標', `E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}`);
+
+    // 集落・拠点
+    if (p.settlement) {
+        basicInfoHtml += createRow('location_city', '拠　点', p.settlement);
+    }
+
+    // 上位拠点
     if (p.parentHexId != null) {
         const superiorHex = allHexesData[p.parentHexId];
         if (superiorHex) {
-            let detailsText = '';
+            basicInfoHtml += createRow('arrow_upward', '上　位', `${superiorHex.properties.settlement}`);
             if (p.distanceToParent) {
-                const distanceStr = `\n　道のり：${p.distanceToParent.toFixed(1)}km`;
-                let travelDaysStr = '';
-                if (p.travelDaysToParent) {
-                    travelDaysStr = `\n　荷馬車：${p.travelDaysToParent.toFixed(1)}日`;
-                }
-                detailsText = `${distanceStr}${travelDaysStr}`;
+                basicInfoHtml += createRow('straighten', '距　離', `${p.distanceToParent.toFixed(1)}`, 'km');
             }
-            superiorText = `${superiorHex.properties.settlement} (E${String(superiorHex.col).padStart(3, '0')}-N${String((config.ROWS - 1) - superiorHex.row).padStart(3, '0')})${detailsText}`;
         }
     } else if (p.territoryId != null && getIndex(d.x, (config.ROWS - 1) - d.y) !== p.territoryId) {
         const territoryHub = allHexesData[p.territoryId];
         if (territoryHub) {
-            superiorText = `[中枢] ${territoryHub.properties.settlement} (E${String(territoryHub.col).padStart(3, '0')}-N${String((config.ROWS - 1) - territoryHub.row).padStart(3, '0')})`;
+            basicInfoHtml += createRow('stars', '中　枢', `${territoryHub.properties.settlement}`);
         }
     }
 
-    // --- 【既存維持】土地利用・基本情報 ---
-    let landUseText;
-    if (p.isWater) {
-        landUseText = p.vegetation;
-    } else {
-        const landUseParts = [];
-        if (p.terrainType) landUseParts.push(p.terrainType);
-        if (p.vegetation) landUseParts.push(p.vegetation);
-        if (p.isAlluvial) landUseParts.push('河川');
-        if (p.hasSnow) landUseParts.push('積雪');
-        landUseText = landUseParts.join(', ');
-    }
+    // 土地利用
+    let landUseText = p.isWater ? p.vegetation : (p.terrainType || p.vegetation);
+    if (!p.isWater && p.isAlluvial) landUseText += ' (河川)';
+    basicInfoHtml += createRow('landscape', '地　形', landUseText);
 
-    const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺境';
-    const population = p.population ?? 0;
-    const cultivatedArea = p.cultivatedArea ?? 0;
-    const habitability = p.habitability ?? 0;
-    const elevationLabel = p.elevation < 0 ? '水深' : '標高';
-    const elevationValue = p.elevation < 0 ? Math.abs(Math.round(p.elevation)) : Math.round(p.elevation);
+    // 人口・農地
+    basicInfoHtml += createRow('people', '人　口', (p.population || 0).toLocaleString(), '人');
+    basicInfoHtml += createRow('agriculture', '農　地', Math.round(p.cultivatedArea || 0).toLocaleString(), ' ha');
+    basicInfoHtml += createRow('home', '居住適性', (p.habitability || 0).toFixed(1));
 
-    let text = `位置　　：E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}\n` +
-        `所属国家：${nationName}\n` +
-        `直轄上位：${superiorText}\n` +
-        `土地利用： ${landUseText}\n` +
-        `人口　　： ${population.toLocaleString()}人\n` +
-        `農地面積： ${Math.round(cultivatedArea).toLocaleString()} ha\n` +
-        `居住適性： ${habitability.toFixed(1)}\n` +
-        `\n=== 土地詳細 ===\n` +
-        `気候帯　： ${p.climateZone}\n` +
-        `${elevationLabel}　　： ${elevationValue}m\n` +
-        `気温　　： ${p.temperature.toFixed(1)}℃\n` +
-        `降水量　： ${p.precipitation_mm.toFixed(0)}mm/年\n` +
-        `魔力　　： ${p.manaRank}\n` +
-        `資源　　： ${p.resourceRank}\n` +
-        `魔物分布： ${(p.monsterRank ? p.monsterRank + 'ランク' : '観測されず')}\n` +
-        `\n--- 資源ポテンシャル ---\n` +
-        `農業適性： ${(p.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-        `林業適性： ${(p.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-        `鉱業適性： ${(p.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-        `漁業適性： ${(p.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-        `狩猟適性： ${(p.huntingPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-        `牧畜適性： ${(p.pastoralPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
-        `家畜適性： ${(p.livestockPotential * 100).toFixed(0).padStart(3, ' ')}%`;
+    const basicCard = `
+        <div class="info-card">
+            <div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">info</span>基本情報</div>
+            <div class="card-content">
+                ${basicInfoHtml}
+            </div>
+        </div>`;
 
-    // --- 【変更点】産業構造情報の表示 (カテゴリ分け対応) ---
+    // --- 2. 環境・資源カード ---
+    let envInfoHtml = '';
+    envInfoHtml += createRow('public', '気候帯', p.climateZone);
+    envInfoHtml += createRow('terrain', p.elevation < 0 ? '水　深' : '標　高', Math.abs(Math.round(p.elevation)), 'm');
+    envInfoHtml += createRow('thermostat', '気　温', p.temperature.toFixed(1), '℃');
+    envInfoHtml += createRow('water_drop', '降水量', p.precipitation_mm.toFixed(0), 'mm');
+    envInfoHtml += createRow('auto_awesome', '魔　力', p.manaRank);
+    envInfoHtml += createRow('diamond', '資　源', p.resourceRank);
+    envInfoHtml += createRow('warning', '魔　物', p.monsterRank ? p.monsterRank + 'ランク' : 'なし');
+
+    // ポテンシャル (主要なもののみ、または全て)
+    envInfoHtml += `<div class="group-title" style="margin-top:8px;">資源ポテンシャル</div>`;
+    envInfoHtml += createRow('grass', '農　業', (p.agriPotential * 100).toFixed(0), '%');
+    envInfoHtml += createRow('forest', '林　業', (p.forestPotential * 100).toFixed(0), '%');
+    envInfoHtml += createRow('construction', '鉱　業', (p.miningPotential * 100).toFixed(0), '%');
+
+    const envCard = `
+        <div class="info-card">
+            <div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">nature</span>環境・資源</div>
+            <div class="card-content">
+                ${envInfoHtml}
+            </div>
+        </div>`;
+
+    // --- 3. 産業構造カード (存在する場合) ---
+    let industryCard = '';
     if (p.industry) {
-        text += `\n\n=== 産業構造 ===`;
+        let industryHtml = '';
 
-        // カテゴリ定義マップ
+        // カテゴリ定義マップ (既存ロジック流用)
         const categoryMap = {
-            // 第一次産業
-            '小麦': '農業', '大麦': '農業', '雑穀': '農業', '稲': '農業', '果物': '農業', '薬草': '農業',
-            '木材': '林業',
-            '鉱石': '鉱業', '魔鉱石': '鉱業',
-            '魚介類': '漁業',
-            '牧畜肉': '畜産', '家畜肉': '畜産', '乳製品': '畜産', '革': '畜産', '魔獣素材': '畜産',
-            '狩猟肉': '狩猟',
-            // 第二次産業
-            '武具・道具': '鍛冶・工房',
-            '織物': '織物・染色',
-            'ポーション・魔導具': '錬金・魔導',
-            '酒(穀物)': '食品加工', '酒(果実)': '食品加工',
-            '建築': '建築'
+            '小　麦': '農　業', '大　麦': '農　業', '雑　穀': '農　業', '稲': '農　業', '果　物': '農　業', '薬　草': '農　業',
+            '木　材': '林　業',
+            '鉱　石': '鉱　業', '魔鉱石': '鉱　業',
+            '魚介類': '漁　業',
+            '牧畜肉': '畜　産', '家畜肉': '畜　産', '乳製品': '畜　産', '革': '畜　産', '魔獣素材': '畜　産',
+            '狩猟肉': '狩　猟',
+            '武具・道具': '鍛　冶', '織　物': '繊　維', 'ポーション・魔導具': '魔　導', '酒(穀物)': '食　品', '酒(果実)': '食　品', '建　築': '建　築'
         };
 
-        const formatSector = (sectorName, data, unit) => {
+        const formatSector = (title, icon, data, unit) => {
             const entries = Object.entries(data || {}).filter(([, val]) => val > 0.1);
             if (entries.length === 0) return '';
 
-            // データをカテゴリごとにグルーピング
-            const groups = {};
-            const noCategoryItems = [];
+            let html = `<div class="sector-block"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">${icon}</span>${title}</h6>`;
 
+            // グルーピング
+            const groups = {};
+            const others = [];
             entries.forEach(([key, val]) => {
                 const cat = categoryMap[key];
-                const str = `${key}: ${Math.round(val).toLocaleString()}${unit}`;
+                const valStr = `${Math.round(val).toLocaleString()}${unit}`;
                 if (cat) {
                     if (!groups[cat]) groups[cat] = [];
-                    groups[cat].push(str);
+                    groups[cat].push({ key, val: valStr });
                 } else {
-                    noCategoryItems.push(str);
+                    others.push({ key, val: valStr });
                 }
             });
 
-            let content = '';
-
-            // カテゴリありの項目（インデントして表示）
-            for (const [catName, items] of Object.entries(groups)) {
-                content += `\n　■ ${catName}\n　　${items.join('\n　　')}`;
+            for (const [cat, items] of Object.entries(groups)) {
+                html += `<div class="industry-group"><div class="group-title">${cat}</div>`;
+                items.forEach(item => {
+                    html += `<div class="industry-item"><span class="label">${item.key}</span><span class="value">${item.val}</span></div>`;
+                });
+                html += `</div>`;
             }
+            others.forEach(item => {
+                html += `<div class="industry-item"><span class="label">${item.key}</span><span class="value">${item.val}</span></div>`;
+            });
 
-            // カテゴリなしの項目（そのままリスト表示）
-            if (noCategoryItems.length > 0) {
-                content += `\n　${noCategoryItems.join('\n　')}`;
-            }
-
-            return `\n▼ ${sectorName}${content}`;
+            html += `</div>`;
+            return html;
         };
 
-        text += formatSector('第一次産業 (資源)', p.industry.primary, 't');
-        text += formatSector('第二次産業 (加工)', p.industry.secondary, '');
-        text += formatSector('第三次産業 (サービス)', p.industry.tertiary, 'G');
-        text += formatSector('第四次産業 (知識)', p.industry.quaternary, 'P');
-        text += formatSector('第五次産業 (統治)', p.industry.quinary, '');
+        industryHtml += formatSector('第一次産業', 'agriculture', p.industry.primary, 't');
+        industryHtml += formatSector('第二次産業', 'factory', p.industry.secondary, '');
+        industryHtml += formatSector('第三次産業', 'store', p.industry.tertiary, 'G');
 
         // 食料収支
-        text += `\n\n=== 食料生産 ===`;
-
         if (p.surplus && p.surplus['食料']) {
-            text += `\n[食料収支] +${p.surplus['食料']}t (余剰)`;
+            industryHtml += `<div class="food-balance surplus"><span class="material-icons-round" style="font-size:14px; vertical-align:middle;">trending_up</span> 食料余剰: +${Math.round(p.surplus['食料']).toLocaleString()}t</div>`;
         } else if (p.shortage && p.shortage['食料']) {
-            text += `\n[食料収支] -${p.shortage['食料']}t (不足)`;
+            industryHtml += `<div class="food-balance shortage"><span class="material-icons-round" style="font-size:14px; vertical-align:middle;">trending_down</span> 食料不足: -${Math.round(p.shortage['食料']).toLocaleString()}t</div>`;
         }
-    } else if (p.production && Object.keys(p.production).length > 0) {
-        // フォールバック (古いデータ用)
-        text += `\n\n--- 産業生産 (t/年) ---`;
-        const productionText = Object.entries(p.production)
-            .filter(([, amount]) => amount > 0.1)
-            .map(([item, amount]) => `${item} ${Math.round(amount).toLocaleString()}`)
-            .join('t\n　　　') + 't';
-        text += `\n生産：${productionText}`;
+
+        industryCard = `
+            <div class="info-card wide-card">
+                <div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">precision_manufacturing</span>産業構造</div>
+                <div class="card-content">
+                    ${industryHtml}
+                </div>
+            </div>`;
     }
 
-    // --- 【既存維持】領地集計情報 ---
+    // --- 4. 領地集計カード (拠点の場合) ---
+    let territoryCard = '';
     if (p.territoryData && ['首都', '都市', '領都', '街', '町'].includes(p.settlement)) {
         const data = p.territoryData;
-        text += `\n\n=== 領地集計 ===`;
-        const settlementCountText = Object.entries(data.settlementCounts).filter(([, count]) => count > 0).map(([type, count]) => { const shortName = { '首都': '首', '都市': '都', '領都': '領', '街': '街', '町': '町', '村': '村' }[type]; return `${shortName}${count}`; }).join(', ');
-        if (settlementCountText) text += `\n直轄集落： ${settlementCountText}`;
-        text += `\n合計人口： ${data.population.toLocaleString()}人`;
-        text += `\n合計農地： ${Math.round(data.cultivatedArea).toLocaleString()}ha`;
-        const totalProductionText = Object.entries(data.production).map(([crop, amount]) => `${crop} ${Math.round(amount).toLocaleString()}t`).join('\n　　　　　');
-        text += `\n生産合計：${totalProductionText}`;
+        let territoryHtml = '';
+
+        territoryHtml += createRow('group', '合計人口', data.population.toLocaleString(), '人');
+        territoryHtml += createRow('landscape', '合計農地', Math.round(data.cultivatedArea).toLocaleString(), 'ha');
+
+        // 集落数
+        const counts = Object.entries(data.settlementCounts).filter(([, c]) => c > 0)
+            .map(([t, c]) => `${t}:${c}`).join(', ');
+        if (counts) {
+            territoryHtml += `<div class="info-row" style="display:block;"><span class="label" style="display:block; margin-bottom:2px;">直轄集落</span><span class="value" style="font-size:12px;">${counts}</span></div>`;
+        }
+
+        // 収支
         const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement];
         const totalDemand = data.population * settlementInfo.consumption_t_per_person;
         const totalSupply = Object.values(data.production).reduce((a, b) => a + b, 0);
         const balance = totalSupply - totalDemand;
-        if (balance >= 0) { text += `\n食料収支：+${Math.round(balance).toLocaleString()}t の余剰`; } else { text += `\n食料収支：${Math.round(balance).toLocaleString()}t の不足`; }
+
+        if (balance >= 0) {
+            territoryHtml += `<div class="food-balance surplus">領内余剰: +${Math.round(balance).toLocaleString()}t</div>`;
+        } else {
+            territoryHtml += `<div class="food-balance shortage">領内不足: ${Math.round(balance).toLocaleString()}t</div>`;
+        }
+
+        territoryCard = `
+            <div class="info-card">
+                <div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">domain</span>領地管理</div>
+                <div class="card-content">
+                    ${territoryHtml}
+                </div>
+            </div>`;
     }
 
-    return text;
+    // --- 結合してコンテナに入れる ---
+    return `<div class="info-scroll-container">
+        ${basicCard}
+        ${envCard}
+        ${industryCard}
+        ${territoryCard}
+    </div>`;
 }
 
 /**
@@ -1218,7 +1249,7 @@ function updateVisibleHexes(transform) {
                         .attr('stroke-width', 5)
                         .style('pointer-events', 'none');
 
-                    infoContent.textContent = getInfoText(d);
+                    infoContent.innerHTML = getInfoText(d);
                     infoWindow.classList.remove('hidden');
                     event.stopPropagation();
                 });
