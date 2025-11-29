@@ -519,7 +519,7 @@ button.active:hover {
    ================================================================ */
 #info-window {
     position: fixed;
-    bottom: 60px;
+    bottom: 10px;
     right: 10px;
     width: auto;
     height: auto;
@@ -528,9 +528,13 @@ button.active:hover {
     border: 2px solid #fff;
     border-radius: 8px;
     z-index: 20;
+    /* UIボタンより手前に表示 */
     box-shadow: 0 0 10px #000;
     font-size: 14px;
-    overflow: visible;
+    overflow: hidden;
+
+    /* 表示・非表示のアニメーション */
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
     transition: opacity 0.2s ease-out, transform 0.2s ease-out;
     opacity: 1;
     transform: translateY(0);
@@ -540,9 +544,18 @@ button.active:hover {
     opacity: 0;
     transform: translateY(20px);
     pointer-events: none;
+    /* 非表示時はクリックイベントを受け付けない */
 }
 
-/* .info-window-header styles removed */
+.info-window-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: #0008;
+    border-bottom: 1px solid #999;
+    font-weight: bold;
+}
 
 #info-close-btn {
     position: absolute;
@@ -556,6 +569,7 @@ button.active:hover {
     color: #fff;
     font-size: 24px;
     line-height: 1;
+    padding: 0;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -735,10 +749,22 @@ button.active:hover {
     bottom: 0;
     right: 0;
     left: 0;
-    background-color: #0006;
+    background-color: #0007;
     border: none;
     border-radius: 0;
     box-shadow: none;
+    z-index: 20;
+    box-shadow: 0 0 20px #000;
+    font-size: 14px;
+    padding: 0;
+
+    /* 修正前: hidden だと枠外のボタンが消えます */
+    /* overflow: hidden; */
+
+    /* 修正後: visible にして枠外表示を許可します */
+    overflow: visible;
+
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
 }
 
 .info-window-header {
@@ -757,11 +783,9 @@ button.active:hover {
     display: flex;
     overflow-x: auto;
     gap: 10px;
-    padding-bottom: 10px;
+    padding: 0;
     max-width: 100%;
     max-height: 30vh;
-    padding-left: 10px;
-    padding-right: 10px;
 }
 
 .info-card {
@@ -805,11 +829,13 @@ button.active:hover {
 
 .info-row span:first-child {
     color: #aaa;
+    font-size: 11px;
 }
 
 .info-row span:last-child {
     font-weight: bold;
     color: #eee;
+    font-size: 16px;
 }
 
 /* 産業構造・領地詳細用 */
@@ -838,6 +864,7 @@ button.active:hover {
 
 .industry-item .value {
     font-weight: bold;
+    font-size: 16px;
 }
 
 .sector-block {
@@ -875,7 +902,7 @@ button.active:hover {
     font-family: 'Material Icons Round';
     font-weight: normal;
     font-style: normal;
-    font-size: 14px;
+    font-size: 20px;
     display: inline-block;
     line-height: 1;
     text-transform: none;
