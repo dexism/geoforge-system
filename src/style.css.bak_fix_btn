@@ -520,6 +520,7 @@ button.active:hover {
 #info-window {
     position: fixed;
     bottom: 60px;
+    /* Raised to make room for the floating button below it */
     right: 10px;
     width: auto;
     height: auto;
@@ -528,9 +529,13 @@ button.active:hover {
     border: 2px solid #fff;
     border-radius: 8px;
     z-index: 20;
+    /* UIボタンより手前に表示 */
     box-shadow: 0 0 10px #000;
     font-size: 14px;
     overflow: visible;
+    /* Allow button to hang out */
+
+    /* 表示・非表示のアニメーション */
     transition: opacity 0.2s ease-out, transform 0.2s ease-out;
     opacity: 1;
     transform: translateY(0);
@@ -540,14 +545,15 @@ button.active:hover {
     opacity: 0;
     transform: translateY(20px);
     pointer-events: none;
+    /* 非表示時はクリックイベントを受け付けない */
 }
 
 /* .info-window-header styles removed */
 
 #info-close-btn {
     position: absolute;
-    top: -18px;
-    right: 10px;
+    bottom: -40px;
+    right: 0;
     width: 36px;
     height: 36px;
     background-color: var(--sidebar-bg);
@@ -563,7 +569,7 @@ button.active:hover {
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
     transition: background-color 0.2s;
     pointer-events: auto;
-    z-index: 30;
+    /* Ensure it's clickable even if parent has pointer-events: none issues */
 }
 
 #info-close-btn:hover {
