@@ -562,7 +562,11 @@ function getInfoText(d) {
 
     // --- ヘルパー: アイコン付き行の生成 ---
     const createRow = (icon, label, value, unit = '') => {
-        return `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 14px; vertical-align: middle; margin-right: 4px;">${icon}</span>${label}</span><span class="value">${value}${unit}</span></div>`;
+        return `
+            <div class="info-row">
+                <span class="label"><span class="material-icons-round" style="font-size: 14px; vertical-align: middle; margin-right: 4px;">${icon}</span>${label}</span>
+                <span class="value">${value}${unit}</span>
+            </div>`;
     };
 
     // --- 1. 基本情報カード ---
@@ -604,7 +608,13 @@ function getInfoText(d) {
     basicInfoHtml += createRow('agriculture', '農　地', Math.round(p.cultivatedArea || 0).toLocaleString(), ' ha');
     basicInfoHtml += createRow('home', '居住適性', (p.habitability || 0).toFixed(1));
 
-    const basicCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">info</span>基本情報</div><div class="card-content">${basicInfoHtml}</div></div>`;
+    const basicCard = `
+        <div class="info-card">
+            <div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">info</span>基本情報</div>
+            <div class="card-content">
+                ${basicInfoHtml}
+            </div>
+        </div>`;
 
     // --- 2. 環境・資源カード ---
     let envInfoHtml = '';
@@ -626,7 +636,13 @@ function getInfoText(d) {
     envInfoHtml += createRow('egg', '畜　産', (p.livestockPotential * 100).toFixed(0), '%');
     envInfoHtml += createRow('pest_control', '狩　猟', (p.huntingPotential * 100).toFixed(0), '%');
 
-    const envCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">nature</span>環境・資源</div><div class="card-content">${envInfoHtml}</div></div>`;
+    const envCard = `
+        <div class="info-card">
+            <div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">nature</span>環境・資源</div>
+            <div class="card-content">
+                ${envInfoHtml}
+            </div>
+        </div>`;
 
     // --- 3. 産業構造カード (存在する場合) ---
     let industryCard = '';
@@ -692,7 +708,13 @@ function getInfoText(d) {
             industryHtml += `<div class="food-balance shortage"><span class="material-icons-round" style="font-size:14px; vertical-align:middle;">trending_down</span> 食料不足: -${Math.round(p.shortage['食料']).toLocaleString()}t</div>`;
         }
 
-        industryCard = `<div class="info-card wide-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">precision_manufacturing</span>産業構造</div><div class="card-content">${industryHtml}</div></div>`;
+        industryCard = `
+            <div class="info-card wide-card">
+                <div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">precision_manufacturing</span>産業構造</div>
+                <div class="card-content">
+                    ${industryHtml}
+                </div>
+            </div>`;
     }
 
     // --- 4. 領地集計カード (拠点の場合) ---
@@ -723,11 +745,22 @@ function getInfoText(d) {
             territoryHtml += `<div class="food-balance shortage">領内不足: ${Math.round(balance).toLocaleString()}t</div>`;
         }
 
-        territoryCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">domain</span>領地管理</div><div class="card-content">${territoryHtml}</div></div>`;
+        territoryCard = `
+            <div class="info-card">
+                <div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">domain</span>領地管理</div>
+                <div class="card-content">
+                    ${territoryHtml}
+                </div>
+            </div>`;
     }
 
     // --- 結合してコンテナに入れる ---
-    return `<div class="info-scroll-container">${basicCard}${envCard}${industryCard}${territoryCard}</div>`;
+    return `<div class="info-scroll-container">
+        ${basicCard}
+        ${envCard}
+        ${industryCard}
+        ${territoryCard}
+    </div>`;
 }
 
 /**
