@@ -31,6 +31,7 @@ const step2Btn = document.getElementById('step2-climate-btn');
 const step3Btn = document.getElementById('step3-settlement-btn');
 const step4Btn = document.getElementById('step4-nation-btn');
 const step5Btn = document.getElementById('step5-save-btn');
+const downloadJsonBtn = document.getElementById('download-json-btn');
 const regenerateBtn = document.getElementById('force-regenerate-btn');
 
 
@@ -66,6 +67,7 @@ function updateButtonStates(currentStep) {
     step3Btn.disabled = currentStep < 2;
     step4Btn.disabled = currentStep < 3;
     step5Btn.disabled = currentStep < 4;
+    downloadJsonBtn.disabled = currentStep < 4;
 }
 
 /**
@@ -336,6 +338,26 @@ async function runStep5_Save() {
     loadingOverlay.style.display = 'none';
 }
 
+// JSONダウンロード機能
+function downloadWorldData() {
+    if (!worldData || !worldData.allHexes) {
+        alert("ダウンロードするデータがありません。");
+        return;
+    }
+
+    const dataStr = JSON.stringify(worldData, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "world_data.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 // ================================================================
 // ■ メイン処理とイベントハンドラ
 // ================================================================
@@ -391,19 +413,35 @@ async function recalculateDistances(worldData) {
 }
 
 async function loadExistingWorld() {
-    if (!GAS_WEB_APP_URL.startsWith('https://script.google.com')) {
-        await addLogMessage('[設定注意] GASのURLが設定されていません。新規生成のみ行います。');
-        return false;
-    }
-    
     try {
-        await addLogMessage('既存の世界データをデータベースから読み込み中...');
+        await addLogMessage('既存の世界データを読み込み中...');
         progressBarContainer.style.display = 'block';
 
-        const response = await fetch(GAS_WEB_APP_URL);
-        if (!response.ok) throw new Error(`サーバーからの応答が不正です (ステータス: ${response.status})`);
-        
-        const loadedData = await response.json();
+        let loadedData = null;
+
+        // 1. まず静的ファイル (world_data.json) の読み込みを試みる
+        try {
+            const staticRes = await fetch('./world_data.json');
+            if (staticRes.ok) {
+                loadedData = await staticRes.json();
+                await addLogMessage('静的ファイルからデータを読み込みました。');
+            }
+        } catch (e) {
+            // 静的ファイルがない場合は無視して次へ
+        }
+
+        // 2. 静的ファイルがなければ GAS から取得
+        if (!loadedData) {
+             if (!GAS_WEB_APP_URL.startsWith('https://script.google.com')) {
+                await addLogMessage('[設定注意] GASのURLが設定されていません。新規生成のみ行います。');
+                return false;
+            }
+
+            await addLogMessage('データベース(GAS)からデータを取得しています...');
+            const response = await fetch(GAS_WEB_APP_URL);
+            if (!response.ok) throw new Error(`サーバーからの応答が不正です (ステータス: ${response.status})`);
+            loadedData = await response.json();
+        }
 
         if (loadedData && loadedData.allHexes && loadedData.allHexes.length > 0) {
             await addLogMessage('データの読み込みに成功しました。世界を再構築します。');
@@ -463,6 +501,7 @@ step2Btn.addEventListener('click', runStep2_Climate);
 step3Btn.addEventListener('click', runStep3_Settlements);
 step4Btn.addEventListener('click', runStep4_Nations);
 step5Btn.addEventListener('click', runStep5_Save);
+downloadJsonBtn.addEventListener('click', downloadWorldData);
 
 regenerateBtn.addEventListener('click', async () => {
     // ボタンが押されたら、確認ダイアログを出す前に（または同時に）通知処理を投げる

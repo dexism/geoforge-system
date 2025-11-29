@@ -1,19 +1,22 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8" />
     <title>GeoForge System - World Map</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-    <script src="//accaii.com/geoforge/script.js" async></script><noscript><img src="//accaii.com/geoforge/script?guid=on"></noscript>
+    <script src="//accaii.com/geoforge/script.js" async></script><noscript><img
+            src="//accaii.com/geoforge/script?guid=on"></noscript>
     <div id="loading-overlay">
         <div class="loading-content">
-        <h1 id="loading-title">GeoForge SYSTEM v2.1.2<br>世界を創造しています！</h1>
-        <div id="progress-bar-container" class="progress-bar-container" style="display: none;">
-            <div id="progress-bar" class="progress-bar"></div>
-        </div>
-        <div id="loading-log"></div>
+            <h1 id="loading-title">GeoForge SYSTEM v2.1.2<br>世界を創造しています！</h1>
+            <div id="progress-bar-container" class="progress-bar-container" style="display: none;">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            <div id="loading-log"></div>
         </div>
     </div>
 
@@ -54,7 +57,7 @@
                     <label for="map-type-white">白地図</label>
                 </div>
             </details>
-            
+
             <!-- 2. レイヤー (重ねがけ) -->
             <details open>
                 <summary>レイヤー</summary>
@@ -81,7 +84,7 @@
                     <li><button id="toggleMonsterLayer">魔物分布</button></li>
                 </ul>
             </details>
-            
+
             <!-- 4. 資源 -->
             <details>
                 <summary>資源</summary>
@@ -103,7 +106,7 @@
             <details>
                 <summary>システム</summary>
                 <ul>
-                        <li><button id="force-regenerate-btn">強制再生成</button></li>
+                    <li><button id="force-regenerate-btn">強制再生成</button></li>
                 </ul>
                 <div class="generation-controls">
                     <p class="note">ステップごとに世界を生成します。<br>各ステップで再生成が可能です。</p>
@@ -113,10 +116,11 @@
                         <li><button id="step3-settlement-btn" disabled>③ 集落生成</button></li>
                         <li><button id="step4-nation-btn" disabled>④ 道路・国家生成</button></li>
                         <li><button id="step5-save-btn" disabled>⑤ 保存</button></li>
+                        <li><button id="download-json-btn" disabled>⑥ JSONダウンロード</button></li>
                     </ul>
-              </div>
+                </div>
             </details>
-            
+
             <p>&copy; 2025 Candle's. All rights reserved.</p>
         </aside>
 
@@ -127,8 +131,8 @@
 
     <div id="info-window" class="hidden">
         <div class="info-window-header">
-        <span id="info-coord">Information</span>
-        <button id="info-close-btn" title="閉じる">×</button>
+            <span id="info-coord">Information</span>
+            <button id="info-close-btn" title="閉じる">×</button>
         </div>
         <div id="info-window-content">
         </div>
@@ -136,4 +140,5 @@
 
     <script type="module" src="./main.js"></script>
 </body>
+
 </html>
