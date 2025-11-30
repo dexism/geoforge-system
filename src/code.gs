@@ -7,8 +7,11 @@ const SPREADSHEET_ID = '1WJqsaohJoXxwRcREsyZzA0ihvSOpfMXI7CnQfZX68PE';
 const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1441760230688948335/zrk2DbmQY7t6LTYEaERiVZfofZDl8-7bAbTa8jsFAGWrjBOAX6eIwhybY1cpRIMM6wyo';
 
 // 各データを保存するシート名
+// 各データを保存するシート名
 const HEX_SHEET_NAME = 'HexData';
 const ROAD_SHEET_NAME = 'RoadData';
+const DICT_SHEET_NAME = 'DictData';
+const META_SHEET_NAME = 'MetaData';
 
 /**
  * WebアプリからGETリクエストを受け取ったときに実行される関数。
@@ -18,19 +21,39 @@ function doGet(e) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     
+    // メタデータを読み込む
+    const metaSheet = ss.getSheetByName(META_SHEET_NAME);
+    const metaValues = metaSheet ? metaSheet.getDataRange().getValues() : [];
+    const meta = {};
+    metaValues.forEach(row => { if(row.length >= 2) meta[row[0]] = row[1]; });
+
+    // 辞書データを読み込む
+    const dictSheet = ss.getSheetByName(DICT_SHEET_NAME);
+    const dictValues = dictSheet ? dictSheet.getDataRange().getValues() : [];
+    const dicts = {};
+    dictValues.forEach(row => { if(row.length >= 2) dicts[row[0]] = JSON.parse(row[1]); });
+
     // ヘックスデータを読み込む
     const hexSheet = ss.getSheetByName(HEX_SHEET_NAME);
     const hexValues = hexSheet.getDataRange().getValues();
-    const allHexes = valuesToObjects(hexValues);
+    const hexes = valuesToObjects(hexValues);
     
     // 道路データを読み込む
     const roadSheet = ss.getSheetByName(ROAD_SHEET_NAME);
     const roadValues = roadSheet.getDataRange().getValues();
-    const roadPaths = valuesToObjects(roadValues);
+    const roads = valuesToObjects(roadValues);
 
+    // V2フォーマットで構築
     const worldData = {
-      allHexes: allHexes,
-      roadPaths: roadPaths,
+      version: meta.version || 2,
+      cols: meta.cols || 115,
+      rows: meta.rows || 100,
+      dicts: dicts,
+      hexes: hexes,
+      roads: roads,
+      // 互換性のため古いキーも残す（必要なら）
+      allHexes: hexes,
+      roadPaths: roads
     };
 
     // JSON形式で出力
@@ -62,20 +85,37 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    const allHexes = data.allHexes;
-    const roadPaths = data.roadPaths;
+    // V2対応: キーのマッピング
+    const hexes = data.hexes || data.allHexes;
+    const roads = data.roads || data.roadPaths;
+    const dicts = data.dicts || {};
+    const meta = {
+        version: data.version || 2,
+        cols: data.cols || 115,
+        rows: data.rows || 100
+    };
 
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
     // ヘックスデータをシートに書き込む
     const hexSheet = getOrCreateSheet(ss, HEX_SHEET_NAME);
-    const hexRows = objectsToValues(allHexes);
+    const hexRows = objectsToValues(hexes);
     updateSheetData(hexSheet, hexRows);
     
     // 道路データをシートに書き込む
     const roadSheet = getOrCreateSheet(ss, ROAD_SHEET_NAME);
-    const roadRows = objectsToValues(roadPaths);
+    const roadRows = objectsToValues(roads);
     updateSheetData(roadSheet, roadRows);
+
+    // 辞書データをシートに書き込む
+    const dictSheet = getOrCreateSheet(ss, DICT_SHEET_NAME);
+    const dictRows = Object.entries(dicts).map(([k, v]) => [k, JSON.stringify(v)]);
+    updateSheetData(dictSheet, dictRows);
+
+    // メタデータをシートに書き込む
+    const metaSheet = getOrCreateSheet(ss, META_SHEET_NAME);
+    const metaRows = Object.entries(meta);
+    updateSheetData(metaSheet, metaRows);
 
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'success' }))
