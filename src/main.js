@@ -401,7 +401,11 @@ const KEY_MAP = {
     'landUse.desert': 'lu_d',
     'landUse.barren': 'lu_b',
     'landUse.grassland': 'lu_g',
-    'landUse.forest': 'lu_f'
+    'landUse.forest': 'lu_f',
+
+    // 社会構成
+    demographics: 'dem',
+    facilities: 'fac'
 };
 
 // 逆マッピング（解凍用）
@@ -428,7 +432,16 @@ const INDUSTRY_ITEM_MAP = {
     '行政・税収': 'ad', 'ギルド統括': 'gu', '芸術・文化': 'ar', '世界儀式': 'rt',
     // 領土データ用
     'population': 'pop', 'cultivatedArea': 'ca', 'production': 'prod', 'settlementCounts': 'sc',
-    '都市': 'cit', '領都': 'reg', '街': 'str', '町': 'twn', '村': 'vil', '首都': 'cap'
+    '都市': 'cit', '領都': 'reg', '街': 'str', '町': 'twn', '村': 'vil', '首都': 'cap',
+    // 人口構成
+    '貴族': 'nob', '騎士': 'kni', '正規兵': 'sol', '衛兵': 'gua', '傭兵': 'mer',
+    '農夫': 'far', '木こり': 'lum', '鉱夫': 'min', '漁師': 'fis', '牧畜民': 'pas', '狩人': 'hun',
+    '職人': 'art', '商人': 'tra', '学者': 'sch', '官僚': 'bur', '神官': 'pri', '冒険者': 'adv', '浮浪者': 'vag',
+    // 施設
+    '商会・商店': 'shp', '行商・露店': 'ped', '宿屋': 'inn', '酒場・食堂': 'tav',
+    '鍛冶屋': 'smi', '工房': 'wor', '診療所': 'cli', '教会': 'chu', '運送屋': 'car', '厩舎': 'sta',
+    '研究所': 'lab', '学校': 'col', '兵舎': 'bar', '砦': 'for', '役所': 'off', 'ギルド': 'gui',
+    '劇場・美術館': 'the', '儀式場': 'rit'
 };
 const REVERSE_INDUSTRY_ITEM_MAP = Object.fromEntries(Object.entries(INDUSTRY_ITEM_MAP).map(([k, v]) => [v, k]));
 
@@ -518,6 +531,20 @@ function compressWorldData() {
             if (key === 'territoryData' && value) {
                 const cTdat = compressNestedObject(value);
                 if (cTdat) cHex[KEY_MAP['territoryData']] = cTdat;
+                return;
+            }
+
+            // demographicsの特別処理
+            if (key === 'demographics' && value) {
+                const cDem = compressNestedObject(value);
+                if (cDem) cHex[KEY_MAP['demographics']] = cDem;
+                return;
+            }
+
+            // facilitiesの特別処理
+            if (key === 'facilities' && value) {
+                const cFac = compressNestedObject(value);
+                if (cFac) cHex[KEY_MAP['facilities']] = cFac;
                 return;
             }
 
@@ -783,6 +810,18 @@ async function processLoadedData(loadedData) {
                 // territoryData (ネスト解凍)
                 if (originalKey === 'territoryData') {
                     props.territoryData = decompressNestedObject(v);
+                    return;
+                }
+
+                // demographics (ネスト解凍)
+                if (originalKey === 'demographics') {
+                    props.demographics = decompressNestedObject(v);
+                    return;
+                }
+
+                // facilities (ネスト解凍)
+                if (originalKey === 'facilities') {
+                    props.facilities = decompressNestedObject(v);
                     return;
                 }
 

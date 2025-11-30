@@ -364,7 +364,7 @@ export function getInfoText(d) {
             societyHtml += `<div class="industry-group" style="display:flex; flex-wrap:wrap; gap:4px;">`;
             for (const [role, count] of Object.entries(p.demographics)) {
                 if (count > 0) {
-                    societyHtml += `<div class="industry-item" style="width:48%;"><span class="label">${role}</span><span class="value">${count.toLocaleString()}人</span></div>`;
+                    societyHtml += `<div class="industry-item" style="width:100%;"><span class="label">${role}</span><span class="value">${count.toLocaleString()}人</span></div>`;
                 }
             }
             societyHtml += `</div></div>`;
@@ -376,7 +376,7 @@ export function getInfoText(d) {
             societyHtml += `<div class="industry-group" style="display:flex; flex-wrap:wrap; gap:4px;">`;
             for (const [facility, count] of Object.entries(p.facilities)) {
                 if (count > 0) {
-                    societyHtml += `<div class="industry-item" style="width:48%;"><span class="label">${facility}</span><span class="value">${count.toLocaleString()}軒</span></div>`;
+                    societyHtml += `<div class="industry-item" style="width:100%;"><span class="label">${facility}</span><span class="value">${count.toLocaleString()}軒</span></div>`;
                 }
             }
             societyHtml += `</div></div>`;
