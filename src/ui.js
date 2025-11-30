@@ -582,7 +582,7 @@ function getInfoText(d) {
     if (p.parentHexId != null) {
         const superiorHex = allHexesData[p.parentHexId];
         if (superiorHex) {
-            basicInfoHtml += createRow('arrow_upward', '上　位', `${superiorHex.properties.settlement}`);
+            basicInfoHtml += createRow('arrow_upward', '上位集落', `${superiorHex.properties.settlement}`);
             if (p.distanceToParent) {
                 basicInfoHtml += createRow('straighten', '距　離', `${p.distanceToParent.toFixed(1)}`, 'km');
             }
