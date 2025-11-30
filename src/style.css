@@ -745,6 +745,46 @@ button.active:hover {
 }
 
 /* ================================================================
+   ミニマップ表示切り替え用スタイル (追加)
+   ================================================================ */
+
+/* ミニマップアイコン */
+#minimap-icon {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    background-color: #000;
+    border: 2px solid #fff;
+    border-radius: 5px;
+    box-shadow: 0 0 10px #000;
+    z-index: 10;
+    display: none; /* 初期状態は非表示（ミニマップが表示されているため） */
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
+#minimap-icon .material-icons-round {
+    font-size: 24px;
+}
+
+/* ミニマップコンテナの追加スタイル */
+#minimap-container {
+    cursor: pointer;
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0.2s;
+}
+
+#minimap-container.hidden {
+    opacity: 0;
+    transform: scale(0.8);
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* ================================================================
    情報ウィンドウ (カードUI) - 追加スタイル
    ================================================================ */
 
@@ -768,11 +808,18 @@ button.active:hover {
     overflow: visible;
     pointer-events: auto;
 
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0.2s;
+    /* スライドイン・アウトのアニメーション設定 */
+    transition: transform 0.3s ease-out, opacity 0.3s ease-out, visibility 0.3s;
+    transform: translateY(0); /* 表示時は定位置 */
+    opacity: 1;
 }
 
 #info-window.hidden {
+    /* 下方向に100%（自身の高さ分）移動して隠す */
+    transform: translateY(100%);
+    opacity: 0;
     visibility: hidden;
+    pointer-events: none;
 }
 
 .info-window-header {

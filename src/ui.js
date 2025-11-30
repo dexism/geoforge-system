@@ -934,8 +934,40 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // ビューポート矩形を初期状態で追加
     minimapViewport = minimapSvg.append('rect').attr('id', 'minimap-viewport');
 
-    // ミニマップを表示
-    minimapContainer.style('display', 'block');
+    // ミニマップを初期状態で非表示（アイコン表示）にする
+    minimapContainer.style('display', 'block').classed('hidden', true);
+
+    // --- ミニマップの表示切り替え機能 ---
+    // アイコン要素の作成
+    const minimapIcon = d3.select('body').append('div')
+        .attr('id', 'minimap-icon')
+        .html('<span class="material-icons-round">map</span>')
+        .style('display', 'flex'); // 初期状態で表示
+
+    // 切り替え関数の定義
+    const toggleMinimap = () => {
+        const isHidden = minimapContainer.classed('hidden');
+        if (isHidden) {
+            // 表示する
+            minimapContainer.classed('hidden', false);
+            minimapIcon.style('display', 'none');
+        } else {
+            // 非表示にする（アイコン化）
+            minimapContainer.classed('hidden', true);
+            minimapIcon.style('display', 'flex');
+        }
+    };
+
+    // イベントリスナーの登録
+    minimapContainer.on('click', (event) => {
+        event.stopPropagation(); // マップへのクリック伝播を防ぐ
+        toggleMinimap();
+    });
+
+    minimapIcon.on('click', (event) => {
+        event.stopPropagation();
+        toggleMinimap();
+    });
 
     const hexOverlapScale = 1.01; // 隙間を埋めるための拡大率を定義。1%拡大
 
@@ -1516,4 +1548,5 @@ export function resetUI() {
         minimapContainer.remove(); // 古いミニマップを削除
         minimapContainer = null;
     }
+    d3.select('#minimap-icon').remove(); // アイコンも削除
 }
