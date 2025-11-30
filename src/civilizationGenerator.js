@@ -34,11 +34,11 @@ function generatePopulation(allHexes) {
             score += p.fishingPotential * 20;
             const idealTemp = 10.0;
             score += Math.max(0, 1 - Math.abs(p.temperature - idealTemp) / 15) * 15;
-            
+
             const idealPrecip = config.PRECIPITATION_PARAMS.DRYNESS_FARMING_THRESHOLD;
             const precipScore = Math.max(0, 1 - Math.abs(p.precipitation_mm - idealPrecip) / 800) * 10;
             score += precipScore;
-            
+
             score += p.manaValue * 10;
             score += p.miningPotential * 5;
             score += p.forestPotential * 5;
@@ -60,7 +60,7 @@ function generatePopulation(allHexes) {
                     .domain([0, -20, -100]) // 0m, -20m(理想), -100m
                     .range([0, 1, 0])      // ボーナス 0 -> 1 -> 0
                     .clamp(true);
-                
+
                 // 居住適性スコアに最大15点のボーナスを追加
                 score += portBonusScale(deepestNeighborDepth) * 15;
             }
@@ -68,7 +68,7 @@ function generatePopulation(allHexes) {
             // 特定の植生タイプに対して厳しいペナルティを課す
             switch (p.vegetation) {
                 case '高山':
-                    score *= 0.1; 
+                    score *= 0.1;
                     break;
                 case '砂漠':
                     score *= 0.2;
@@ -77,8 +77,21 @@ function generatePopulation(allHexes) {
                     score *= 0.4;
                     break;
             }
+
+            // --- マップ端の抑制ロジック (端から5ヘックス以内の居住適性を減衰) ---
+            const distLeft = h.col;
+            const distRight = config.COLS - 1 - h.col;
+            const distTop = h.row;
+            const distBottom = config.ROWS - 1 - h.row;
+            const minDistToEdge = Math.min(distLeft, distRight, distTop, distBottom);
+
+            if (minDistToEdge < 5) {
+                // 端(0)で0.0、距離5で1.0になるように線形補間
+                const edgePenalty = minDistToEdge / 5.0;
+                score *= edgePenalty;
+            }
         }
-        
+
         p.habitability = score;
         if (p.habitability > maxHabitability) {
             maxHabitability = p.habitability;
@@ -89,13 +102,20 @@ function generatePopulation(allHexes) {
     allHexes.forEach(h => {
         const p = h.properties;
         if (maxHabitability > 0) {
-            const normalizedHabitability = p.habitability / maxHabitability;
+            let normalizedHabitability = p.habitability / maxHabitability;
+
+            // 居住適性の上限キャップ (絶対に1.0にならないようにする)
+            normalizedHabitability = Math.min(0.999, normalizedHabitability);
 
             if (normalizedHabitability >= config.POPULATION_PARAMS.HABITABILITY_THRESHOLD) {
                 const effectiveHabitability = (normalizedHabitability - config.POPULATION_PARAMS.HABITABILITY_THRESHOLD) / (1.0 - config.POPULATION_PARAMS.HABITABILITY_THRESHOLD);
                 const populationFactor = Math.pow(effectiveHabitability, config.POPULATION_PARAMS.POPULATION_CURVE);
-                const calculatedPopulation = Math.floor(populationFactor * config.POPULATION_PARAMS.MAX_POPULATION_PER_HEX);
-                
+
+                // 1.0前後のゆらぎを持たせる (0.85 ～ 1.15)
+                const randomVariation = 0.85 + Math.random() * 0.30;
+
+                const calculatedPopulation = Math.floor(populationFactor * config.POPULATION_PARAMS.MAX_POPULATION_PER_HEX * randomVariation);
+
                 p.population = (calculatedPopulation > 10) ? calculatedPopulation : 0;
             } else {
                 p.population = 0;
@@ -147,7 +167,7 @@ function defineNations(allCities, numNations) {
     // 2. 代表都市の中から、人口が多い順に指定された国家数だけ「首都」として選抜
     const capitalCandidates = regionBests.filter(c => c !== null);
     capitalCandidates.sort((a, b) => b.properties.population - a.properties.population);
-    
+
     const capitals = capitalCandidates.slice(0, numNations);
 
     // 3. 首都を正式に定義
@@ -182,7 +202,7 @@ function assignTerritoriesByTradeRoutes(allCities, capitals, tradeRouteData, all
 
         capitals.forEach(capital => {
             const capitalIndex = getIndex(capital.col, capital.row);
-            const route = tradeRouteData.find(r => 
+            const route = tradeRouteData.find(r =>
                 (r.fromId === cityIndex && r.toId === capitalIndex) ||
                 (r.fromId === capitalIndex && r.toId === cityIndex)
             );
@@ -282,15 +302,15 @@ export async function generateCivilization(allHexes, addLogMessage) {
     const cities = allHexes.filter(h => h.properties.settlement === '都市');
 
     // configの値をローカル変数にコピーして使用する
-    let numNations = config.NUM_NATIONS; 
+    let numNations = config.NUM_NATIONS;
 
     if (cities.length < numNations) {
         await addLogMessage(`警告: 都市が${cities.length}個しか形成されませんでした。国家数を${cities.length}に減らします。`);
         numNations = Math.max(1, cities.length); // ローカル変数を更新
     }
     if (numNations === 0) { // ローカル変数で判定
-         await addLogMessage("都市が全く生成されなかったため、文明生成を中断します。");
-         return { allHexes, roadPaths: [] };
+        await addLogMessage("都市が全く生成されなかったため、文明生成を中断します。");
+        return { allHexes, roadPaths: [] };
     }
 
     // 手順1-2: 首都を定義
@@ -332,12 +352,12 @@ export async function determineTerritories(allHexes, addLogMessage) {
 
     while (head < queue.length) {
         const currentHex = queue[head++];
-        
+
         currentHex.neighbors.forEach(neighborIndex => {
             if (!visited.has(neighborIndex)) {
                 visited.add(neighborIndex);
                 const neighborHex = allHexes[neighborIndex];
-                
+
                 // 隣が水域でなく、まだどの勢力にも属していない場合
                 if (!neighborHex.properties.isWater && neighborHex.properties.territoryId === null) {
                     // 自分の所属(国、支配者)を隣に伝播させる
@@ -392,7 +412,7 @@ export function generateMonsterDistribution(allHexes) {
     const queue = allHexes.filter(h => h.properties.isWater && h.neighbors.some(n => !allHexes[n].properties.isWater));
     queue.forEach(h => distanceToCoast.set(getIndex(h.col, h.row), 1));
     let head = 0;
-    while(head < queue.length) {
+    while (head < queue.length) {
         const current = queue[head++];
         const dist = distanceToCoast.get(getIndex(current.col, current.row));
         current.neighbors.forEach(nIdx => {
@@ -406,20 +426,20 @@ export function generateMonsterDistribution(allHexes) {
     // --- STEP 3: 海上の S, A, B, C, D ランクを割合ベースで割り当て ---
     const assignSeaRank = (rank, criteria, sortLogic, percentage) => {
         if (seaCandidates.length === 0) return;
-        
+
         const targetCount = Math.floor(totalSeaHexes * percentage);
         let rankCandidates = seaCandidates.filter(criteria);
-        
+
         if (sortLogic) {
             rankCandidates.sort(sortLogic);
         } else {
             // ソート指定がない場合はランダムにシャッフルして揺らぎを与える
             rankCandidates.sort(() => Math.random() - 0.5);
         }
-        
+
         const assignedHexes = rankCandidates.slice(0, targetCount);
         assignedHexes.forEach(h => h.properties.monsterRank = rank);
-        
+
         const assignedIndexes = new Set(assignedHexes.map(h => getIndex(h.col, h.row)));
         seaCandidates = seaCandidates.filter(h => !assignedIndexes.has(getIndex(h.col, h.row)));
     };
