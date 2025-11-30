@@ -764,11 +764,9 @@ button.active:hover {
     font-size: 14px;
     padding: 0;
 
-    /* 修正前: hidden だと枠外のボタンが消えます */
-    /* overflow: hidden; */
-
     /* 修正後: visible にして枠外表示を許可します */
     overflow: visible;
+    pointer-events: auto;
 
     transition: opacity 0.2s ease-out, transform 0.2s ease-out;
 }

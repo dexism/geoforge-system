@@ -200,7 +200,7 @@ export function getInfoText(d) {
         basicInfoHtml += createRow('location_city', '集落規模', p.settlement);
     }
 
-    // 上位拠点
+    // 上位集落
     if (p.parentHexId != null) {
         const superiorHex = allHexesData[p.parentHexId];
         if (superiorHex) {
@@ -224,10 +224,29 @@ export function getInfoText(d) {
     basicInfoHtml += createRow('agriculture', '農　地', Math.round(p.cultivatedArea || 0).toLocaleString(), ' ha');
     basicInfoHtml += createRow('home', '居住適性', (p.habitability || 0).toFixed(1));
 
+    if (p.roadUsage > 0) {
+        basicInfoHtml += createRow('local_shipping', '月間輸送', `${Math.round(p.roadUsage).toLocaleString()}t`);
+        if (p.roadLoss > 0) {
+            basicInfoHtml += createRow('warning', '輸送損失', `${Math.round(p.roadLoss).toLocaleString()}t`, '', 'color:#ff6b6b;');
+        }
+
+        // 荷馬車・船の換算表示
+        if (p.isWater) {
+            // 海上: 大型船換算 (1隻=100トンと仮定)
+            const ships = (p.roadUsage / 100).toFixed(1);
+            basicInfoHtml += createRow('sailing', '船舶換算', `${ships}隻`);
+        } else {
+            // 陸上: 荷馬車換算 (1台=1トン)
+            const wagons = Math.round(p.roadUsage);
+            basicInfoHtml += createRow('groups', '荷馬車換算', `${wagons}台`);
+        }
+    }
+
     const basicCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">info</span>基本情報</div><div class="card-content">${basicInfoHtml}</div></div>`;
 
     // --- 2. 環境カード ---
     let envInfoHtml = '';
+
     // 土地利用
     let landUseText = p.isWater ? p.vegetation : (p.terrainType || p.vegetation);
     if (!p.isWater && p.isAlluvial) landUseText += ' (河川)';
@@ -389,13 +408,13 @@ function createTemperatureLegend() {
     const gradientColors = d3.range(0, 1.01, 0.1).map(t => scale.interpolator()(t));
 
     return `
-        <h4>気温凡例</h4>
-        <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
-        <div class="legend-gradient-labels">
-            <span>${scale.domain()[0]}℃</span>
-            <span>${scale.domain()[1]}℃</span>
-        </div>
-    `;
+    <h4>気温凡例</h4>
+    <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
+    <div class="legend-gradient-labels">
+        <span>${scale.domain()[0]}℃</span>
+        <span>${scale.domain()[1]}℃</span>
+    </div>
+`;
 }
 
 /**
@@ -413,11 +432,11 @@ function createPrecipitationLegend() {
         const upperBound = domain[i];
         const label = i === 0 ? `～ ${upperBound} mm` : `${lowerBound} - ${upperBound} mm`;
         itemsHtml += `
-            <div class="legend-item">
-                <div class="legend-color-box" style="background-color: ${color};"></div>
-                <span>${label}</span>
-            </div>
-        `;
+        <div class="legend-item">
+            <div class="legend-color-box" style="background-color: ${color};"></div>
+            <span>${label}</span>
+        </div>
+    `;
     }
 
     return `<h4>降水量凡例 (mm/年)</h4>${itemsHtml}`;
@@ -430,11 +449,11 @@ function createClimateZoneLegend() {
     let itemsHtml = '';
     for (const [zone, color] of Object.entries(config.CLIMATE_ZONE_COLORS)) {
         itemsHtml += `
-            <div class="legend-item">
-                <div class="legend-color-box" style="background-color: ${color};"></div>
-                <span>${zone}</span>
-            </div>
-        `;
+        <div class="legend-item">
+            <div class="legend-color-box" style="background-color: ${color};"></div>
+            <span>${zone}</span>
+        </div>
+    `;
     }
     return `<h4>気候帯凡例</h4>${itemsHtml}`;
 }
@@ -449,13 +468,13 @@ function createPopulationLegend() {
     const gradientColors = d3.range(0, 1.01, 0.1).map(interpolator);
 
     return `
-        <h4>人口分布凡例</h4>
-        <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
-        <div class="legend-gradient-labels">
-            <span>${scale.domain()[0].toLocaleString()}人</span>
-            <span>${scale.domain()[1].toLocaleString()}人</span>
-        </div>
-    `;
+    <h4>人口分布凡例</h4>
+    <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
+    <div class="legend-gradient-labels">
+        <span>${scale.domain()[0].toLocaleString()}人</span>
+        <span>${scale.domain()[1].toLocaleString()}人</span>
+    </div>
+`;
 }
 
 /**
@@ -476,11 +495,11 @@ function createMonsterLegend() {
     for (const [rank, color] of Object.entries(config.MONSTER_COLORS)) {
         const description = rankDescriptions[rank] || '';
         itemsHtml += `
-            <div class="legend-item">
-                <div class="legend-color-box" style="background-color: ${color};"></div>
-                <span>${rank}ランク: ${description}</span>
-            </div>
-        `;
+        <div class="legend-item">
+            <div class="legend-color-box" style="background-color: ${color};"></div>
+            <span>${rank}ランク: ${description}</span>
+        </div>
+    `;
     }
     return `<h4>魔物分布凡例</h4>${itemsHtml}`;
 }

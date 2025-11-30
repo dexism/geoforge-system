@@ -6,7 +6,7 @@ import * as d3 from 'd3';
 import * as config from './config.js';
 import { generatePhysicalMap, generateClimateAndVegetation } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
-import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic } from './economySimulator.js';
+import { simulateEconomy, calculateTerritoryAggregates } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex } from './utils.js';
@@ -303,7 +303,6 @@ async function runStep4_Nations() {
     worldData.allHexes = await determineTerritories(worldData.allHexes, addLogMessage);
     worldData.allHexes = await simulateEconomy(worldData.allHexes, addLogMessage);
     worldData.allHexes = await calculateTerritoryAggregates(worldData.allHexes, addLogMessage);
-    worldData.allHexes = await calculateRoadTraffic(worldData.allHexes, worldData.roadPaths, addLogMessage);
 
     await addLogMessage("道路網、国境、経済情報を再描画しています...");
     await redrawRoadsAndNations(worldData.allHexes, worldData.roadPaths);
@@ -326,7 +325,7 @@ async function runStep5_Save() {
                 mode: 'no-cors',
                 cache: 'no-cache',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(compressWorldData()),
+                body: JSON.stringify(worldData),
                 redirect: 'follow'
             });
             await addLogMessage('保存リクエストを送信しました。');
@@ -393,8 +392,6 @@ const KEY_MAP = {
 
     // 道路
     roadLevel: 'rl',
-    roadUsage: 'ru',
-    roadLoss: 'rlo',
 
     // landUse (フラット化)
     'landUse.river': 'lu_r',
@@ -439,10 +436,13 @@ const INDUSTRY_LEVEL_MAP = {
 const REVERSE_INDUSTRY_LEVEL_MAP = Object.fromEntries(Object.entries(INDUSTRY_LEVEL_MAP).map(([k, v]) => [v, k]));
 
 /**
- * 世界データを圧縮形式に変換する共通関数
+ * データを圧縮してダウンロードする
  */
-function compressWorldData() {
-    if (!worldData || !worldData.allHexes) return null;
+function downloadWorldData() {
+    if (!worldData || !worldData.allHexes) {
+        alert("ダウンロードするデータがありません。");
+        return;
+    }
 
     // 1. 辞書の作成
     const dictionaries = {};
@@ -482,13 +482,7 @@ function compressWorldData() {
     const compressedHexes = worldData.allHexes.map(h => {
         const cHex = {};
 
-        // Hexクラスのゲッターは列挙されないため、KEY_MAPとlandUseからキーリストを作成して反復
-        const keysToProcess = Object.keys(KEY_MAP).filter(k => !k.includes('.'));
-        keysToProcess.push('landUse');
-
-        keysToProcess.forEach(key => {
-            const value = h.properties[key];
-
+        Object.entries(h.properties).forEach(([key, value]) => {
             // landUseの特別処理 (フラット化)
             if (key === 'landUse' && value) {
                 if (value.river > 0) cHex[KEY_MAP['landUse.river']] = parseFloat(value.river.toFixed(2));
@@ -561,7 +555,7 @@ function compressWorldData() {
         ])
     })) : [];
 
-    return {
+    const finalData = {
         version: 2,
         cols: config.COLS,
         rows: config.ROWS,
@@ -569,17 +563,6 @@ function compressWorldData() {
         hexes: compressedHexes,
         roads: compressedRoads
     };
-}
-
-/**
- * データを圧縮してダウンロードする
- */
-function downloadWorldData() {
-    const finalData = compressWorldData();
-    if (!finalData) {
-        alert("ダウンロードするデータがありません。");
-        return;
-    }
 
     const dataStr = JSON.stringify(finalData);
     const blob = new Blob([dataStr], { type: "application/json" });
@@ -808,17 +791,6 @@ async function processLoadedData(loadedData) {
             if (props.flow === undefined) props.flow = 0;
             if (props.population === undefined) props.population = 0;
             if (props.settlement === undefined) props.settlement = null;
-            if (props.roadUsage === undefined) props.roadUsage = 0;
-            if (props.roadLoss === undefined) props.roadLoss = 0;
-            if (!props.landUse) {
-                props.landUse = {
-                    river: 0,
-                    desert: 0,
-                    barren: 0,
-                    grassland: 0,
-                    forest: 0
-                };
-            }
             if (!props.industry) props.industry = { primary: {}, secondary: {}, tertiary: {}, quaternary: {}, quinary: {} };
             if (!props.production) props.production = {};
             if (!props.surplus) props.surplus = {};

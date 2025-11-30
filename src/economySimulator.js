@@ -4,6 +4,7 @@
 
 import * as config from './config.js';
 import { getIndex } from './utils.js';
+import { findAStarPath } from './roadGenerator.js';
 
 /**
  * 経済シミュレーションのメイン関数 (main.js から呼び出される)
@@ -13,7 +14,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 
     allHexes.forEach(h => {
         const p = h.properties;
-        
+
         // 初期化: 産業データ構造を作成
         p.industry = {
             primary: {},    // 第一次
@@ -22,9 +23,9 @@ export async function simulateEconomy(allHexes, addLogMessage) {
             quaternary: {}, // 第四次
             quinary: {}     // 第五次
         };
-        
+
         // 互換性維持のため p.production も残すが、内容は primary の内容と同期させる
-        p.production = {}; 
+        p.production = {};
         p.surplus = {};
         p.shortage = {};
         p.cultivatedArea = 0;
@@ -44,7 +45,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         // =================================================
         // この階層に割り当てられる労働力
         const labor1 = totalLabor * alloc[1];
-        
+
         // 労働力の配分（適性に応じて傾斜配分）
         const pot = {
             agri: p.agriPotential,
@@ -55,7 +56,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
             livestock: p.livestockPotential
         };
         const totalPot1 = Object.values(pot).reduce((a, b) => a + b, 0) || 1;
-        
+
         // 各分野の労働者数
         const workers = {
             agri: labor1 * (pot.agri / totalPot1),
@@ -101,15 +102,15 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 
             // 労働力に基づき耕作可能面積を計算 (インフラ係数含む)
             // settlementInfo.infra_coeff は集落ランクによる効率補正
-            const laborBasedArea = workers.agri * avgHaPerPerson * settlementInfo.infra_coeff; 
-            
+            const laborBasedArea = workers.agri * avgHaPerPerson * settlementInfo.infra_coeff;
+
             // 土地の限界面積 (最大でヘックスの面積 * (基本値 + 適性補正))
             const maxArea = config.HEX_AREA_HA * (0.03 + p.agriPotential * 0.5);
             p.cultivatedArea = Math.min(laborBasedArea, maxArea);
 
             // 収穫量の計算 (ランダムな豊作・不作係数あり)
             const yieldFluctuation = 0.7 + Math.random() * 0.6;
-            
+
             Object.keys(mainCrops).forEach(cropName => {
                 const cropData = config.CROP_DATA[cropName];
                 if (cropData) {
@@ -118,34 +119,34 @@ export async function simulateEconomy(allHexes, addLogMessage) {
                     prod1[cropName] = (prod1[cropName] || 0) + cropYield;
                 }
             });
-            
+
             // 果樹園: 農業適性が高く温暖な土地で、農業労働力の一部が果樹栽培を行う
             if (p.agriPotential > 0.6 && p.temperature > 10) {
                 // 農業労働者の10%が従事すると仮定し、適性に基づいて算出
-                prod1['果物'] = (workers.agri * 0.1) * (p.agriPotential * 0.5); 
+                prod1['果物'] = (workers.agri * 0.1) * (p.agriPotential * 0.5);
             }
 
             // 薬草 (魔法産業の基礎 - 新規追加要素だが既存ロジックと競合しない形で配置)
             if (p.manaValue > 0.3) {
-                prod1['薬草'] = workers.agri * 0.05 * p.manaValue * 10; 
+                prod1['薬草'] = workers.agri * 0.05 * p.manaValue * 10;
             }
         }
 
         // ---------------------------------------------------------
         // 【その他 第一次産業】
         // ---------------------------------------------------------
-        
+
         // 漁業
         if (workers.fish > 0.1) {
             const laborYield = workers.fish * C.YIELD_PER_WORKER.FISHING * p.fishingPotential;
             // 資源限界チェック (面積ベース)
-            const resourceLimit = config.HEX_AREA_HA * C.MAX_YIELD_PER_HA.FISHING; 
+            const resourceLimit = config.HEX_AREA_HA * C.MAX_YIELD_PER_HA.FISHING;
             prod1['魚介類'] = Math.min(laborYield, resourceLimit);
         }
 
         // 林業
         if (workers.forest > 0.1) {
-             prod1['木材'] = workers.forest * C.YIELD_PER_WORKER.FORESTRY * p.forestPotential;
+            prod1['木材'] = workers.forest * C.YIELD_PER_WORKER.FORESTRY * p.forestPotential;
         }
 
         // 鉱業
@@ -162,7 +163,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
             prod1['牧畜肉'] = workers.pastoral * C.YIELD_PER_WORKER.PASTORAL_MEAT * p.pastoralPotential;
             prod1['乳製品'] = workers.pastoral * C.YIELD_PER_WORKER.PASTORAL_DAIRY * p.pastoralPotential;
             prod1['革'] = workers.pastoral * 0.05 * p.pastoralPotential;
-            
+
             // 魔獣素材 (高ランク魔物地域での牧畜)
             if (p.monsterRank && ['A', 'B'].includes(p.monsterRank)) {
                 prod1['魔獣素材'] = workers.pastoral * 0.01;
@@ -195,14 +196,14 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         // 鍛冶・工房: 鉱石と木材を利用
         const resourceMetal = (prod1['鉱石'] || 0) + (prod1['木材'] || 0) * 0.5;
         if (resourceMetal > 0 && labor2 > 0) {
-            const capacity = labor2 * 0.4; 
+            const capacity = labor2 * 0.4;
             // 効率係数を用いて産出
             const output = Math.min(capacity * 2, resourceMetal * I.SMITHING_EFFICIENCY);
             prod2['武具・道具'] = output;
         }
 
         // 織物・染色: 革や植物繊維(農業の副産物と仮定)を利用
-        const resourceFiber = (prod1['革'] || 0) + (prod1['雑穀'] || 0) * 0.2; 
+        const resourceFiber = (prod1['革'] || 0) + (prod1['雑穀'] || 0) * 0.2;
         if (resourceFiber > 0 && labor2 > 0) {
             const capacity = labor2 * 0.3;
             prod2['織物'] = Math.min(capacity * 2, resourceFiber * 1.5);
@@ -216,7 +217,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
             const efficiency = I.MAGIC_CRAFT_EFFICIENCY * (1 + p.manaValue);
             prod2['ポーション・魔導具'] = Math.min(capacity, resourceMagic * efficiency);
         }
-        
+
         // 酒造 (既存ロジックの統合)
         // 食料需給計算前に余剰予測を行うのは難しいため、ここでは生産能力としての酒造を計算
         // 実際の生産量は、後段の余剰計算後に補正される可能性があるが、ここでは産業規模として算出
@@ -246,16 +247,16 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 
         // 交通: 船や馬車の運用
         if (p.roadLevel >= 4 || (p.isWater || h.neighbors.some(n => allHexes[n].properties.isWater))) {
-             prod3['運送・交通'] = labor3 * 0.1 * roadBonus;
+            prod3['運送・交通'] = labor3 * 0.1 * roadBonus;
         }
 
         // =================================================
         // 4. 第四次産業 (知識・情報)
         // =================================================
         const labor4 = totalLabor * alloc[4];
-        if (labor4 > 10) { 
+        if (labor4 > 10) {
             const prod4 = p.industry.quaternary;
-            
+
             // 魔法研究: マナ濃度に強く依存
             prod4['魔法研究'] = labor4 * 0.4 * p.manaValue * I.MAGIC_RESEARCH_BASE;
 
@@ -302,7 +303,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         // =================================================
         const totalDemand = p.population * settlementInfo.consumption_t_per_person;
         let totalSupply = 0;
-        
+
         // 第一次産業で生産された食料品目を集計
         const foodItems = ['小麦', '大麦', '雑穀', '稲', '魚介類', '狩猟肉', '牧畜肉', '家畜肉', '乳製品', '果物'];
         foodItems.forEach(item => {
@@ -310,7 +311,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
                 totalSupply += prod1[item];
             }
         });
-        
+
         const balance = totalSupply - totalDemand;
 
         // 余剰・不足の計算
@@ -322,7 +323,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 }
 
 /**
- * 主要都市の庇護下にある領土の各種データを集計する関数 (集計ロジック修正版)
+ * 主要都市の庇護下にある領土の各種データを集計する関数
  * @param {Array<object>} allHexes - 経済シミュレーション後の全ヘックスデータ
  * @param {Function} addLogMessage - ログ出力用の関数
  * @returns {Array<object>} - 集計データが追加された全ヘックスデータ
@@ -332,7 +333,7 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
 
     // 集計対象を「町」以上の、実質的な拠点となりうる集落に限定する
     const territoryHubs = allHexes.filter(h => ['首都', '都市', '領都', '街', '町'].includes(h.properties.settlement));
-    
+
     // --- STEP 1: 親から子の関係をマップ化する ---
     const childrenMap = new Map();
     allHexes.forEach(h => {
@@ -352,14 +353,14 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
 
         // 集計の初期値を「ハブ自身の値」からスタートさせる
         const aggregatedData = {
-            population: hubProps.population,              // 修正: 0ではなくハブ自身の人口からスタート
-            cultivatedArea: hubProps.cultivatedArea,      // 修正: 0ではなくハブ自身の農地からスタート
-            production: { ...hubProps.production }, 
+            population: hubProps.population,
+            cultivatedArea: hubProps.cultivatedArea,
+            production: { ...hubProps.production },
             settlementCounts: { '都市': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
         };
 
         // --- 幅優先探索で、ハブ配下のすべての子孫（孫、ひ孫...）をたどる ---
-        const queue = [...(childrenMap.get(hubIndex) || [])]; 
+        const queue = [...(childrenMap.get(hubIndex) || [])];
         const visited = new Set(queue.map(h => getIndex(h.col, h.row)));
         let head = 0;
 
@@ -381,7 +382,7 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
                 }
             }
 
-            // 3. この子孫がさらに子（ハブから見て孫）を持っているなら、キューに追加
+            // 3. さらにその下の子孫をキューに追加
             const descendantIndex = getIndex(descendant.col, descendant.row);
             const grandchildren = childrenMap.get(descendantIndex) || [];
             grandchildren.forEach(child => {
@@ -396,6 +397,229 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
         // --- STEP 3: 計算した集計データをハブのプロパティに格納 ---
         hubProps.territoryData = aggregatedData;
     });
+
+    return allHexes;
+}
+
+/**
+ * 街道の交通量（月間輸送量：トン）を計算する
+ * ユーザー定義: 街などのキャラバンは荷馬車20台を1個小隊として、数個小隊が年に6回ほど行動する。
+ * 1回のキャラバン = 20台 * 3小隊 = 60台 と仮定。
+ * 年6回 = 2ヶ月に1回 => 月あたり0.5回。
+ * 月間荷馬車数 = 30台。
+ * 荷馬車1台 = 積載量1トン (御者1人+護衛1人=2人) とする。
+ * 
+ * 追加要件:
+ * 1. 街道上の魔物や治安に応じた輸送成功量と損失を加味する。
+ * 2. 海上輸送も考慮する（船種により大量輸送可能）。
+ * 
+ * @param {Array<object>} allHexes - 全ヘックスデータ
+ * @param {Array<object>} roadPaths - 生成された全道路パス
+ * @param {Function} addLogMessage - ログ出力用
+ */
+export async function calculateRoadTraffic(allHexes, roadPaths, addLogMessage) {
+    if (!roadPaths) return allHexes;
+    await addLogMessage("街道および海路の交通量（月間輸送量・損失）を計算しています...");
+
+    // 1. 初期化: 全ヘックスの交通量と損失をリセット
+    allHexes.forEach(h => {
+        h.properties.roadUsage = 0;
+        h.properties.roadLoss = 0;
+    });
+
+    // -------------------------------------------------------
+    // A. 陸路の交通量計算
+    // -------------------------------------------------------
+    roadPaths.forEach(route => {
+        if (!route.path || route.path.length < 2) return;
+
+        const startNode = route.path[0];
+        const endNode = route.path[route.path.length - 1];
+        const startHex = allHexes[getIndex(startNode.x, startNode.y)];
+        const endHex = allHexes[getIndex(endNode.x, endNode.y)];
+
+        if (!startHex || !endHex) return;
+
+        const pStart = startHex.properties;
+        const pEnd = endHex.properties;
+
+        let trafficTons = 0;
+
+        // --- 1. 定期交易キャラバン ---
+        const getBaseTradeVolume = (settlement) => {
+            if (settlement === '首都') return 300;
+            if (settlement === '都市') return 150;
+            if (settlement === '領都') return 100;
+            if (settlement === '街') return 30;
+            if (settlement === '町') return 5;
+            return 1;
+        };
+
+        // 相乗平均 (幾何平均) を採用することで、片方が小さければ交通量も抑制されるようにする
+        const volA = getBaseTradeVolume(pStart.settlement);
+        const volB = getBaseTradeVolume(pEnd.settlement);
+        const baseVolume = Math.sqrt(volA * volB);
+
+        const distanceDecay = Math.max(0.1, 1.0 - (route.travelDays || 0) / 60);
+        trafficTons += baseVolume * distanceDecay;
+
+        // --- 2. 物流需給 (食料・資源の輸送) ---
+        const startFoodSurplus = parseFloat(pStart.surplus['食料'] || 0);
+        const endFoodSurplus = parseFloat(pEnd.surplus['食料'] || 0);
+        const startFoodShortage = parseFloat(pStart.shortage['食料'] || 0);
+        const endFoodShortage = parseFloat(pEnd.shortage['食料'] || 0);
+
+        let foodTraffic = 0;
+        if (startFoodSurplus > 0 && endFoodShortage > 0) foodTraffic += Math.min(startFoodSurplus, endFoodShortage);
+        if (endFoodSurplus > 0 && startFoodShortage > 0) foodTraffic += Math.min(endFoodSurplus, startFoodShortage);
+
+        // 食料需給は「年間」なので、月間に換算して加算 (1/12)
+        trafficTons += foodTraffic / 12;
+
+        const getResourceExport = (p) => {
+            let out = 0;
+            if (p.production) {
+                out += (p.production['鉱石'] || 0);
+                out += (p.production['木材'] || 0);
+                out += (p.production['鉄'] || 0);
+                out += (p.production['魚介類'] || 0);
+            }
+            return out * 0.5;
+        };
+        if (['首都', '都市', '領都'].includes(pStart.settlement)) trafficTons += getResourceExport(pEnd);
+        if (['首都', '都市', '領都'].includes(pEnd.settlement)) trafficTons += getResourceExport(pStart);
+
+        // --- 3. 租税輸送 ---
+        let taxTraffic = 0;
+        if (pStart.parentHexId === getIndex(endNode.x, endNode.y)) {
+            let totalProd = 0;
+            for (let k in pStart.production) totalProd += pStart.production[k];
+            taxTraffic += totalProd * 0.1;
+        }
+        if (pEnd.parentHexId === getIndex(startNode.x, startNode.y)) {
+            let totalProd = 0;
+            for (let k in pEnd.production) totalProd += pEnd.production[k];
+            taxTraffic += totalProd * 0.1;
+        }
+        trafficTons += taxTraffic;
+
+        // --- 4. 損失計算 (魔物ランク・治安) ---
+        // パス上の最大危険度または累積危険度を計算
+        let totalRisk = 0;
+        route.path.forEach(node => {
+            const h = allHexes[getIndex(node.x, node.y)];
+            const rank = h.properties.monsterRank;
+            // ランクごとの損失率 (通過するごとに発生)
+            // S: 5%, A: 2%, B: 1%, C: 0.5%, D: 0.1%
+            if (rank === 'S') totalRisk += 0.05;
+            else if (rank === 'A') totalRisk += 0.02;
+            else if (rank === 'B') totalRisk += 0.01;
+            else if (rank === 'C') totalRisk += 0.005;
+            else if (rank === 'D') totalRisk += 0.001;
+        });
+
+        // 損失率は最大50%で頭打ち
+        const lossRate = Math.min(0.5, totalRisk);
+        const lossAmount = trafficTons * lossRate;
+
+        // パス上の全ヘックスに加算
+        route.path.forEach(node => {
+            const index = getIndex(node.x, node.y);
+            const hex = allHexes[index];
+            if (hex) {
+                hex.properties.roadUsage += trafficTons;
+                hex.properties.roadLoss += lossAmount;
+            }
+        });
+    });
+
+    // -------------------------------------------------------
+    // B. 海上輸送の計算 (主要港湾間)
+    // -------------------------------------------------------
+    // 港湾候補: 「首都」「都市」「領都」で、かつ水域に隣接している場所
+    const ports = allHexes.filter(h => {
+        const p = h.properties;
+        if (!['首都', '都市', '領都'].includes(p.settlement)) return false;
+        // 隣接ヘックスに水域があるか
+        const neighbors = h.neighbors; // neighborsはインデックスの配列と仮定
+        return neighbors.some(nIdx => allHexes[nIdx].properties.isWater);
+    });
+
+    if (ports.length >= 2) {
+        await addLogMessage(`主要港湾数: ${ports.length} - 海路を計算中...`);
+
+        // 港湾間の組み合わせ (総当たりは重いので、距離制限またはハブ＆スポークにする)
+        // ここではシンプルに、各港から「最も近い他の3つの港」に対してルートを引く
+        for (let i = 0; i < ports.length; i++) {
+            const startHex = ports[i];
+
+            // 距離でソートして近い順に3つ選ぶ
+            const targets = ports.filter((_, idx) => idx !== i)
+                .map(p => ({ hex: p, dist: Math.abs(p.col - startHex.col) + Math.abs(p.row - startHex.row) }))
+                .sort((a, b) => a.dist - b.dist)
+                .slice(0, 3);
+
+            for (const target of targets) {
+                const endHex = target.hex;
+
+                // A* で海路探索
+                // コスト関数: 水域なら1、それ以外はInfinity (ただし発着点は陸地なので例外処理必要)
+                const seaPath = findAStarPath({
+                    start: { x: startHex.col, y: startHex.row },
+                    goal: { x: endHex.col, y: endHex.row },
+                    getNeighbors: (node) => {
+                        const idx = getIndex(node.x, node.y);
+                        const h = allHexes[idx];
+                        if (!h) return [];
+                        return h.neighbors.map(nIdx => {
+                            const nHex = allHexes[nIdx];
+                            return { x: nHex.col, y: nHex.row };
+                        });
+                    },
+                    heuristic: (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y),
+                    cost: (a, b) => {
+                        const idxB = getIndex(b.x, b.y);
+                        const hexB = allHexes[idxB];
+                        // 目的地なら陸地でもOK
+                        if (b.x === endHex.col && b.y === endHex.row) return 1;
+                        // 水域ならコスト1
+                        if (hexB.properties.isWater) return 1;
+                        // それ以外（陸地）は通行不可
+                        return Infinity;
+                    }
+                });
+
+                if (seaPath && seaPath.path.length > 0) {
+                    // 海上交通量: 陸路の10倍 (大型船)
+                    // 基礎量は都市ランク依存
+                    const pStart = startHex.properties;
+                    const pEnd = endHex.properties;
+
+                    const getSeaBaseVolume = (settlement) => {
+                        if (settlement === '首都') return 3000;
+                        if (settlement === '都市') return 1500;
+                        if (settlement === '領都') return 1000;
+                        return 100;
+                    };
+                    const seaVolume = (getSeaBaseVolume(pStart.settlement) + getSeaBaseVolume(pEnd.settlement)) / 2;
+
+                    // 海路には魔物による損失も発生する (クラーケンなど)
+                    // 海域の魔物ランクは未設定の場合が多いが、便宜上ランダムまたは固定リスク
+                    // ここでは一律 1% の海難事故リスクとする
+                    const seaLoss = seaVolume * 0.01 * seaPath.path.length; // 距離比例
+
+                    seaPath.path.forEach(node => {
+                        const index = getIndex(node.x, node.y);
+                        const hex = allHexes[index];
+                        if (hex && hex.properties.isWater) {
+                            hex.properties.roadUsage += seaVolume;
+                            hex.properties.roadLoss += seaLoss;
+                        }
+                    });
+                }
+            }
+        }
+    }
 
     return allHexes;
 }

@@ -5,42 +5,6 @@ import * as config from './config.js';
 import { getIndex, getDistance, formatProgressBar } from './utils.js';
 import * as d3 from 'd3';
 
-// Union-Find 
-class UnionFind {
-    constructor(elements) { this.parent = new Map(); elements.forEach(el => this.parent.set(el, el)); }
-    find(i) { if (this.parent.get(i) === i) { return i; } const root = this.find(this.parent.get(i)); this.parent.set(i, root); return root; }
-    union(i, j) { const rootI = this.find(i); const rootJ = this.find(j); if (rootI !== rootJ) { this.parent.set(rootJ, rootI); return true; } return false; }
-}
-
-// findAStarPath 
-function findAStarPath({ start, goal, getNeighbors, heuristic, cost }) {
-    const toVisit = [{ node: start, f: 0, g: 0, path: [start] }];
-    const visited = new Map();
-    visited.set(`${start.x}-${start.y}`, 0);
-
-    while (toVisit.length > 0) {
-        toVisit.sort((a, b) => a.f - b.f);
-        const current = toVisit.shift();
-
-        if (current.node.x === goal.x && current.node.y === goal.y) {
-            return { path: current.path, cost: current.g };
-        }
-
-        getNeighbors(current.node).forEach(n => {
-            const gScore = current.g + cost(current.node, n);
-            const visitedNeighborCost = visited.get(`${n.x}-${n.y}`);
-            
-            if (visitedNeighborCost === undefined || gScore < visitedNeighborCost) {
-                visited.set(`${n.x}-${n.y}`, gScore);
-                const hScore = heuristic(n, goal);
-                const fScore = gScore + hScore;
-                toVisit.push({ node: n, f: fScore, g: gScore, path: [...current.path, n] });
-            }
-        });
-    }
-    return null;
-}
-
 // createCostFunction 
 const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
     const hexA = allHexes[getIndex(nodeA.x, nodeA.y)];
@@ -75,14 +39,14 @@ const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
     if (pB.ridgeFlow > 0) {
         cost += pB.ridgeFlow * config.RIDGE_CROSSING_COST_MULTIPLIER;
     }
-    
+
     // 高低差コスト
     const elevationDiff = Math.abs(hexA.properties.elevation - hexB.properties.elevation);
     cost += elevationDiff * 0.05;
 
     // 他国領土コスト
     if (ownerNationId && pB.nationId !== 0 && pB.nationId !== ownerNationId) {
-        cost *= 50; 
+        cost *= 50;
     }
 
     return cost;
@@ -100,23 +64,23 @@ export async function generateMainTradeRoutes(capitals, allHexes, addLogMessage)
 
     await addLogMessage("国家間の主要幹線（通商路）を探索しています...");
     const mainRoutes = [];
-    
+
     // この時点では既存の道路はないため、国籍ボーナスなしのコスト関数を使用
     const costFunc = createCostFunction(allHexes, null);
     const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
-    const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
+    const heuristic = (nodeA, nodeB) => getDistance({ col: nodeA.x, row: nodeA.y }, { col: nodeB.x, row: nodeB.y });
 
     // 全ての首都のペアに対してA*探索を実行
     for (let i = 0; i < capitals.length; i++) {
         for (let j = i + 1; j < capitals.length; j++) {
             const capital1 = capitals[i];
             const capital2 = capitals[j];
-            const result = findAStarPath({ 
-                start: { x: capital1.col, y: capital1.row }, 
-                goal: { x: capital2.col, y: capital2.row }, 
-                getNeighbors, 
-                heuristic, 
-                cost: costFunc 
+            const result = findAStarPath({
+                start: { x: capital1.col, y: capital1.row },
+                goal: { x: capital2.col, y: capital2.row },
+                getNeighbors,
+                heuristic,
+                cost: costFunc
             });
 
             if (result) {
@@ -129,7 +93,7 @@ export async function generateMainTradeRoutes(capitals, allHexes, addLogMessage)
             }
         }
     }
-    
+
     return mainRoutes;
 }
 
@@ -143,10 +107,10 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
 
     const progressId = 'trade-route-progress';
     await addLogMessage(`交易路の経路探索...`, progressId);
-    
+
     const costFunc = createCostFunction(allHexes, null);
     const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
-    const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
+    const heuristic = (nodeA, nodeB) => getDistance({ col: nodeA.x, row: nodeA.y }, { col: nodeB.x, row: nodeB.y });
 
     const allEdges = [];
     const totalPairs = (cities.length * (cities.length - 1)) / 2;
@@ -159,23 +123,23 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
             const city1 = cities[i];
             const city2 = cities[j];
             const result = findAStarPath({ start: { x: city1.col, y: city1.row }, goal: { x: city2.col, y: city2.row }, getNeighbors, heuristic, cost: costFunc });
-            
+
             if (result) {
                 // 手順2-1: 移動日数を計算して記憶
                 const travelDays = calculateTravelDays(result.path, 5, allHexes);
-                allEdges.push({ 
-                    from: city1, to: city2, 
+                allEdges.push({
+                    from: city1, to: city2,
                     fromId: getIndex(city1.col, city1.row), toId: getIndex(city2.col, city2.row),
-                    path: result.path, cost: result.cost, travelDays: travelDays 
+                    path: result.path, cost: result.cost, travelDays: travelDays
                 });
             }
             processedPairs++;
             const percent = Math.floor((processedPairs / totalPairs) * 100);
             if (percent > lastReportedPercent) {
-                 // 汎用関数を呼び出す
-                 const message = formatProgressBar({ current: processedPairs, total: totalPairs, prefix: "交易路:" });
-                 await addLogMessage(message, progressId);
-                 lastReportedPercent = percent;
+                // 汎用関数を呼び出す
+                const message = formatProgressBar({ current: processedPairs, total: totalPairs, prefix: "交易路:" });
+                await addLogMessage(message, progressId);
+                lastReportedPercent = percent;
             }
         }
     }
@@ -184,10 +148,10 @@ export async function generateTradeRoutes(cities, allHexes, addLogMessage) {
 
     // MSTは使わず、全ての経路を返す
     allEdges.forEach(edge => {
-        const pathNodes = edge.path.map(p => ({x: p.x, y: p.y}));
+        const pathNodes = edge.path.map(p => ({ x: p.x, y: p.y }));
         roadPaths.push({ path: pathNodes, level: 5, nationId: 0 }); // この時点では国籍は未定
     });
-    
+
     return { roadPaths, routeData: allEdges };
 }
 
@@ -204,7 +168,7 @@ function getSharedEdgeMidpoint(hex1, hex2, hexWidth, hexHeight) {
 
     const points1 = getPoints(hex1);
     const points2 = getPoints(hex2);
-    
+
     const commonPoints = [];
     for (const p1 of points1) {
         for (const p2 of points2) {
@@ -228,11 +192,11 @@ function getSharedEdgeMidpoint(hex1, hex2, hexWidth, hexHeight) {
  */
 function calculateRoadDistance(path, roadLevel, allHexes) {
     if (path.length < 2) return 0;
-        
+
     // ヘックスの描画サイズを計算
     const hexWidth = 2 * config.r;
     const hexHeight = Math.sqrt(3) * config.r;
-    
+
     // ピクセル距離をkmに変換するスケール
     // ヘックスの高さ(config.r * sqrt(3))がHEX_SIZE_KMに対応する
     const pixelToKm = config.HEX_SIZE_KM / hexHeight;
@@ -278,7 +242,7 @@ function calculateRoadDistance(path, roadLevel, allHexes) {
 
         // このセグメントのピクセル単位での直線距離を計算
         const segmentPixelDistance = Math.hypot(endPoint[0] - startPoint[0], endPoint[1] - startPoint[1]);
-        
+
         // 地形乗数を取得
         const p = currentHex.properties;
         let multiplier = 1.0;
@@ -328,8 +292,8 @@ function calculateTravelDays(path, roadLevel, allHexes) {
         let terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS[p.terrainType] || 1.0;
         // 平地の場合、植生による係数をさらに考慮
         if (p.terrainType === '平地') {
-             if (p.vegetation === '密林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.密林;
-             else if (p.vegetation === '森林' || p.vegetation === '針葉樹林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.森林;
+            if (p.vegetation === '密林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.密林;
+            else if (p.vegetation === '森林' || p.vegetation === '針葉樹林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.森林;
         }
 
         if (p.hasSnow) {
@@ -378,7 +342,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
 
     const costFunc = createCostFunction(allHexes, null);
     const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
-    const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
+    const heuristic = (nodeA, nodeB) => getDistance({ col: nodeA.x, row: nodeA.y }, { col: nodeB.x, row: nodeB.y });
 
     const unprocessedSettlements = [];
 
@@ -386,15 +350,15 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
     for (const lower of lowerSettlements) {
         let bestRoute = null;
         let minTravelDays = Infinity;
-        
+
         if (upperSettlements && upperSettlements.length > 0) {
             const sortedUppers = [...upperSettlements].sort((a, b) => getDistance(lower, a) - getDistance(lower, b));
             const targetCandidates = sortedUppers.slice(0, 7);
             for (const upper of targetCandidates) {
-                const result = findAStarPath({ 
-                    start: { x: lower.col, y: lower.row }, 
-                    goal: { x: upper.col, y: upper.row }, 
-                    getNeighbors, heuristic, cost: costFunc 
+                const result = findAStarPath({
+                    start: { x: lower.col, y: lower.row },
+                    goal: { x: upper.col, y: upper.row },
+                    getNeighbors, heuristic, cost: costFunc
                 });
                 if (result) {
                     const travelDays = calculateTravelDays(result.path, roadLevel, allHexes);
@@ -421,7 +385,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                     if (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel) { hex.properties.roadLevel = roadLevel; }
                 }
             });
-            roadPaths.push({ path: bestRoute.path.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: newNationId });
+            roadPaths.push({ path: bestRoute.path.map(p => ({ x: p.x, y: p.y })), level: roadLevel, nationId: newNationId });
         } else {
             unprocessedSettlements.push(lower);
         }
@@ -459,7 +423,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                     }
                 }
             }
-            
+
             if (!nearestCivilization) continue;
 
             let hub = allHexes[nearestCivilization.properties.territoryId];
@@ -473,7 +437,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                     finalHub = allHexes[p_nearest.parentHexId];
                 }
             }
-            
+
             const finalNationId = finalHub.properties.nationId;
             const finalHubIndex = getIndex(finalHub.col, finalHub.row);
 
@@ -495,7 +459,7 @@ export async function generateFeederRoads(lowerSettlements, upperSettlements, al
                             if (!hex.properties.roadLevel || hex.properties.roadLevel < roadLevel) hex.properties.roadLevel = roadLevel;
                         }
                     });
-                    roadPaths.push({ path: newPath.map(p => ({x: p.x, y: p.y})), level: roadLevel, nationId: finalNationId });
+                    roadPaths.push({ path: newPath.map(p => ({ x: p.x, y: p.y })), level: roadLevel, nationId: finalNationId });
                 }
             }
         }
@@ -516,7 +480,7 @@ function createSeaCostFunction(allHexes, ship) {
     const queue = allHexes.filter(h => h.properties.isWater && h.neighbors.some(n => !allHexes[n].properties.isWater));
     queue.forEach(h => distanceToCoast.set(getIndex(h.col, h.row), 1));
     let head = 0;
-    while(head < queue.length) {
+    while (head < queue.length) {
         const current = queue[head++];
         const dist = distanceToCoast.get(getIndex(current.col, current.row));
         current.neighbors.forEach(nIdx => {
@@ -526,7 +490,7 @@ function createSeaCostFunction(allHexes, ship) {
             }
         });
     }
-    
+
     return (nodeA, nodeB) => {
         const hexB = allHexes[getIndex(nodeB.x, nodeB.y)];
         const pB = hexB.properties;
@@ -538,7 +502,7 @@ function createSeaCostFunction(allHexes, ship) {
         if (Math.abs(pB.elevation) < config.PORT_PARAMS.MIN_NAVIGATION_DEPTH[Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key] === ship)]) {
             return Infinity;
         }
-        
+
         // 船の離岸可能距離を超えている場合は通行不可
         const dist = distanceToCoast.get(getIndex(nodeB.x, nodeB.y)) || 0;
         if (dist * config.HEX_SIZE_KM > ship.max_offshore_km) {
@@ -573,7 +537,7 @@ export async function generateSeaRoutes(allHexes, addLogMessage) {
     // ================================================================
     const seaGroupId = new Map(); // 各ヘックスがどの海のグループに属するかを記録
     let currentGroupId = 0;
-    
+
     // 湖沼（標高 > 0）を除いた、標高0以下の「海」ヘックスのみを対象とする
     const oceanHexes = allHexes.filter(h => h.properties.isWater && h.properties.elevation <= 0);
 
@@ -605,7 +569,7 @@ export async function generateSeaRoutes(allHexes, addLogMessage) {
     const portCities = allHexes.filter(h => {
         const p = h.properties;
         return ['町', '街', '領都', '都市', '首都'].includes(p.settlement) &&
-               h.neighbors.some(nIdx => seaGroupId.has(nIdx)); // グループ分けされた海に隣接している港のみ
+            h.neighbors.some(nIdx => seaGroupId.has(nIdx)); // グループ分けされた海に隣接している港のみ
     });
 
     if (portCities.length < 2) {
@@ -624,10 +588,10 @@ export async function generateSeaRoutes(allHexes, addLogMessage) {
     // ================================================================
     const progressId = 'sea-route-progress';
     await addLogMessage(`航路の経路探索...`, progressId);
-    
+
     const seaRoutes = [];
     const getNeighbors = node => allHexes[getIndex(node.x, node.y)].neighbors.map(i => allHexes[i]).map(h => ({ x: h.col, y: h.row }));
-    const heuristic = (nodeA, nodeB) => getDistance({col: nodeA.x, row: nodeA.y}, {col: nodeB.x, row: nodeB.y});
+    const heuristic = (nodeA, nodeB) => getDistance({ col: nodeA.x, row: nodeA.y }, { col: nodeB.x, row: nodeB.y });
 
     // プログレスバー用に、探索するペアの総数を事前に計算
     let totalPairs = 0;
@@ -663,15 +627,15 @@ export async function generateSeaRoutes(allHexes, addLogMessage) {
                 const startShipKeys = config.SHIP_AVAILABILITY[startPort.properties.settlement] || [];
                 const endShipKeys = config.SHIP_AVAILABILITY[endPort.properties.settlement] || [];
                 const availableShipKeys = startShipKeys.filter(key => endShipKeys.includes(key));
-                if (availableShipKeys.length === 0) { 
-                    processedPairs++; 
-                    continue; 
+                if (availableShipKeys.length === 0) {
+                    processedPairs++;
+                    continue;
                 }
                 const bestShipKey = availableShipKeys[availableShipKeys.length - 1];
                 const bestShip = config.SHIP_TYPES[bestShipKey];
 
                 const seaCostFunc = createSeaCostFunction(allHexes, bestShip);
-                
+
                 // --- A*探索の実行 ---
                 const result = findAStarPath({
                     start: { x: startSeaHex.col, y: startSeaHex.row },
@@ -697,7 +661,7 @@ export async function generateSeaRoutes(allHexes, addLogMessage) {
                         }
                     }
                 }
-                
+
                 // --- プログレスバー更新 ---
                 processedPairs++;
                 if (totalPairs > 0) {
@@ -711,9 +675,47 @@ export async function generateSeaRoutes(allHexes, addLogMessage) {
             }
         }
     }
-    
+
     await addLogMessage(`航路を${seaRoutes.length}本発見しました。`);
     return seaRoutes;
 }
 
 export { calculateRoadDistance, calculateTravelDays };
+
+/**
+ * A* Pathfinding Algorithm
+ * @param {object} params
+ * @param {object} params.start - Start node {x, y}
+ * @param {object} params.goal - Goal node {x, y}
+ * @param {function} params.getNeighbors - Function(node) returning array of neighbor nodes
+ * @param {function} params.heuristic - Function(nodeA, nodeB) returning estimated cost
+ * @param {function} params.cost - Function(nodeA, nodeB) returning actual cost
+ * @returns {object|null} - { path: Array<node>, cost: number } or null if not found
+ */
+export function findAStarPath({ start, goal, getNeighbors, heuristic, cost }) {
+    const toVisit = [{ node: start, f: 0, g: 0, path: [start] }];
+    const visited = new Map();
+    visited.set(`${start.x}-${start.y}`, 0);
+
+    while (toVisit.length > 0) {
+        toVisit.sort((a, b) => a.f - b.f);
+        const current = toVisit.shift();
+
+        if (current.node.x === goal.x && current.node.y === goal.y) {
+            return { path: current.path, cost: current.g };
+        }
+
+        getNeighbors(current.node).forEach(n => {
+            const gScore = current.g + cost(current.node, n);
+            const visitedNeighborCost = visited.get(`${n.x}-${n.y}`);
+
+            if (visitedNeighborCost === undefined || gScore < visitedNeighborCost) {
+                visited.set(`${n.x}-${n.y}`, gScore);
+                const hScore = heuristic(n, goal);
+                const fScore = gScore + hScore;
+                toVisit.push({ node: n, f: fScore, g: gScore, path: [...current.path, n] });
+            }
+        });
+    }
+    return null;
+}

@@ -124,7 +124,10 @@ export class WorldMap {
 
         // Road Usage (Float32)
         this.roadUsage = new Float32Array(this.size);
-        this.roadLoss = new Float32Array(this.size);
+
+        // Cache for Hex objects (Flyweights)
+        // REMOVED: We don't cache all of them to save memory.
+        // this._hexObjects = new Array(this.size);
 
         return new Proxy(this, {
             get: (target, prop) => {
@@ -138,6 +141,11 @@ export class WorldMap {
             }
         });
     }
+
+    // Initialize hex objects (lazy or upfront)
+    // Upfront is safer for existing code compatibility
+    // Initialize hex objects (lazy or upfront)
+    // REMOVED: initHexObjects
 
     getHex(index) {
         // Always create a new flyweight object
@@ -384,7 +392,6 @@ class Hex {
 
     get roadUsage() { return this._map.roadUsage[this._index]; }
     set roadUsage(v) { this._map.roadUsage[this._index] = v; }
-
-    get roadLoss() { return this._map.roadLoss[this._index]; }
-    set roadLoss(v) { this._map.roadLoss[this._index] = v; }
 }
+
+
