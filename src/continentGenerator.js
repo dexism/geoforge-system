@@ -557,13 +557,15 @@ function calculateFinalProperties(allHexes) {
 
                 // 4. 合計値を使って各ポテンシャルを正規化し、割合（%）を算出
                 if (totalPotential > 0) {
-                    properties.landUse.river = potentials.river / totalPotential;
-                    properties.landUse.desert = potentials.desert / totalPotential;
-                    properties.landUse.barren = potentials.barren / totalPotential;
-                    properties.landUse.grassland = potentials.grassland / totalPotential;
-                    properties.landUse.forest = potentials.forest / totalPotential;
+                    properties.landUse = {
+                        river: potentials.river / totalPotential,
+                        desert: potentials.desert / totalPotential,
+                        barren: potentials.barren / totalPotential,
+                        grassland: potentials.grassland / totalPotential,
+                        forest: potentials.forest / totalPotential
+                    };
                 } else {
-                    properties.landUse.barren = 1.0;
+                    properties.landUse = { river: 0, desert: 0, barren: 1.0, grassland: 0, forest: 0 };
                 }
 
                 // 5. 従来の vegetation プロパティ（最も優勢な地目）を決定
