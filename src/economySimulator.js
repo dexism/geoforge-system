@@ -673,8 +673,8 @@ export function calculateDemographics(hex) {
     const totalSecurity = Math.floor(totalPop * securityRate);
 
     demo['正規兵'] = Math.floor(totalSecurity * 0.6);
-    demo['衛兵'] = Math.floor(totalSecurity * 0.3);
-    demo['傭兵'] = Math.max(0, totalSecurity - demo['正規兵'] - demo['衛兵']);
+    demo['衛兵・自警団'] = Math.floor(totalSecurity * 0.3);
+    demo['傭兵'] = Math.max(0, totalSecurity - demo['正規兵'] - demo['衛兵・自警団']);
 
     // C. 産業別労働者
     // 第一次
@@ -705,14 +705,14 @@ export function calculateDemographics(hex) {
     const labor3 = laborPop * alloc[3];
     demo['商人'] = Math.floor(labor3 * 0.4);
     demo['宿屋・店員'] = Math.floor(labor3 * 0.3);
-    demo['神官・医師'] = Math.floor(labor3 * 0.1);
+    demo['神官・医師・薬師'] = Math.floor(labor3 * 0.1);
     demo['御者・船員'] = Math.floor(labor3 * 0.2);
 
     // 第四次 (知識)
     const labor4 = laborPop * alloc[4];
     if (labor4 > 0) {
         demo['学者・研究員'] = Math.floor(labor4 * 0.6);
-        demo['魔法使い'] = Math.floor(labor4 * 0.4);
+        demo['錬金術師'] = Math.floor(labor4 * 0.4);
     }
 
     // 第五次 (統治・特殊)
@@ -771,17 +771,17 @@ export function calculateFacilities(hex) {
     }
 
     // 4. 医療・宗教
-    if (demo['神官・医師']) {
-        facilities['教会'] = Math.ceil(demo['神官・医師'] / 5);
-        facilities['診療所'] = Math.ceil(demo['神官・医師'] / 3);
+    if (demo['神官・医師・薬師']) {
+        facilities['教会'] = Math.ceil(demo['神官・医師・薬師'] / 5);
+        facilities['診療所'] = Math.ceil(demo['神官・医師・薬師'] / 3);
     }
 
     // 5. 特殊
-    if (demo['魔法使い']) {
-        facilities['魔法店'] = Math.ceil(demo['魔法使い'] / 10);
+    if (demo['錬金術師']) {
+        facilities['魔道具店'] = Math.ceil(demo['錬金術師'] / 10);
     }
     if (demo['冒険者']) {
-        facilities['冒険者ギルド'] = Math.ceil(demo['冒険者'] / 50);
+        facilities['職能ギルド'] = Math.ceil(demo['冒険者'] / 50);
     }
 
     // 6. 公共
