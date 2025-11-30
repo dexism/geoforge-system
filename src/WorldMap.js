@@ -117,6 +117,8 @@ export class WorldMap {
 
         // Complex Objects (Sparse Arrays)
         this.industry = new Array(this.size).fill(null);
+        this.demographics = new Array(this.size).fill(null);
+        this.facilities = new Array(this.size).fill(null);
         this.production = new Array(this.size).fill(null);
         this.surplus = new Array(this.size).fill(null);
         this.shortage = new Array(this.size).fill(null);
@@ -369,6 +371,12 @@ class Hex {
 
     get industry() { return this._map.industry[this._index]; }
     set industry(v) { this._map.industry[this._index] = v; }
+
+    get demographics() { return this._map.demographics[this._index]; }
+    set demographics(v) { this._map.demographics[this._index] = v; }
+
+    get facilities() { return this._map.facilities[this._index]; }
+    set facilities(v) { this._map.facilities[this._index] = v; }
 
     get production() { return this._map.production[this._index]; }
     set production(v) { this._map.production[this._index] = v; }

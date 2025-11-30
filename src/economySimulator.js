@@ -302,22 +302,26 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         // 食料需給計算 (既存ロジックの維持)
         // =================================================
         const totalDemand = p.population * settlementInfo.consumption_t_per_person;
-        let totalSupply = 0;
+            let totalSupply = 0;
 
-        // 第一次産業で生産された食料品目を集計
-        const foodItems = ['小麦', '大麦', '雑穀', '稲', '魚介類', '狩猟肉', '牧畜肉', '家畜肉', '乳製品', '果物'];
-        foodItems.forEach(item => {
-            if (prod1[item]) {
-                totalSupply += prod1[item];
-            }
+            // 第一次産業で生産された食料品目を集計
+            const foodItems = ['小麦', '大麦', '雑穀', '稲', '魚介類', '狩猟肉', '牧畜肉', '家畜肉', '乳製品', '果物'];
+            foodItems.forEach(item => {
+                if (prod1[item]) {
+                    totalSupply += prod1[item];
+                }
+            });
+
+            const balance = totalSupply - totalDemand;
+
+            // 余剰・不足の計算
+            if (balance > 0) { p.surplus['食料'] = balance.toFixed(1); }
+            else { p.shortage['食料'] = Math.abs(balance).toFixed(1); }
+
+            // 人口構成と施設数の計算
+            p.demographics = calculateDemographics(h);
+            p.facilities = calculateFacilities(h);
         });
-
-        const balance = totalSupply - totalDemand;
-
-        // 余剰・不足の計算
-        if (balance > 0) { p.surplus['食料'] = balance.toFixed(1); }
-        else { p.shortage['食料'] = Math.abs(balance).toFixed(1); }
-    });
 
     return allHexes;
 }
@@ -622,4 +626,174 @@ export async function calculateRoadTraffic(allHexes, roadPaths, addLogMessage) {
     }
 
     return allHexes;
+}
+
+/**
+ * 人口構成（デモグラフィクス）を計算する
+ * @param {object} hex - ヘックスオブジェクト
+ * @returns {object} - 職業別人口
+ */
+export function calculateDemographics(hex) {
+    const p = hex.properties;
+    const totalPop = p.population;
+    if (totalPop <= 0) return {};
+
+    const demo = {};
+
+    const settlementType = p.settlement || '散居';
+    // configから取得、なければデフォルト値
+    const alloc = config.INDUSTRY_ALLOCATION[settlementType] || { 1: 0.8, 2: 0.1, 3: 0.1, 4: 0, 5: 0 };
+    const settlementInfo = config.SETTLEMENT_PARAMS[settlementType] || { labor_rate: 0.6 };
+
+    const laborPop = totalPop * settlementInfo.labor_rate;
+
+    // --- 階級別割り当て ---
+
+    // A. 上流階級 (貴族・騎士)
+    let nobleRate = 0;
+    if (settlementType === '首都') nobleRate = 0.02;
+    else if (settlementType === '都市') nobleRate = 0.01;
+    else if (settlementType === '領都') nobleRate = 0.015;
+    else if (settlementType === '街') nobleRate = 0.005;
+
+    demo['貴族'] = Math.floor(totalPop * nobleRate);
+
+    // 騎士: 貴族の警護や軍事指導。貴族の数に比例 + 拠点防衛
+    demo['騎士'] = Math.floor(demo['貴族'] * 2 + (p.fortress ? 50 : 0));
+
+    // B. 軍事・治安 (軍人・衛兵・傭兵)
+    let securityRate = 0.01; // 基本治安維持
+    if (p.monsterRank === 'S') securityRate += 0.05;
+    else if (p.monsterRank === 'A') securityRate += 0.03;
+    else if (p.monsterRank === 'B') securityRate += 0.02;
+
+    // 首都・都市は軍隊が駐屯
+    if (['首都', '都市', '領都'].includes(settlementType)) securityRate += 0.02;
+
+    const totalSecurity = Math.floor(totalPop * securityRate);
+
+    demo['正規兵'] = Math.floor(totalSecurity * 0.6);
+    demo['衛兵'] = Math.floor(totalSecurity * 0.3);
+    demo['傭兵'] = Math.max(0, totalSecurity - demo['正規兵'] - demo['衛兵']);
+
+    // C. 産業別労働者
+    // 第一次
+    const labor1 = laborPop * alloc[1];
+    const pot = {
+        agri: p.agriPotential || 0,
+        forest: p.forestPotential || 0,
+        mining: p.miningPotential || 0,
+        fish: p.fishingPotential || 0,
+        pastoral: p.pastoralPotential || 0,
+        livestock: p.livestockPotential || 0
+    };
+    const totalPot1 = Object.values(pot).reduce((a, b) => a + b, 0) || 1;
+
+    demo['農夫'] = Math.floor(labor1 * (pot.agri / totalPot1));
+    demo['木こり'] = Math.floor(labor1 * (pot.forest / totalPot1));
+    demo['鉱夫'] = Math.floor(labor1 * (pot.mining / totalPot1));
+    demo['漁師'] = Math.floor(labor1 * (pot.fish / totalPot1));
+    demo['牧童'] = Math.floor(labor1 * ((pot.pastoral + pot.livestock) / totalPot1));
+
+    // 第二次 (職人)
+    const labor2 = laborPop * alloc[2];
+    demo['鍛冶屋'] = Math.floor(labor2 * 0.2);
+    demo['職人'] = Math.floor(labor2 * 0.5);
+    demo['建築夫'] = Math.floor(labor2 * 0.3);
+
+    // 第三次 (商人・サービス)
+    const labor3 = laborPop * alloc[3];
+    demo['商人'] = Math.floor(labor3 * 0.4);
+    demo['宿屋・店員'] = Math.floor(labor3 * 0.3);
+    demo['神官・医師'] = Math.floor(labor3 * 0.1);
+    demo['御者・船員'] = Math.floor(labor3 * 0.2);
+
+    // 第四次 (知識)
+    const labor4 = laborPop * alloc[4];
+    if (labor4 > 0) {
+        demo['学者・研究員'] = Math.floor(labor4 * 0.6);
+        demo['魔法使い'] = Math.floor(labor4 * 0.4);
+    }
+
+    // 第五次 (統治・特殊)
+    const labor5 = laborPop * alloc[5];
+    if (labor5 > 0) {
+        demo['官僚・役人'] = Math.floor(labor5 * 0.7);
+        demo['芸術家'] = Math.floor(labor5 * 0.3);
+    }
+
+    // D. その他 (冒険者、スラム)
+    let adventurerRate = 0;
+    if (['首都', '都市', '領都', '街'].includes(settlementType)) {
+        adventurerRate = 0.005;
+        if (p.monsterRank && ['S', 'A', 'B'].includes(p.monsterRank)) adventurerRate *= 3;
+    }
+    demo['冒険者'] = Math.floor(totalPop * adventurerRate);
+
+    let slumRate = 0;
+    if (settlementType === '首都') slumRate = 0.15;
+    else if (settlementType === '都市') slumRate = 0.10;
+    else if (settlementType === '領都') slumRate = 0.05;
+
+    demo['スラム街住人'] = Math.floor(totalPop * slumRate);
+
+    return demo;
+}
+
+/**
+ * 施設数を計算する
+ * @param {object} hex - ヘックスオブジェクト
+ * @returns {object} - 施設数
+ */
+export function calculateFacilities(hex) {
+    const p = hex.properties;
+    const demo = p.demographics || {};
+    const facilities = {};
+
+    // 1. 商業施設
+    if (demo['商人']) {
+        facilities['商会・商店'] = Math.ceil(demo['商人'] / 5);
+        facilities['行商・露店'] = Math.ceil(demo['商人'] / 2);
+    }
+
+    // 2. 飲食・宿泊
+    if (demo['宿屋・店員']) {
+        facilities['宿屋'] = Math.ceil(demo['宿屋・店員'] / 10);
+        facilities['酒場・食堂'] = Math.ceil(demo['宿屋・店員'] / 5);
+    }
+
+    // 3. 工房
+    if (demo['鍛冶屋']) {
+        facilities['鍛冶屋'] = Math.ceil(demo['鍛冶屋'] / 3);
+    }
+    if (demo['職人']) {
+        facilities['工房'] = Math.ceil(demo['職人'] / 4);
+    }
+
+    // 4. 医療・宗教
+    if (demo['神官・医師']) {
+        facilities['教会'] = Math.ceil(demo['神官・医師'] / 5);
+        facilities['診療所'] = Math.ceil(demo['神官・医師'] / 3);
+    }
+
+    // 5. 特殊
+    if (demo['魔法使い']) {
+        facilities['魔法店'] = Math.ceil(demo['魔法使い'] / 10);
+    }
+    if (demo['冒険者']) {
+        facilities['冒険者ギルド'] = Math.ceil(demo['冒険者'] / 50);
+    }
+
+    // 6. 公共
+    if (['首都', '都市', '領都'].includes(p.settlement)) {
+        facilities['役所'] = 1;
+        if (p.settlement === '首都') facilities['王城'] = 1;
+        if (p.settlement === '領都') facilities['領主館'] = 1;
+    }
+
+    if (p.settlement === '村') {
+        facilities['集会場'] = 1;
+    }
+
+    return facilities;
 }

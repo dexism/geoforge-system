@@ -3,21 +3,21 @@
 // ================================================================
 
 import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
-import * as config from './config.js';
-import { getIndex } from './utils.js';
+import * as config from '../src/config.js';
+import { getIndex } from '../src/utils.js';
 import * as d3 from 'd3'; // d3-scaleをスケール計算に利用
 
 // ノイズ変数を let で宣言のみ行う
-let continentNoise, 
-    mountainNoise, 
-    hillNoise, 
-    detailNoise, 
-    manaNoise, 
-    climateNoise, 
-    forestPotentialNoise, 
-    grasslandPotentialNoise, 
-    miningPotentialNoise, 
-    precipitationNoise, 
+let continentNoise,
+    mountainNoise,
+    hillNoise,
+    detailNoise,
+    manaNoise,
+    climateNoise,
+    forestPotentialNoise,
+    grasslandPotentialNoise,
+    miningPotentialNoise,
+    precipitationNoise,
     seasonalityNoise,
     beachNoise,
     shelfNoise;
@@ -28,13 +28,13 @@ let continentNoise,
 function initializeNoiseFunctions() {
     // Math.random をシード"関数"として使用する
     const seedFn = Math.random;
-    
+
     continentNoise = createNoise2D(seedFn);
     mountainNoise = createNoise2D(seedFn);
     hillNoise = createNoise2D(seedFn);
     detailNoise = createNoise2D(seedFn);
     manaNoise = createNoise2D(seedFn);
-    climateNoise = createNoise2D(seedFn); 
+    climateNoise = createNoise2D(seedFn);
     forestPotentialNoise = createNoise2D(seedFn);
     grasslandPotentialNoise = createNoise2D(seedFn);
     miningPotentialNoise = createNoise2D(seedFn);
@@ -98,7 +98,7 @@ function generateBaseProperties(col, row) {
 
         let details = (detailNoise(nx * config.DETAIL_NOISE_FREQ, ny * config.DETAIL_NOISE_FREQ) + 1) / 2;
         details *= config.DETAIL_HEIGHT_MAX;
-        
+
         // 3. 計算した標高に、海岸線抑制係数を乗算する
         const finalElevation = (mountain + hills + details) * coastalDampeningFactor;
         elevation = config.elevationScale(finalElevation);
@@ -129,17 +129,17 @@ function generateBaseProperties(col, row) {
     // 乾燥地帯は大きなムラ、湿潤地帯は細かい変化の影響を強く受けるように合成
     const noiseEffect = d3.scaleLinear().domain([250, 800]).range([300, 600]).clamp(true)(basePrecip);
     basePrecip += (largeNoise * 0.6 + detailNoiseValue * 0.4 - 0.5) * noiseEffect;
-    
+
     // c. 南東部の多雨バイアス: 南東角に近いほど降水量をブースト
     const distFromSE = Math.hypot(1.0 - nx, 1.0 - ny);
     const southeastBias = Math.max(0, 1.0 - distFromSE / 0.5); // 南東角から半径50%の範囲
     basePrecip += Math.pow(southeastBias, 2) * config.PRECIPITATION_PARAMS.SOUTHEAST_BIAS_INTENSITY;
-    
+
     // d. 海上では陸地よりも降水量を少し多めにする補正
     if (isWater) {
         basePrecip *= 1.2;
     }
-    
+
     properties.precipitation_mm = Math.max(0, basePrecip);
     // 古い0-1スケールの降水量は廃止。互換性のため最大3000mmで正規化した値を残す。
     properties.precipitation = Math.min(1.0, properties.precipitation_mm / 3000);
@@ -171,7 +171,7 @@ function generateBaseProperties(col, row) {
             properties.climateZone = "熱帯雨林気候";
         }
     }
-    
+
     // --- 4. その他のプロパティ ---
     properties.hasSnow = false;
     if (!isWater && properties.temperature <= config.SNOW_THRESHOLDS.TEMPERATURE && properties.precipitation > config.SNOW_THRESHOLDS.PRECIPITATION_LIGHT) {
@@ -187,7 +187,7 @@ function generateBaseProperties(col, row) {
     else properties.manaRank = 'D';
     const resourceSymbols = ['石', '鉄', '金', '晶'];
     properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
-    
+
     return properties;
 }
 
@@ -234,13 +234,13 @@ function applyGeographicPrecipitationEffects(allHexes) {
 function generateContinentalShelves(allHexes) {
     // --- STEP 1: 海岸からの距離を計算 (BFSアルゴリズム) ---
     const distanceFromLand = new Map();
-    const queue = allHexes.filter(h => 
+    const queue = allHexes.filter(h =>
         h.properties.isWater && h.neighbors.some(n => !allHexes[n].properties.isWater)
     );
     queue.forEach(h => distanceFromLand.set(getIndex(h.col, h.row), 1));
-    
+
     let head = 0;
-    while(head < queue.length) {
+    while (head < queue.length) {
         const current = queue[head++];
         const dist = distanceFromLand.get(getIndex(current.col, current.row));
         current.neighbors.forEach(nIdx => {
@@ -331,7 +331,7 @@ function generateWaterSystems(allHexes) {
                 }
             } else {
                 if (!allHexes[currentIndex].properties.isWater) {
-                     allHexes[currentIndex].properties.isWater = true;
+                    allHexes[currentIndex].properties.isWater = true;
                 }
                 break;
             }
@@ -345,10 +345,10 @@ function generateWaterSystems(allHexes) {
  */
 function adjustLandElevation(allHexes) {
     const MIN_ELEVATION_TARGET = 10;
-    
+
     // 補正対象となるヘックス（陸地 または 湖沼）をリストアップ
     const targetHexes = allHexes.filter(h => !h.properties.isWater || (h.properties.isWater && h.properties.elevation > 0));
-    
+
     if (targetHexes.length === 0) {
         return; // 補正対象がなければ何もしない
     }
@@ -382,7 +382,7 @@ function generateRidgeLines(allHexes) {
         const p = h.properties;
         // 水域と、川が流れているヘックス（水系）は除外
         if (p.isWater || p.flow > 0) return false;
-        
+
         const elevation = p.elevation;
         // 標高1000m～6000mの陸地ヘックスを候補とする
         const isCandidate = elevation >= 1000 && elevation < 6000;
@@ -401,11 +401,11 @@ function generateRidgeLines(allHexes) {
         for (let i = 0; i < 50; i++) { // 無限ループ防止
             // 現在地のridgeFlowをインクリメント
             currentHex.properties.ridgeFlow += 1;
-            
+
             // 隣接ヘックスの中で、最も標高が高いものを探す
             let highestNeighbor = null;
             let maxElevation = currentHex.properties.elevation;
-            
+
             currentHex.neighbors.map(i => allHexes[i]).forEach(n => {
                 // 自分より標高が高い隣人のみ対象
                 if (n.properties.elevation > maxElevation) {
@@ -452,7 +452,7 @@ function calculateFinalProperties(allHexes) {
 
         // 沖積平野フラグ
         properties.isAlluvial = properties.flow > 0 && !isWater && elevation < 4000;
-        
+
         // 1. 新しいプロパティ landUse を初期化
         properties.landUse = { river: 0, desert: 0, barren: 0, grassland: 0, forest: 0 };
 
@@ -469,7 +469,7 @@ function calculateFinalProperties(allHexes) {
             }
         } else {
             // --- ステップ1: 特別な植生（湿地・密林）を優先的に判定 ---
-            
+
             // 湿地生成ロジック
             let isWetland = false;
             const wp = config.PRECIPITATION_PARAMS.WETLAND_PARAMS;
@@ -487,7 +487,7 @@ function calculateFinalProperties(allHexes) {
                 // 条件2: 水源の豊富さを評価
                 let waterScore = 0;
                 // 河川からのボーナス
-                waterScore += Math.min(1.0, properties.flow * 0.5); 
+                waterScore += Math.min(1.0, properties.flow * 0.5);
                 // 降水量からのボーナス
                 if (properties.precipitation_mm > wp.PRECIP_THRESHOLD_MM) {
                     waterScore += Math.min(1.0, (properties.precipitation_mm - wp.PRECIP_THRESHOLD_MM) / 1000);
@@ -510,7 +510,7 @@ function calculateFinalProperties(allHexes) {
             // b. 密林の判定 (湿地でない場合のみ)
             // 条件: 気温が高く、かつ降水量が非常に多い
             else if (
-                temperature >= config.PRECIPITATION_PARAMS.JUNGLE_MIN_TEMP && 
+                temperature >= config.PRECIPITATION_PARAMS.JUNGLE_MIN_TEMP &&
                 properties.precipitation_mm >= config.PRECIPITATION_PARAMS.JUNGLE_MIN_PRECIP_MM
             ) {
                 properties.vegetation = '密林';
@@ -573,7 +573,7 @@ function calculateFinalProperties(allHexes) {
                 // --- STEP 0: 標高や特殊条件による優先判定 ---
                 if (elevation >= 3500) {
                     dominantVeg = '高山'; // 標高3500m以上は問答無用で高山植生
-                } 
+                }
 
                 // --- STEP 1: 気温帯ごとの植生判定（ホイッタカーのバイオーム図を簡易的に模倣） ---
                 else {
@@ -585,14 +585,14 @@ function calculateFinalProperties(allHexes) {
                         } else {
                             dominantVeg = '針葉樹林'; // タイガ
                         }
-                    } 
+                    }
                     // 【b. 温帯 (Temperate Zone)】
                     else if (temperature < config.TEMP_ZONES.TEMPERATE) {
                         if (precip_mm < 200) {
                             dominantVeg = '砂漠';
                         } else if (precip_mm < 350) {
                             // 砂漠の周辺に荒れ地を生成
-                            dominantVeg = '荒れ地'; 
+                            dominantVeg = '荒れ地';
                         } else if (precip_mm < config.VEGETATION_PARAMS.TEMPERATE_FOREST_MIN_PRECIP_MM) { // config.js の値を参照
                             dominantVeg = '草原'; // ステップ気候に相当
                         } else {
@@ -607,14 +607,14 @@ function calculateFinalProperties(allHexes) {
                             dominantVeg = '荒れ地';
                         } else if (precip_mm < config.VEGETATION_PARAMS.TROPICAL_FOREST_MIN_PRECIP_MM) { // config.js の値を参照
                             // 熱帯の草原（サバンナ）
-                            dominantVeg = '草原'; 
+                            dominantVeg = '草原';
                         } else {
                             // 既に '密林' 判定済みだが、ここに来る場合は通常の熱帯林とする
-                            dominantVeg = '森林'; 
+                            dominantVeg = '森林';
                         }
                     }
                 }
-                
+
                 properties.vegetation = dominantVeg;
             }
         }
@@ -643,7 +643,7 @@ function calculateFinalProperties(allHexes) {
             .domain([500, 2500])      // 標高500mからペナルティ開始、2500mで最大化
             .range([1.0, 0.1])      // 標高500mで効率100%、2500mで効率10%
             .clamp(true)(properties.elevation);
-        
+
         // これまで計算した適性に、標高係数を乗算する
         agriPotential *= elevationFactor;
 
@@ -660,10 +660,10 @@ function calculateFinalProperties(allHexes) {
             // 2. 値のピークを鋭くする (powの指数を大きくするほど鋭くなる)
             const peakFactor = 8;
             let noisePotential = Math.pow(1.0 - Math.abs(rawMiningValue), peakFactor);
-            
+
             // 3. 標高が高いほど鉱脈が存在しやすい、という補正を加える
             const elevationFactor = 1 + (Math.min(4000, elevation) / 4000) * 0.5;
-            
+
             // 4. 最終的なポテンシャルを計算
             miningPotential = noisePotential * elevationFactor;
         }
@@ -763,10 +763,10 @@ export async function generatePhysicalMap(addLogMessage) {
     for (let row = 0; row < config.ROWS; row++) {
         for (let col = 0; col < config.COLS; col++) {
             // この時点では植生などは仮計算
-            allHexes.push({ 
-                col, 
-                row, 
-                properties: generateBaseProperties(col, row) 
+            allHexes.push({
+                col,
+                row,
+                properties: generateBaseProperties(col, row)
             });
         }
     }
@@ -780,7 +780,7 @@ export async function generatePhysicalMap(addLogMessage) {
             { col: col - 1, row: isOddCol ? row + 1 : row - 1 },
             { col: col + 1, row: isOddCol ? row + 1 : row - 1 },
         ].filter(n => n.col >= 0 && n.col < config.COLS && n.row >= 0 && n.row < config.ROWS)
-         .map(n => getIndex(n.col, n.row));
+            .map(n => getIndex(n.col, n.row));
     });
 
     // パス1.2：大陸棚の形成

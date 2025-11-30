@@ -1,7 +1,7 @@
 
-import * as config from './config.js';
-import { WorldMap } from './WorldMap.js';
-import { generatePhysicalMap, generateClimateAndVegetation } from './continentGenerator.js';
+import * as config from '../src/config.js';
+import { WorldMap } from '../src/WorldMap.js';
+import { generatePhysicalMap, generateClimateAndVegetation } from '../src/continentGenerator.js';
 
 async function debugForest() {
     console.log("Starting Forest Debug...");

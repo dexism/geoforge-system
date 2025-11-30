@@ -3,10 +3,10 @@
 // ================================================================
 
 import { createNoise2D } from 'simplex-noise';
-import * as config from './config.js';
-import { getIndex } from './utils.js';
+import * as config from '../src/config.js';
+import { getIndex } from '../src/utils.js';
 import * as d3 from 'd3'; // d3-scaleをスケール計算に利用
-import { WorldMap } from './WorldMap.js';
+import { WorldMap } from '../src/WorldMap.js';
 
 // ノイズ変数を let で宣言のみ行う
 let continentNoise,

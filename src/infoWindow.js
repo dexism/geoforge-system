@@ -353,6 +353,40 @@ export function getInfoText(d) {
         }
     }
 
+    // --- 3.5. 社会構成カード (人口構成・施設) ---
+    let societyCard = '';
+    if (p.demographics || p.facilities) {
+        let societyHtml = '';
+
+        // 人口構成
+        if (p.demographics && Object.keys(p.demographics).length > 0) {
+            societyHtml += `<div class="sector-block"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">groups</span>人口構成</h6>`;
+            societyHtml += `<div class="industry-group" style="display:flex; flex-wrap:wrap; gap:4px;">`;
+            for (const [role, count] of Object.entries(p.demographics)) {
+                if (count > 0) {
+                    societyHtml += `<div class="industry-item" style="width:48%;"><span class="label">${role}</span><span class="value">${count.toLocaleString()}人</span></div>`;
+                }
+            }
+            societyHtml += `</div></div>`;
+        }
+
+        // 施設
+        if (p.facilities && Object.keys(p.facilities).length > 0) {
+            societyHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">storefront</span>施設</h6>`;
+            societyHtml += `<div class="industry-group" style="display:flex; flex-wrap:wrap; gap:4px;">`;
+            for (const [facility, count] of Object.entries(p.facilities)) {
+                if (count > 0) {
+                    societyHtml += `<div class="industry-item" style="width:48%;"><span class="label">${facility}</span><span class="value">${count.toLocaleString()}軒</span></div>`;
+                }
+            }
+            societyHtml += `</div></div>`;
+        }
+
+        if (societyHtml) {
+            societyCard = `<div class="info-card wide-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">deck</span>社会構成</div><div class="card-content">${societyHtml}</div></div>`;
+        }
+    }
+
     // --- 4. 領地集計カード (拠点の場合) ---
     let territoryCard = '';
     if (p.territoryData && ['首都', '都市', '領都', '街', '町'].includes(p.settlement)) {
@@ -393,7 +427,7 @@ export function getInfoText(d) {
     }
 
     // --- 結合してコンテナに入れる ---
-    return `<div class="info-scroll-container">${basicCard}${envCard}${resourceCard}${industryCard}${territoryCard}</div>`;
+    return `<div class="info-scroll-container">${basicCard}${envCard}${resourceCard}${industryCard}${societyCard}${territoryCard}</div>`;
 }
 
 // ================================================================
