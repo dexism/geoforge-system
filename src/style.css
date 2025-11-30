@@ -596,7 +596,7 @@ button.active:hover {
     white-space: pre-wrap;
     line-height: 1.6;
     box-sizing: border-box;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 /* ================================================================

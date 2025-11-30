@@ -1,0 +1,519 @@
+// ================================================================
+// GeoForge System - Info Window & Legend Module
+// ================================================================
+// このモジュールは、情報ウィンドウのコンテンツ生成、
+// サイドバーの統計情報更新、および凡例の生成を担当します。
+// ================================================================
+
+import * as d3 from 'd3';
+import * as config from './config.js';
+import { getIndex, formatLocation } from './utils.js';
+
+// --- モジュールスコープ変数 ---
+export let childrenMap = new Map();
+let allHexesData = [];
+let legendContainer = null;
+
+/**
+ * 情報ウィンドウモジュールの初期化
+ * @param {HTMLElement} container - 凡例を表示するコンテナ要素
+ */
+export function initInfoWindow(container) {
+    legendContainer = container;
+}
+
+/**
+ * 全ヘックスデータを設定する
+ * @param {Array<object>} data - 全ヘックスデータ
+ */
+export function setAllHexesData(data) {
+    allHexesData = data;
+}
+
+/**
+ * 集落の親子関係マップを更新する関数
+ * @param {Array<object>} hexesData - 全ヘックスのデータ
+ */
+export function updateChildrenMap(hexesData) {
+    allHexesData = hexesData; // データも更新しておく
+    childrenMap.clear(); // 古いデータをクリア
+    hexesData.forEach((h, index) => {
+        const parentId = h.properties.parentHexId;
+        if (parentId !== null) {
+            if (!childrenMap.has(parentId)) {
+                childrenMap.set(parentId, []);
+            }
+            childrenMap.get(parentId).push(index);
+        }
+    });
+}
+
+/**
+ * 指定されたヘックスを起点として、全ての隷下集落を再帰的に集計する関数
+ * @param {number} rootIndex - 起点となるヘックスのインデックス
+ * @returns {object} 集落タイプごとのカウント { '街': 1, '村': 5, ... }
+ */
+export function getAllSubordinateSettlements(rootIndex) {
+    const counts = {};
+    const queue = [rootIndex];
+
+    // 循環参照防止のためのSet
+    const visited = new Set([rootIndex]);
+
+    while (queue.length > 0) {
+        const currentIdx = queue.shift();
+        const children = childrenMap.get(currentIdx) || [];
+
+        children.forEach(childIdx => {
+            if (visited.has(childIdx)) return;
+            visited.add(childIdx);
+
+            const childHex = allHexesData[childIdx];
+            if (childHex && childHex.properties.settlement) {
+                const type = childHex.properties.settlement;
+                counts[type] = (counts[type] || 0) + 1;
+                queue.push(childIdx);
+            }
+        });
+    }
+    return counts;
+}
+
+/**
+ * サイドバーの全体情報パネルを更新する (辺境地帯の集計に対応)
+ * @param {Array<object>} allHexes - 全てのヘックスデータ
+ */
+export function updateOverallInfo(allHexes) {
+    if (!allHexes || allHexes.length === 0) return;
+
+    // --- DOM要素の取得 ---
+    const popEl = document.getElementById('info-total-population');
+    const nationCountEl = document.getElementById('info-nation-count');
+    const settlementSummaryEl = document.getElementById('info-settlement-summary');
+    const nationsDetailsEl = document.getElementById('info-nations-details');
+    if (nationsDetailsEl) nationsDetailsEl.innerHTML = ''; // 事前にクリア
+
+    // --- 集計用データ構造の初期化 ---
+    const globalStats = {
+        population: 0,
+        nations: new Set(),
+        settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
+    };
+    const nationStats = new Map();
+    // 辺境地帯用の集計オブジェクトを追加
+    const frontierStats = {
+        population: 0,
+        settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
+    };
+
+    // --- STEP 1: 全ヘックスを走査し、データ集計 ---
+    allHexes.forEach(h => {
+        const p = h.properties;
+        globalStats.population += p.population || 0;
+        if (p.settlement && globalStats.settlements[p.settlement] !== undefined) {
+            globalStats.settlements[p.settlement]++;
+        }
+
+        if (p.nationId > 0) {
+            globalStats.nations.add(p.nationId);
+            // 国家別の集計 (変更なし)
+            if (!nationStats.has(p.nationId)) {
+                nationStats.set(p.nationId, {
+                    name: config.NATION_NAMES[p.nationId - 1] || `国家${p.nationId}`,
+                    population: 0, capital: null,
+                    settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
+                });
+            }
+            const currentNation = nationStats.get(p.nationId);
+            currentNation.population += p.population || 0;
+            if (p.settlement && currentNation.settlements[p.settlement] !== undefined) {
+                currentNation.settlements[p.settlement]++;
+                if (p.settlement === '首都') { currentNation.capital = h; }
+            }
+        } else {
+            // nationIdが0の場合、辺境として集計
+            frontierStats.population += p.population || 0;
+            if (p.settlement && frontierStats.settlements[p.settlement] !== undefined) {
+                frontierStats.settlements[p.settlement]++;
+            }
+        }
+    });
+
+    // --- STEP 2: グローバル情報の描画 (変更なし) ---
+    if (popEl) popEl.textContent = `${globalStats.population.toLocaleString()}人`;
+    if (nationCountEl) nationCountEl.textContent = `${globalStats.nations.size}カ国`;
+    const summaryText = [`首${globalStats.settlements['首都']}`, `領${globalStats.settlements['領都']}`, `街${globalStats.settlements['街']}`, `町${globalStats.settlements['町']}`, `村${globalStats.settlements['村']}`].join(' ');
+    if (settlementSummaryEl) settlementSummaryEl.textContent = summaryText;
+
+    // --- STEP 3: 国家別情報の描画 ---
+    const sortedNations = Array.from(nationStats.values()).sort((a, b) => a.name.localeCompare(b.name));
+    let nationsHtml = '';
+    sortedNations.forEach(nation => {
+        const capitalCoords = nation.capital ? `(${formatLocation(nation.capital, 'coords')})` : '';
+        const nationSettlementSummary = [`首${nation.settlements['首都']}`, `領${nation.settlements['領都']}`, `街${nation.settlements['街']}`, `町${nation.settlements['町']}`, `村${nation.settlements['村']}`].join(' ');
+        nationsHtml += `
+            <div class="nation-info-block">
+                <h5>${nation.name} <span>${capitalCoords}</span></h5>
+                <div class="info-line"><span>人口</span><span>${nation.population.toLocaleString()}人</span></div>
+                <div class="info-line" style="justify-content: flex-start; font-size: 13px;"><span>${nationSettlementSummary}</span></div>
+            </div>`;
+    });
+
+    // STEP 4: 辺境地帯情報の描画を追加
+    if (frontierStats.population > 0) {
+        const frontierSettlementSummary = [`街${frontierStats.settlements['街']}`, `町${frontierStats.settlements['町']}`, `村${frontierStats.settlements['村']}`].join(' ');
+        nationsHtml += `
+            <div class="nation-info-block">
+                <h5>辺境</h5>
+                <div class="info-line"><span>人口</span><span>${frontierStats.population.toLocaleString()}人</span></div>
+                <div class="info-line" style="justify-content: flex-start; font-size: 13px;"><span>${frontierSettlementSummary}</span></div>
+            </div>`;
+    }
+
+    if (nationsDetailsEl) nationsDetailsEl.innerHTML = nationsHtml;
+}
+
+/**
+ * クリックされたヘックスの詳細情報を整形して返す関数。
+ * 情報ウィンドウの表示内容を生成します。
+ * @param {object} d - ヘックスデータ
+ * @returns {string} - 整形された情報テキスト (HTML)
+ */
+export function getInfoText(d) {
+    const p = d.properties;
+
+    // --- ヘルパー: アイコン付き行の生成 ---
+    const createRow = (icon, label, value, unit = '') => {
+        return `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${icon}</span>${label}</span><span class="value">${value}${unit}</span></div>`;
+    };
+
+    // --- 1. 基本情報カード ---
+    let basicInfoHtml = '';
+
+    // 位置・所属
+    const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺　境';
+    basicInfoHtml += createRow('flag', '所　属', nationName);
+    basicInfoHtml += createRow('place', '座　標', `E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}`);
+
+    // 集落・拠点
+    if (p.settlement) {
+        basicInfoHtml += createRow('location_city', '集落規模', p.settlement);
+    }
+
+    // 上位拠点
+    if (p.parentHexId != null) {
+        const superiorHex = allHexesData[p.parentHexId];
+        if (superiorHex) {
+            basicInfoHtml += createRow('arrow_upward', '上位集落', `${superiorHex.properties.settlement}`);
+            if (p.distanceToParent) {
+                basicInfoHtml += createRow('straighten', '距　離', `${p.distanceToParent.toFixed(1)}`, 'km');
+            }
+            if (p.travelDaysToParent !== undefined) {
+                basicInfoHtml += createRow('directions_bus', '荷馬車', p.travelDaysToParent.toFixed(1), '日');
+            }
+        }
+    } else if (p.territoryId != null && getIndex(d.x, (config.ROWS - 1) - d.y) !== p.territoryId) {
+        const territoryHub = allHexesData[p.territoryId];
+        if (territoryHub) {
+            basicInfoHtml += createRow('stars', '中　枢', `${territoryHub.properties.settlement}`);
+        }
+    }
+
+    // 人口・農地
+    basicInfoHtml += createRow('people', '人　口', (p.population || 0).toLocaleString(), '人');
+    basicInfoHtml += createRow('agriculture', '農　地', Math.round(p.cultivatedArea || 0).toLocaleString(), ' ha');
+    basicInfoHtml += createRow('home', '居住適性', (p.habitability || 0).toFixed(1));
+
+    const basicCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">info</span>基本情報</div><div class="card-content">${basicInfoHtml}</div></div>`;
+
+    // --- 2. 環境カード ---
+    let envInfoHtml = '';
+    // 土地利用
+    let landUseText = p.isWater ? p.vegetation : (p.terrainType || p.vegetation);
+    if (!p.isWater && p.isAlluvial) landUseText += ' (河川)';
+    envInfoHtml += createRow('landscape', '地　形', landUseText);
+
+    // 植生・特性
+    envInfoHtml += createRow('forest', '植　生', p.vegetation || 'なし');
+
+    const features = [];
+    if (p.isAlluvial) features.push('河川');
+    if (p.hasSnow) features.push('積雪');
+    if (p.beachNeighbors && p.beachNeighbors.length > 0) features.push('砂浜');
+    envInfoHtml += createRow('star', '特　性', features.length > 0 ? features.join('・') : 'なし');
+
+    envInfoHtml += createRow('public', '気候帯', p.climateZone);
+    envInfoHtml += createRow('terrain', p.elevation < 0 ? '水　深' : '標　高', Math.abs(Math.round(p.elevation)), 'm');
+    envInfoHtml += createRow('thermostat', '気　温', p.temperature.toFixed(1), '℃');
+    envInfoHtml += createRow('water_drop', '降水量', p.precipitation_mm.toFixed(0), 'mm');
+    envInfoHtml += createRow('auto_awesome', '魔　力', p.manaRank);
+    envInfoHtml += createRow('diamond', '資　源', p.resourceRank);
+    envInfoHtml += createRow('warning', '魔　物', p.monsterRank ? p.monsterRank + 'ランク' : 'なし');
+
+    const envCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">nature</span>環　境</div><div class="card-content">${envInfoHtml}</div></div>`;
+
+    // --- 3. 資源カード ---
+    let resourceInfoHtml = '';
+    // ポテンシャル
+    resourceInfoHtml += createRow('grass', '農　業', (p.agriPotential * 100).toFixed(0), '%');
+    resourceInfoHtml += createRow('forest', '林　業', (p.forestPotential * 100).toFixed(0), '%');
+    resourceInfoHtml += createRow('construction', '鉱　業', (p.miningPotential * 100).toFixed(0), '%');
+    resourceInfoHtml += createRow('phishing', '漁　業', (p.fishingPotential * 100).toFixed(0), '%');
+    resourceInfoHtml += createRow('pets', '牧　畜', (p.pastoralPotential * 100).toFixed(0), '%');
+    resourceInfoHtml += createRow('egg', '畜　産', (p.livestockPotential * 100).toFixed(0), '%');
+    resourceInfoHtml += createRow('pest_control', '狩　猟', (p.huntingPotential * 100).toFixed(0), '%');
+
+    const resourceCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">diamond</span>資源ポテンシャル</div><div class="card-content">${resourceInfoHtml}</div></div>`;
+
+    // --- 3. 産業構造カード (存在する場合) ---
+    let industryCard = '';
+    if (p.population > 0) {
+        if (p.industry) {
+            let industryHtml = '';
+
+            // カテゴリ定義マップ (既存ロジック流用)
+            const categoryMap = {
+                '小　麦': '農　業', '大　麦': '農　業', '雑　穀': '農　業', '稲': '農　業', '果　物': '農　業', '薬　草': '農　業',
+                '木　材': '林　業',
+                '鉱　石': '鉱　業', '魔鉱石': '鉱　業',
+                '魚介類': '漁　業',
+                '牧畜肉': '畜　産', '家畜肉': '畜　産', '乳製品': '畜　産', '革': '畜　産', '魔獣素材': '畜　産',
+                '狩猟肉': '狩　猟',
+                '武具・道具': '鍛　冶', '織　物': '繊　維', 'ポーション・魔導具': '魔　導', '酒(穀物)': '食　品', '酒(果実)': '食　品', '建　築': '建　築'
+            };
+
+            const formatSector = (title, icon, data, unit) => {
+                const entries = Object.entries(data || {}).filter(([, val]) => val > 0.1);
+                if (entries.length === 0) return '';
+
+                let html = `<div class="sector-block"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">${icon}</span>${title}</h6>`;
+
+                // グルーピング
+                const groups = {};
+                const others = [];
+                entries.forEach(([key, val]) => {
+                    const cat = categoryMap[key];
+                    const valStr = `${Math.round(val).toLocaleString()}${unit}`;
+                    if (cat) {
+                        if (!groups[cat]) groups[cat] = [];
+                        groups[cat].push({ key, val: valStr });
+                    } else {
+                        others.push({ key, val: valStr });
+                    }
+                });
+
+                for (const [cat, items] of Object.entries(groups)) {
+                    html += `<div class="industry-group"><div class="group-title">${cat}</div>`;
+                    items.forEach(item => {
+                        html += `<div class="industry-item"><span class="label">${item.key}</span><span class="value">${item.val}</span></div>`;
+                    });
+                    html += `</div>`;
+                }
+                others.forEach(item => {
+                    html += `<div class="industry-item"><span class="label">${item.key}</span><span class="value">${item.val}</span></div>`;
+                });
+
+                html += `</div>`;
+                return html;
+            };
+
+            industryHtml += formatSector('第一次産業', 'agriculture', p.industry.primary, 't');
+            industryHtml += formatSector('第二次産業', 'factory', p.industry.secondary, '');
+            industryHtml += formatSector('第三次産業', 'store', p.industry.tertiary, 'G');
+            industryHtml += formatSector('第四次産業', 'school', p.industry.quaternary, 'pt');
+            industryHtml += formatSector('第五次産業', 'account_balance', p.industry.quinary, 'pt');
+
+            // 食料収支
+            if (p.surplus && p.surplus['食料']) {
+                industryHtml += `<div class="food-balance surplus"><span class="material-icons-round" style="font-size:14px; vertical-align:middle;">trending_up</span> 食料余剰: +${Math.round(p.surplus['食料']).toLocaleString()}t</div>`;
+            } else if (p.shortage && p.shortage['食料']) {
+                industryHtml += `<div class="food-balance shortage"><span class="material-icons-round" style="font-size:14px; vertical-align:middle;">trending_down</span> 食料不足: -${Math.round(p.shortage['食料']).toLocaleString()}t</div>`;
+            }
+
+            industryCard = `<div class="info-card wide-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">precision_manufacturing</span>産業構造</div><div class="card-content">${industryHtml}</div></div>`;
+        }
+    }
+
+    // --- 4. 領地集計カード (拠点の場合) ---
+    let territoryCard = '';
+    if (p.territoryData && ['首都', '都市', '領都', '街', '町'].includes(p.settlement)) {
+        const data = p.territoryData;
+        let territoryHtml = '';
+
+        // 集落数 (直轄)
+        const counts = Object.entries(data.settlementCounts).filter(([, c]) => c > 0)
+            .map(([t, c]) => `${t}:${c}`).join(', ');
+        if (counts) {
+            territoryHtml += `<div class="info-row" style="display:block;"><span class="label" style="display:block; margin-bottom:2px;">直轄集落</span><span class="value" style="font-size:12px;">${counts}</span></div>`;
+        }
+
+        // 集落数 (全隷下)
+        const allSubordinateCounts = getAllSubordinateSettlements(d.index);
+        const allCountsStr = Object.entries(allSubordinateCounts).filter(([, c]) => c > 0)
+            .map(([t, c]) => `${t}:${c}`).join(', ');
+        if (allCountsStr) {
+            territoryHtml += `<div class="info-row" style="display:block;"><span class="label" style="display:block; margin-bottom:2px;">全隷下集落</span><span class="value" style="font-size:12px;">${allCountsStr}</span></div>`;
+        }
+
+        territoryHtml += createRow('group', '合計人口', data.population.toLocaleString(), '人');
+        territoryHtml += createRow('landscape', '合計農地', Math.round(data.cultivatedArea).toLocaleString(), 'ha');
+
+        // 収支
+        const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement];
+        const totalDemand = data.population * settlementInfo.consumption_t_per_person;
+        const totalSupply = Object.values(data.production).reduce((a, b) => a + b, 0);
+        const balance = totalSupply - totalDemand;
+
+        if (balance >= 0) {
+            territoryHtml += `<div class="food-balance surplus">領内余剰: +${Math.round(balance).toLocaleString()}t</div>`;
+        } else {
+            territoryHtml += `<div class="food-balance shortage">領内不足: ${Math.round(balance).toLocaleString()}t</div>`;
+        }
+
+        territoryCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">domain</span>領地管理</div><div class="card-content">${territoryHtml}</div></div>`;
+    }
+
+    // --- 結合してコンテナに入れる ---
+    return `<div class="info-scroll-container">${basicCard}${envCard}${resourceCard}${industryCard}${territoryCard}</div>`;
+}
+
+// ================================================================
+// 凡例生成関数
+// ================================================================
+
+/**
+ * 気温の凡例を生成する
+ */
+function createTemperatureLegend() {
+    const scale = config.tempColor;
+    const gradientColors = d3.range(0, 1.01, 0.1).map(t => scale.interpolator()(t));
+
+    return `
+        <h4>気温凡例</h4>
+        <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
+        <div class="legend-gradient-labels">
+            <span>${scale.domain()[0]}℃</span>
+            <span>${scale.domain()[1]}℃</span>
+        </div>
+    `;
+}
+
+/**
+ * 降水量の凡例を生成する
+ */
+function createPrecipitationLegend() {
+    const scale = config.precipColor;
+    const domain = scale.domain();
+    const range = scale.range();
+    let itemsHtml = '';
+
+    for (let i = 0; i < range.length; i++) {
+        const color = range[i];
+        const lowerBound = domain[i - 1] ? domain[i - 1] : 0;
+        const upperBound = domain[i];
+        const label = i === 0 ? `～ ${upperBound} mm` : `${lowerBound} - ${upperBound} mm`;
+        itemsHtml += `
+            <div class="legend-item">
+                <div class="legend-color-box" style="background-color: ${color};"></div>
+                <span>${label}</span>
+            </div>
+        `;
+    }
+
+    return `<h4>降水量凡例 (mm/年)</h4>${itemsHtml}`;
+}
+
+/**
+ * 気候帯の凡例を生成する
+ */
+function createClimateZoneLegend() {
+    let itemsHtml = '';
+    for (const [zone, color] of Object.entries(config.CLIMATE_ZONE_COLORS)) {
+        itemsHtml += `
+            <div class="legend-item">
+                <div class="legend-color-box" style="background-color: ${color};"></div>
+                <span>${zone}</span>
+            </div>
+        `;
+    }
+    return `<h4>気候帯凡例</h4>${itemsHtml}`;
+}
+
+/**
+ * 人口分布の凡例を生成する
+ */
+function createPopulationLegend() {
+    const scale = config.populationColor;
+    // scaleLogにはinterpolatorがないため、rangeの色から直接補間関数を作成する
+    const interpolator = d3.interpolate(scale.range()[0], scale.range()[1]);
+    const gradientColors = d3.range(0, 1.01, 0.1).map(interpolator);
+
+    return `
+        <h4>人口分布凡例</h4>
+        <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
+        <div class="legend-gradient-labels">
+            <span>${scale.domain()[0].toLocaleString()}人</span>
+            <span>${scale.domain()[1].toLocaleString()}人</span>
+        </div>
+    `;
+}
+
+/**
+ * 魔物分布の凡例を生成する
+ */
+function createMonsterLegend() {
+    let itemsHtml = '';
+    // 各ランクの説明を追加
+    const rankDescriptions = {
+        'S': '伝説級',
+        'A': '高脅威',
+        'B': '危険',
+        'C': '要注意',
+        'D': '低脅威'
+    };
+
+    // config.jsから色情報を取得して凡例項目を生成
+    for (const [rank, color] of Object.entries(config.MONSTER_COLORS)) {
+        const description = rankDescriptions[rank] || '';
+        itemsHtml += `
+            <div class="legend-item">
+                <div class="legend-color-box" style="background-color: ${color};"></div>
+                <span>${rank}ランク: ${description}</span>
+            </div>
+        `;
+    }
+    return `<h4>魔物分布凡例</h4>${itemsHtml}`;
+}
+
+/**
+ * 表示する凡例を更新する
+ * @param {string|null} layerName 表示したい凡例のレイヤー名、または非表示にする場合はnull
+ */
+export function updateLegend(layerName) {
+    if (!legendContainer) return;
+
+    let legendHtml = '';
+    switch (layerName) {
+        case 'temp-overlay':
+            legendHtml = createTemperatureLegend();
+            break;
+        case 'precip-overlay':
+            legendHtml = createPrecipitationLegend();
+            break;
+        case 'climate-zone-overlay':
+            legendHtml = createClimateZoneLegend();
+            break;
+        case 'population-overlay':
+            legendHtml = createPopulationLegend();
+            break;
+        case 'monster-overlay':
+            legendHtml = createMonsterLegend();
+            break;
+        default:
+            legendHtml = ''; // 対応する凡例がなければ空にする
+            break;
+    }
+
+    legendContainer.innerHTML = legendHtml;
+    legendContainer.style.display = legendHtml ? 'block' : 'none';
+}
