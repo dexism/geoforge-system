@@ -434,14 +434,15 @@ const INDUSTRY_ITEM_MAP = {
     'population': 'pop', 'cultivatedArea': 'ca', 'production': 'prod', 'settlementCounts': 'sc',
     '都市': 'cit', '領都': 'reg', '街': 'str', '町': 'twn', '村': 'vil', '首都': 'cap',
     // 人口構成
-    '貴族': 'nob', '騎士': 'kni', '正規兵': 'sol', '衛兵': 'gua', '傭兵': 'mer',
+    '貴族': 'nob', '騎士': 'kni', '正規兵': 'sol', '衛兵・自警団': 'gua', '傭兵': 'mer',
     '農夫': 'far', '木こり': 'lum', '鉱夫': 'min', '漁師': 'fis', '牧畜民': 'pas', '狩人': 'hun',
-    '職人': 'art', '商人': 'tra', '学者': 'sch', '官僚': 'bur', '神官': 'pri', '冒険者': 'adv', '浮浪者': 'vag',
+    '職人': 'art', '商人': 'tra', '学者': 'sch', '官僚': 'bur', '神官・医師・薬師': 'pri', '冒険者': 'adv', '浮浪者': 'vag',
+    '錬金術師': 'alc',
     // 施設
     '商会・商店': 'shp', '行商・露店': 'ped', '宿屋': 'inn', '酒場・食堂': 'tav',
     '鍛冶屋': 'smi', '工房': 'wor', '診療所': 'cli', '教会': 'chu', '運送屋': 'car', '厩舎': 'sta',
     '研究所': 'lab', '学校': 'col', '兵舎': 'bar', '砦': 'for', '役所': 'off', 'ギルド': 'gui',
-    '劇場・美術館': 'the', '儀式場': 'rit'
+    '劇場・美術館': 'the', '儀式場': 'rit', '魔道具店': 'mag'
 };
 const REVERSE_INDUSTRY_ITEM_MAP = Object.fromEntries(Object.entries(INDUSTRY_ITEM_MAP).map(([k, v]) => [v, k]));
 
