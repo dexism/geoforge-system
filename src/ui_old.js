@@ -9,20 +9,12 @@
 import * as d3 from 'd3';
 import * as config from './config.js';
 import { getIndex, formatProgressBar, formatLocation } from './utils.js';
-import {
-    initInfoWindow,
-    setAllHexesData,
-    updateChildrenMap,
-    updateOverallInfo,
-    getInfoText,
-    updateLegend,
-    childrenMap
-} from './infoWindow.js';
 
 // --- グローバル変数 ---
 // 全ての描画レイヤー（<g>要素）を管理するオブジェクト
 const layers = {};
-// 凡例表示用コンテナはinfoWindow.jsで管理
+// 凡例表示用コンテナをグローバル変数として保持
+let legendContainer = null;
 
 let hexes = []; // 描画用データ（座標などを含む）
 let roadPathsData = [];
@@ -31,7 +23,7 @@ let currentTransform = d3.zoomIdentity; // 現在のズーム状態
 let allHexesData = [];
 let infoWindow;
 let infoContent;
-// childrenMapはinfoWindow.jsからインポート
+let childrenMap = new Map();
 const nationColor = d3.scaleOrdinal(d3.schemeTableau10); // 国家ごとの色を固定するためのカラースケール
 // ミニマップ関連の変数を追加
 let minimapContainer;
@@ -94,7 +86,99 @@ function getSharedEdgeMidpoint(hex1, hex2) {
     return null;
 }
 
-// updateOverallInfo is imported from infoWindow.js
+/**
+ * サイドバーの全体情報パネルを更新する (辺境地帯の集計に対応)
+ * @param {Array<object>} allHexes - 全てのヘックスデータ
+ */
+function updateOverallInfo(allHexes) {
+    if (!allHexes || allHexes.length === 0) return;
+
+    // --- DOM要素の取得 ---
+    const popEl = document.getElementById('info-total-population');
+    const nationCountEl = document.getElementById('info-nation-count');
+    const settlementSummaryEl = document.getElementById('info-settlement-summary');
+    const nationsDetailsEl = document.getElementById('info-nations-details');
+    nationsDetailsEl.innerHTML = ''; // 事前にクリア
+
+    // --- 集計用データ構造の初期化 ---
+    const globalStats = {
+        population: 0,
+        nations: new Set(),
+        settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
+    };
+    const nationStats = new Map();
+    // ★★★ 辺境地帯用の集計オブジェクトを追加 ★★★
+    const frontierStats = {
+        population: 0,
+        settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
+    };
+
+    // --- STEP 1: 全ヘックスを走査し、データ集計 ---
+    allHexes.forEach(h => {
+        const p = h.properties;
+        globalStats.population += p.population || 0;
+        if (p.settlement && globalStats.settlements[p.settlement] !== undefined) {
+            globalStats.settlements[p.settlement]++;
+        }
+
+        if (p.nationId > 0) {
+            globalStats.nations.add(p.nationId);
+            // 国家別の集計 (変更なし)
+            if (!nationStats.has(p.nationId)) {
+                nationStats.set(p.nationId, {
+                    name: config.NATION_NAMES[p.nationId - 1] || `国家${p.nationId}`,
+                    population: 0, capital: null,
+                    settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
+                });
+            }
+            const currentNation = nationStats.get(p.nationId);
+            currentNation.population += p.population || 0;
+            if (p.settlement && currentNation.settlements[p.settlement] !== undefined) {
+                currentNation.settlements[p.settlement]++;
+                if (p.settlement === '首都') { currentNation.capital = h; }
+            }
+        } else {
+            // ★★★ nationIdが0の場合、辺境として集計 ★★★
+            frontierStats.population += p.population || 0;
+            if (p.settlement && frontierStats.settlements[p.settlement] !== undefined) {
+                frontierStats.settlements[p.settlement]++;
+            }
+        }
+    });
+
+    // --- STEP 2: グローバル情報の描画 (変更なし) ---
+    popEl.textContent = `${globalStats.population.toLocaleString()}人`;
+    nationCountEl.textContent = `${globalStats.nations.size}カ国`;
+    const summaryText = [`首${globalStats.settlements['首都']}`, `領${globalStats.settlements['領都']}`, `街${globalStats.settlements['街']}`, `町${globalStats.settlements['町']}`, `村${globalStats.settlements['村']}`].join(' ');
+    settlementSummaryEl.textContent = summaryText;
+
+    // --- STEP 3: 国家別情報の描画 ---
+    const sortedNations = Array.from(nationStats.values()).sort((a, b) => a.name.localeCompare(b.name));
+    let nationsHtml = '';
+    sortedNations.forEach(nation => {
+        const capitalCoords = nation.capital ? `(${formatLocation(nation.capital, 'coords')})` : '';
+        const nationSettlementSummary = [`首${nation.settlements['首都']}`, `領${nation.settlements['領都']}`, `街${nation.settlements['街']}`, `町${nation.settlements['町']}`, `村${nation.settlements['村']}`].join(' ');
+        nationsHtml += `
+            <div class="nation-info-block">
+                <h5>${nation.name} <span>${capitalCoords}</span></h5>
+                <div class="info-line"><span>人口</span><span>${nation.population.toLocaleString()}人</span></div>
+                <div class="info-line" style="justify-content: flex-start; font-size: 13px;"><span>${nationSettlementSummary}</span></div>
+            </div>`;
+    });
+
+    // ★★★ STEP 4: 辺境地帯情報の描画を追加 ★★★
+    if (frontierStats.population > 0) {
+        const frontierSettlementSummary = [`街${frontierStats.settlements['街']}`, `町${frontierStats.settlements['町']}`, `村${frontierStats.settlements['村']}`].join(' ');
+        nationsHtml += `
+            <div class="nation-info-block">
+                <h5>辺境</h5>
+                <div class="info-line"><span>人口</span><span>${frontierStats.population.toLocaleString()}人</span></div>
+                <div class="info-line" style="justify-content: flex-start; font-size: 13px;"><span>${frontierSettlementSummary}</span></div>
+            </div>`;
+    }
+
+    nationsDetailsEl.innerHTML = nationsHtml;
+}
 
 /**
  * 汎用的なレイヤー切り替え関数。
@@ -112,7 +196,142 @@ function toggleLayerVisibility(layerName, buttonElement) {
     buttonElement.classList.toggle('active', layer.visible);
 }
 
-// Legend functions are imported from infoWindow.js
+/**
+ * 気温の凡例を生成する
+ */
+function createTemperatureLegend() {
+    const scale = config.tempColor;
+    const gradientColors = d3.range(0, 1.01, 0.1).map(t => scale.interpolator()(t));
+    
+    return `
+        <h4>気温凡例</h4>
+        <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
+        <div class="legend-gradient-labels">
+            <span>${scale.domain()[0]}℃</span>
+            <span>${scale.domain()[1]}℃</span>
+        </div>
+    `;
+}
+
+/**
+ * 降水量の凡例を生成する
+ */
+function createPrecipitationLegend() {
+    const scale = config.precipColor;
+    const domain = scale.domain();
+    const range = scale.range();
+    let itemsHtml = '';
+
+    for (let i = 0; i < range.length; i++) {
+        const color = range[i];
+        const lowerBound = domain[i - 1] ? domain[i-1] : 0;
+        const upperBound = domain[i];
+        const label = i === 0 ? `～ ${upperBound} mm` : `${lowerBound} - ${upperBound} mm`;
+        itemsHtml += `
+            <div class="legend-item">
+                <div class="legend-color-box" style="background-color: ${color};"></div>
+                <span>${label}</span>
+            </div>
+        `;
+    }
+
+    return `<h4>降水量凡例 (mm/年)</h4>${itemsHtml}`;
+}
+
+/**
+ * 気候帯の凡例を生成する
+ */
+function createClimateZoneLegend() {
+    let itemsHtml = '';
+    for (const [zone, color] of Object.entries(config.CLIMATE_ZONE_COLORS)) {
+        itemsHtml += `
+            <div class="legend-item">
+                <div class="legend-color-box" style="background-color: ${color};"></div>
+                <span>${zone}</span>
+            </div>
+        `;
+    }
+    return `<h4>気候帯凡例</h4>${itemsHtml}`;
+}
+
+/**
+ * 人口分布の凡例を生成する
+ */
+function createPopulationLegend() {
+    const scale = config.populationColor;
+    // scaleLogにはinterpolatorがないため、rangeの色から直接補間関数を作成する
+    const interpolator = d3.interpolate(scale.range()[0], scale.range()[1]);
+    const gradientColors = d3.range(0, 1.01, 0.1).map(interpolator);
+    
+    return `
+        <h4>人口分布凡例</h4>
+        <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${gradientColors.join(',')});"></div>
+        <div class="legend-gradient-labels">
+            <span>${scale.domain()[0].toLocaleString()}人</span>
+            <span>${scale.domain()[1].toLocaleString()}人</span>
+        </div>
+    `;
+}
+
+/**
+ * 魔物分布の凡例を生成する
+ */
+function createMonsterLegend() {
+    let itemsHtml = '';
+    // 各ランクの説明を追加
+    const rankDescriptions = {
+        'S': '伝説級',
+        'A': '高脅威',
+        'B': '危険',
+        'C': '要注意',
+        'D': '低脅威'
+    };
+
+    // config.jsから色情報を取得して凡例項目を生成
+    for (const [rank, color] of Object.entries(config.MONSTER_COLORS)) {
+        const description = rankDescriptions[rank] || '';
+        itemsHtml += `
+            <div class="legend-item">
+                <div class="legend-color-box" style="background-color: ${color};"></div>
+                <span>${rank}ランク: ${description}</span>
+            </div>
+        `;
+    }
+    return `<h4>魔物分布凡例</h4>${itemsHtml}`;
+}
+
+/**
+ * 表示する凡例を更新する
+ * @param {string|null} layerName 表示したい凡例のレイヤー名、または非表示にする場合はnull
+ */
+function updateLegend(layerName) {
+    if (!legendContainer) return;
+
+    let legendHtml = '';
+    switch (layerName) {
+        case 'temp-overlay':
+            legendHtml = createTemperatureLegend();
+            break;
+        case 'precip-overlay':
+            legendHtml = createPrecipitationLegend();
+            break;
+        case 'climate-zone-overlay':
+            legendHtml = createClimateZoneLegend();
+            break;
+        case 'population-overlay':
+            legendHtml = createPopulationLegend();
+            break;
+        case 'monster-overlay': 
+            legendHtml = createMonsterLegend();
+            break;
+        default:
+            legendHtml = ''; // 対応する凡例がなければ空にする
+            break;
+    }
+    
+    legendContainer.innerHTML = legendHtml;
+    legendContainer.style.display = legendHtml ? 'block' : 'none';
+}
 
 // ================================================================
 // ■ UIセットアップ メイン関数
@@ -159,12 +378,12 @@ function drawRoads(roadPaths) {
     });
 
     layers.road.group.selectAll('.road-segment')
-        .data(landRoadPathData.sort((a, b) => a.level - b.level))
+        .data(landRoadPathData.sort((a,b) => a.level - b.level))
         .enter()
         .append('path')
         .attr('class', 'road-segment')
         .attr('d', d => d.path)
-        .attr('stroke', d => ({
+        .attr('stroke', d => ({ 
             6: '#f0f', // 通商路
             5: '#f00', // 交易路
             4: '#f80', // 街道
@@ -172,21 +391,21 @@ function drawRoads(roadPaths) {
             2: '#0f0', // 村道
             1: '#800'  // その他
         }[d.level] || '#000'))
-        .attr('stroke-width', d => ({
-            6: 8.0,
-            5: 6.0,
-            4: 4.0,
-            3: 2.0,
-            2: 1.0,
-            1: 1.0
+        .attr('stroke-width', d => ({ 
+            6: 8.0, 
+            5: 6.0, 
+            4: 4.0, 
+            3: 2.0, 
+            2: 1.0, 
+            1: 1.0 
         }[d.level] || 1))
-        .attr('stroke-dasharray', d => ({
-            6: '8, 8',
-            5: '6, 6',
-            4: '4, 4',
-            3: '2, 2',
-            2: '1, 1',
-            1: '1, 2'
+        .attr('stroke-dasharray', d => ({ 
+            6: '8, 8', 
+            5: '6, 6', 
+            4: '4, 4', 
+            3: '2, 2', 
+            2: '1, 1', 
+            1: '1, 2' 
         }[d.level] || '2, 2'))
         .style('pointer-events', 'none')
         .style('fill', 'none');
@@ -198,10 +417,10 @@ function drawRoads(roadPaths) {
 
     // 航路の色を定義
     const seaRouteColors = {
-        'dinghy': '#0f0', // 小舟・漁船
-        'small_trader': '#ff0', // 小型商船
-        'coastal_trader': '#f00', // 沿岸交易船
-        'medium_merchant': '#a0f', // 中型商船
+        'dinghy':             '#0f0', // 小舟・漁船
+        'small_trader':       '#ff0', // 小型商船
+        'coastal_trader':     '#f00', // 沿岸交易船
+        'medium_merchant':    '#a0f', // 中型商船
         'large_sailing_ship': '#00f'  // 大型帆船
     };
 
@@ -223,7 +442,7 @@ function drawRoads(roadPaths) {
         // 航路の各ヘックスを通り抜けるセグメントを生成
         for (let i = 0; i < pathHexes.length; i++) {
             const currentHex = pathHexes[i];
-
+            
             // 港町（陸地）ヘックスは経路の中継点としてのみ使い、その上には線を描画しない
             if (!currentHex.properties.isWater && i > 0 && i < pathHexes.length - 1) {
                 continue;
@@ -235,12 +454,12 @@ function drawRoads(roadPaths) {
             // 始点と終点を決定 (辺の中心)
             const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
             const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
-
+            
             if (!startPoint || !endPoint) continue;
 
             // 制御点は現在のヘックスの中心
             const controlPoint = [currentHex.cx, currentHex.cy];
-
+            
             // 二次ベジェ曲線のパス文字列を生成
             const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
 
@@ -253,15 +472,15 @@ function drawRoads(roadPaths) {
 
     // 航路を描画
     layers['sea-route'].group.selectAll('.sea-route-segment')
-        // ソート処理を追加
+        // ★★★ ソート処理を追加 ★★★
         .data(seaRoutePathData.sort((a, b) => (shipOrder[a.shipKey] || 0) - (shipOrder[b.shipKey] || 0)))
         .enter()
         .append('path')
         .attr('class', 'sea-route-segment')
         .attr('d', d => d.path)
         .attr('stroke', d => seaRouteColors[d.shipKey] || '#fff') // 船のランクに応じて色分け
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', '2, 4')
+        .attr('stroke-width', 2) 
+        .attr('stroke-dasharray', '2, 4') 
         .style('pointer-events', 'none')
         .style('fill', 'none');
 }
@@ -332,40 +551,151 @@ async function drawBeaches(hexes) {
         .style('pointer-events', 'none');
 }
 
-// getInfoText is imported from infoWindow.js
+/**
+ * クリックされたヘックスの詳細情報を整形して返す関数。
+ * 情報ウィンドウの表示内容を生成します。
+ * @param {object} d - ヘックスデータ
+ * @returns {string} - 整形された情報テキスト
+ */
+function getInfoText(d) {
+    const p = d.properties;
+    
+    // --- 上位集落の情報を整形 ---
+    let superiorText = 'なし';
+    if (p.parentHexId != null) {
+        const superiorHex = allHexesData[p.parentHexId]; 
+        if (superiorHex) {
+            let detailsText = '';
+            if (p.distanceToParent) {
+                const distanceStr = `\n　道のり：${p.distanceToParent.toFixed(1)}km`;
+                let travelDaysStr = '';
+                if (p.travelDaysToParent) {
+                    travelDaysStr = `\n　荷馬車：${p.travelDaysToParent.toFixed(1)}日`;
+                }
+                detailsText = `${distanceStr}${travelDaysStr}`;
+            }
+            superiorText = `${superiorHex.properties.settlement} (E${String(superiorHex.col).padStart(3, '0')}-N${String((config.ROWS-1)-superiorHex.row).padStart(3, '0')})${detailsText}`;
+        }
+    } else if (p.territoryId != null && getIndex(d.x, (config.ROWS - 1) - d.y) !== p.territoryId) {
+        const territoryHub = allHexesData[p.territoryId]; 
+         if (territoryHub) {
+            superiorText = `[中枢] ${territoryHub.properties.settlement} (E${String(territoryHub.col).padStart(3, '0')}-N${String((config.ROWS-1)-territoryHub.row).padStart(3, '0')})`;
+        }
+    }
 
-// getAllSubordinateSettlements and updateChildrenMap are imported from infoWindow.js
+    // --- 土地利用情報の整形 ---
+    let landUseText;
+    if (p.isWater) {
+        landUseText = p.vegetation;
+    } else {
+        const landUseParts = [];
+        if (p.terrainType) landUseParts.push(p.terrainType);
+        if (p.vegetation) landUseParts.push(p.vegetation);
+        if (p.isAlluvial) landUseParts.push('河川');
+        if (p.hasSnow) landUseParts.push('積雪');
+        landUseText = landUseParts.join(', ');
+    }
+    
+    // --- 国家情報の整形 ---
+    const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺境';
+    
+    // 未定義の可能性があるプロパティにデフォルト値を設定
+    const population = p.population ?? 0;
+    const cultivatedArea = p.cultivatedArea ?? 0;
+    const habitability = p.habitability ?? 0;
+
+    // 標高/水深の表示を切り替える変数を定義
+    const elevationLabel = p.elevation < 0 ? '水深' : '標高';
+    const elevationValue = p.elevation < 0 ? Math.abs(Math.round(p.elevation)) : Math.round(p.elevation);
+    
+    // --- 全ての情報を結合して最終的なテキストを生成 ---
+    let text =  `位置　　：E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}\n` +
+                `所属国家：${nationName}\n` +
+                `直轄上位：${superiorText}\n`+
+                `土地利用： ${landUseText}\n` +
+                `人口　　： ${population.toLocaleString()}人\n` +
+                `農地面積： ${Math.round(cultivatedArea).toLocaleString()} ha\n` +
+                `居住適性： ${habitability.toFixed(1)}\n` +
+                `\n--- 土地詳細 ---\n` +
+                `気候帯　： ${p.climateZone}\n` +
+                `${elevationLabel}　　： ${elevationValue}m\n` + // 標高/水深
+                `気温　　： ${p.temperature.toFixed(1)}℃\n` +
+                `降水量　： ${p.precipitation_mm.toFixed(0)}mm/年\n` +
+                `魔力　　： ${p.manaRank}\n` +
+                `資源　　： ${p.resourceRank}\n` +
+                `魔物分布： ${(p.monsterRank ? p.monsterRank + 'ランク' : '観測されず')}\n` +
+                `\n--- 資源ポテンシャル ---\n` +
+                `農業適性： ${(p.agriPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+                `林業適性： ${(p.forestPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+                `鉱業適性： ${(p.miningPotential * 100).toFixed(0).padStart(3, ' ')}%\n` +
+                `漁業適性： ${(p.fishingPotential * 100).toFixed(0).padStart(3, ' ')}%\n` + 
+                `狩猟適性： ${(p.huntingPotential * 100).toFixed(0).padStart(3, ' ')}%\n` + 
+                `牧畜適性： ${(p.pastoralPotential * 100).toFixed(0).padStart(3, ' ')}%\n` + 
+                `家畜適性： ${(p.livestockPotential * 100).toFixed(0).padStart(3, ' ')}%`;
+    
+    // --- 食料需給情報の追加 (経済シミュレーション後にのみ表示) ---
+    if (p.production) {
+        const surplusKeys = Object.keys(p.surplus || {});
+        const shortageKeys = Object.keys(p.shortage || {});
+        if (Object.keys(p.production).length > 0) { // 生産物が何かあればセクションを表示
+            text += `\n\n--- 産業生産 (t/年) ---`; // セクション名を変更
+            // 生産物をフィルタリングして表示 (0より大きいもののみ)
+            const productionText = Object.entries(p.production)
+                .filter(([, amount]) => amount > 0.1)
+                .map(([item, amount]) => `${item} ${Math.round(amount).toLocaleString()}`)
+                .join('t\n　　　') + 't';
+            text += `\n生産：${productionText}`;
+
+            // 全体の食料収支を表示
+            if (p.surplus['食料']) {
+                text += `\n食料収支：+${p.surplus['食料']}t の余剰`;
+            } else if (p.shortage['食料']) {
+                text += `\n食料収支：${p.shortage['食料']}t の不足`;
+            }
+        }
+    }
+    
+    // --- 主要都市の場合、支配領域の集計情報を追加 (経済シミュレーション後にのみ表示) ---
+    if (p.territoryData && ['首都', '都市', '領都', '街', '町'].includes(p.settlement)) {
+        const data = p.territoryData;
+        text += `\n\n--- 領地集計 ---`;
+        const settlementCountText = Object.entries(data.settlementCounts).filter(([, count]) => count > 0).map(([type, count]) => { const shortName = { '都市': '都', '領都': '領', '街': '街', '町': '町', '村': '村' }[type]; return `${shortName}${count}`; }).join(', ');
+        if(settlementCountText) text += `\n直轄集落： ${settlementCountText}`;
+        text += `\n合計人口： ${data.population.toLocaleString()}人`;
+        text += `\n合計農地： ${Math.round(data.cultivatedArea).toLocaleString()}ha`;
+        const totalProductionText = Object.entries(data.production).map(([crop, amount]) => `${crop} ${Math.round(amount).toLocaleString()}t`).join('\n　　　　　');
+        text += `\n生産合計：${totalProductionText}`;
+        const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement];
+        const totalDemand = data.population * settlementInfo.consumption_t_per_person; 
+        const totalSupply = Object.values(data.production).reduce((a, b) => a + b, 0);
+        const balance = totalSupply - totalDemand;
+        if (balance >= 0) { text += `\n食料収支：+${Math.round(balance).toLocaleString()}t の余剰`; } else { text += `\n食料収支：${Math.round(balance).toLocaleString()}t の不足`; }
+    }
+    
+    return text;
+}
+
+/**
+ * 集落の親子関係マップを更新する関数
+ * @param {Array<object>} hexesData - 全ヘックスのデータ
+ */
+function updateChildrenMap(hexesData) {
+    childrenMap.clear(); // 古いデータをクリア
+    hexesData.forEach((h, index) => {
+        const parentId = h.properties.parentHexId;
+        if (parentId !== null) {
+            if (!childrenMap.has(parentId)) {
+                childrenMap.set(parentId, []);
+            }
+            childrenMap.get(parentId).push(index);
+        }
+    });
+}
 
 // ================================================================
 // ビューポートカリングのための描画関数
 // 表示範囲内の要素のみを描画する責務を担う
 // ================================================================
-/**
- * ビューポートカリングのための描画関数
- * @param {d3.ZoomTransform} transform - 現在のズーム情報
- */
-/**
- * 情報ウィンドウの表示状態に合わせてサイドバーの高さを調整する関数
- */
-function adjustSidebarHeight() {
-    const sidebar = document.querySelector('.sidebar');
-    if (!sidebar || !infoWindow) return;
-
-    if (infoWindow.classList.contains('hidden')) {
-        sidebar.style.height = '100dvh';
-    } else {
-        // 情報ウィンドウの高さを取得して調整
-        // レンダリング待ちのために少し遅延させる
-        requestAnimationFrame(() => {
-            const infoHeight = infoWindow.offsetHeight;
-            // サイドバーの下端が情報ウィンドウの上端に合うようにする
-            // window.innerHeight - infoHeight - マージン
-            const newHeight = window.innerHeight - infoHeight - 10;
-            sidebar.style.height = `${newHeight}px`;
-        });
-    }
-}
-
 /**
  * ビューポートカリングのための描画関数
  * @param {d3.ZoomTransform} transform - 現在のズーム情報
@@ -382,10 +712,10 @@ function updateVisibleHexes(transform) {
     const svgHeight = svgNode.clientHeight;
     const topLeft = transform.invert([0, 0]);
     const bottomRight = transform.invert([svgWidth, svgHeight]);
-
+    
     // 2. 表示範囲内のヘックスをフィルタリング
     const buffer = config.r * 2;
-    const visibleHexes = hexes.filter(d =>
+    const visibleHexes = hexes.filter(d => 
         d.cx >= topLeft[0] - buffer && d.cx <= bottomRight[0] + buffer &&
         d.cy >= topLeft[1] - buffer && d.cy <= bottomRight[1] + buffer
     );
@@ -404,6 +734,7 @@ function updateVisibleHexes(transform) {
                 .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
                 .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
                 .attr('fill', d => {
+                    // ★★★ ここから修正 ★★★
                     const p = d.properties;
                     // ヘックスが「水域」かつ「標高が0より大きい」場合、それは湖沼
                     if (p.isWater && p.elevation > 0) {
@@ -411,12 +742,13 @@ function updateVisibleHexes(transform) {
                     }
                     // それ以外（陸地および海洋）の場合は、標高/水深に応じたグラデーションを適用
                     return config.getElevationColor(p.elevation);
+                    // ★★★ 修正ここまで ★★★
                 })
                 .attr('stroke', 'none'),
             update => update,
             exit => exit.remove()
         );
-
+    
     // 4b. 白地図オーバーレイヤー
     layers['white-map-overlay'].group.selectAll('.white-map-hex')
         .data(visibleHexes, d => d.index)
@@ -432,40 +764,40 @@ function updateVisibleHexes(transform) {
         );
 
     const visibleLandHexes = visibleHexes.filter(d => !d.properties.isWater);
-
+    
     // 4c. 植生オーバーレイヤー
-    if (layers['vegetation-overlay'].visible) {
-        layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex')
-            .data(visibleLandHexes, d => d.index)
-            .join(
-                enter => enter.append('polygon')
-                    .attr('class', 'veg-overlay-hex')
-                    .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-                    .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-                    // 表示ルールのみを変更する
-                    .attr('fill', d => {
-                        const p = d.properties;
-                        let displayVeg = p.vegetation; // まずはデータ上の優勢植生を取得
+        if (layers['vegetation-overlay'].visible) {
+            layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex')
+                .data(visibleLandHexes, d => d.index)
+                .join(
+                    enter => enter.append('polygon')
+                        .attr('class', 'veg-overlay-hex')
+                        .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+                        .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
+                        // 表示ルールのみを変更する
+                        .attr('fill', d => {
+                            const p = d.properties;
+                            let displayVeg = p.vegetation; // まずはデータ上の優勢植生を取得
 
-                        // もし優勢植生が森林系なら、優勢度チェックを行う
-                        if (displayVeg === '森林' || displayVeg === '針葉樹林') {
-                            // landUse.forest が 10%未満なら、表示上は「草原」として扱う
-                            if (p.landUse.forest < 0.10) {
-                                displayVeg = '草原';
+                            // もし優勢植生が森林系なら、優勢度チェックを行う
+                            if (displayVeg === '森林' || displayVeg === '針葉樹林') {
+                                // landUse.forest が 10%未満なら、表示上は「草原」として扱う
+                                if (p.landUse.forest < 0.10) {
+                                    displayVeg = '草原';
+                                }
                             }
-                        }
-                        // 最終的に表示する植生の色を返す
-                        return config.TERRAIN_COLORS[displayVeg] || 'transparent';
-                    })
-                    .style('fill-opacity', 0.6)
-                    .style('pointer-events', 'none'),
-                update => update, // updateのロジックも必要であれば追記
-                exit => exit.remove()
-            );
-    } else {
-        layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex').remove();
-    }
-
+                            // 最終的に表示する植生の色を返す
+                            return config.TERRAIN_COLORS[displayVeg] || 'transparent';
+                        })
+                        .style('fill-opacity', 0.6)
+                        .style('pointer-events', 'none'),
+                    update => update, // updateのロジックも必要であれば追記
+                    exit => exit.remove()
+                );
+        } else {
+            layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex').remove();
+        }
+    
     // 4d. 積雪レイヤー
     if (layers.snow.visible) {
         layers.snow.group.selectAll('.snow-hex')
@@ -484,11 +816,11 @@ function updateVisibleHexes(transform) {
     } else {
         layers.snow.group.selectAll('.snow-hex').remove();
     }
-
+    
     // 4e. レリーフ（陰影）レイヤー
     if (layers.shading.visible) {
         layers.shading.group.selectAll('.shading-hex')
-            // ここのデータソースを visibleLandHexes から visibleHexes に変更
+            // ★★★ ここのデータソースを visibleLandHexes から visibleHexes に変更 ★★★
             .data(visibleHexes, d => d.index)
             .join(
                 enter => enter.append('polygon')
@@ -504,7 +836,7 @@ function updateVisibleHexes(transform) {
     } else {
         layers.shading.group.selectAll('.shading-hex').remove();
     }
-
+    
     // 4j. 集落シンボル
     layers.settlement.group.selectAll('.settlement-hex')
         .data(visibleHexes.filter(d => ['村', '町', '街', '領都', '首都', '都市'].includes(d.properties.settlement)), d => d.index)
@@ -514,10 +846,10 @@ function updateVisibleHexes(transform) {
                 .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
                 .attr('transform', d => `translate(${d.cx},${d.cy}) scale(0.6)`)
                 .attr('fill', d => ({
-                    '首都': '#f0f',
-                    '都市': '#f00',
-                    '領都': '#f00',
-                    '街': '#f80',
+                    '首都': '#f0f', 
+                    '都市': '#f00', 
+                    '領都': '#f00', 
+                    '街': '#f80', 
                     '町': '#ff0',
                     '村': '#0f0'
                 }[d.properties.settlement]))
@@ -538,8 +870,8 @@ function updateVisibleHexes(transform) {
         'mining-overlay': { data: visibleHexes, fill: d => config.miningColor(d.properties.miningPotential), opacity: 0.7 },
         'fishing-overlay': { data: visibleHexes, fill: d => config.fishingColor(d.properties.fishingPotential), opacity: 0.7 },
         'hunting-overlay': { data: visibleHexes, fill: d => config.huntingColor(d.properties.huntingPotential), opacity: 0.7 },
-        'pastoral-overlay': { data: visibleHexes, fill: d => config.pastoralColor(d.properties.pastoralPotential), opacity: 0.7 },
-        'livestock-overlay': { data: visibleHexes, fill: d => config.livestockColor(d.properties.livestockPotential), opacity: 0.7 },
+        'pastoral-overlay': { data: visibleHexes, fill: d => config.pastoralColor(d.properties.pastoralPotential), opacity: 0.7 }, 
+        'livestock-overlay': { data: visibleHexes, fill: d => config.livestockColor(d.properties.livestockPotential), opacity: 0.7 }, 
         'monster-overlay': { data: visibleHexes.filter(d => d.properties.monsterRank), fill: d => config.MONSTER_COLORS[d.properties.monsterRank], opacity: 0.5 },
         'population-overlay': { data: visibleHexes.filter(d => d.properties.population > 0), fill: d => config.populationColor(d.properties.population), opacity: 0.9 },
         'territory-overlay': { data: visibleHexes, fill: d => d.properties.nationId === 0 ? '#fff0' : nationColor(d.properties.nationId), opacity: 0.5 }
@@ -577,7 +909,7 @@ function updateVisibleHexes(transform) {
         );
 
     // ラベルレイヤー
-    layers.labels.group.selectAll('.hex-label-group').remove();
+    layers.labels.group.selectAll('.hex-label-group').remove(); 
     const hexLabelGroups = layers.labels.group.selectAll('.hex-label-group')
         .data(visibleHexes, d => d.index)
         .join(enter => enter.append('g').attr('class', 'hex-label-group'));
@@ -600,7 +932,7 @@ function updateVisibleHexes(transform) {
         .attr('x', d => d.cx) // X座標を親と同じ位置にリセット
         .attr('dy', '1.0em')  // 1.0文字分だけ下にずらす
         .text(d => formatLocation(d, 'elevation'));
-
+    
     if (layers.settlement.visible) {
         hexLabelGroups.filter(d => d.properties.settlement)
             .append('text').attr('class', 'settlement-label')
@@ -620,7 +952,7 @@ function updateVisibleHexes(transform) {
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
         .text(d => d.properties.resourceRank);
-
+    
     const effectiveRadius = config.r * transform.k;
     layers.labels.group.selectAll('.hex-label, .property-label')
         .style('display', effectiveRadius >= 50 ? 'inline' : 'none');
@@ -632,7 +964,7 @@ function updateVisibleHexes(transform) {
 
         // --- STEP 1: 新しいヘッダーセクションを生成 ---
         let headerText = '';
-
+        
         const terrain = p.isWater ? '水域' : (p.terrainType || '不明');
         const vegetation = p.vegetation || 'なし';
 
@@ -644,7 +976,7 @@ function updateVisibleHexes(transform) {
         if (p.isAlluvial) features.push('河川');
         if (p.hasSnow) features.push('積雪');
         if (p.beachNeighbors && p.beachNeighbors.length > 0) features.push('砂浜');
-
+        
         if (features.length > 0) {
             headerText += `特性：${features.join(', ')}\n`;
         }
@@ -653,32 +985,32 @@ function updateVisibleHexes(transform) {
 
         // --- STEP 2: 既存の本文セクションを生成 ---
         let bodyText = '';
-        const locationText = formatLocation(d, 'short');
+        const locationText = formatLocation(d, 'short'); 
         const settlementType = (p.settlement || '未開地').padEnd(2, '　');
         const populationText = `人口：${(p.population || 0).toLocaleString()}人`;
         bodyText += `${settlementType}：${locationText}\n${populationText}`;
-
+        
         // 親集落の階層をたどって表示
         if (p.parentHexId !== null) {
             bodyText += `\n---`;
             let currentHex = d;
-            let safety = 0;
+            let safety = 0; 
             while (currentHex && currentHex.properties.parentHexId !== null && safety < 10) {
                 const parentHex = hexes[currentHex.properties.parentHexId];
                 if (!parentHex) break;
-
+                
                 const parentType = (parentHex.properties.settlement || '').padEnd(2, '　');
-                const parentCoords = formatLocation(parentHex, 'short');
+                const parentCoords = formatLocation(parentHex, 'short'); 
                 bodyText += `\n${parentType}：${parentCoords}`;
-
+                
                 currentHex = parentHex;
                 safety++;
             }
         }
-
+        
         // 国家情報を表示
-        const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1]
-            ? config.NATION_NAMES[p.nationId - 1]
+        const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] 
+            ? config.NATION_NAMES[p.nationId - 1] 
             : '辺境';
         bodyText += `\n${nationName}`;
 
@@ -694,9 +1026,9 @@ function updateVisibleHexes(transform) {
                     .attr('points', d => d.points.map(p => p.join(',')).join(' '))
                     .style('fill', 'transparent')
                     .style('cursor', 'pointer');
-
+                
                 newHexes.append('title').text(d => getTooltipText(d));
-
+                
                 newHexes.on('click', (event, d) => {
                     // (クリック時の処理は変更なし)
                     const highlightLayer = layers['highlight-overlay'].group;
@@ -708,7 +1040,7 @@ function updateVisibleHexes(transform) {
                             const queue = [{ index: startIndex, depth: 0 }];
                             const visited = new Set([startIndex]);
                             let head = 0;
-                            while (head < queue.length) {
+                            while(head < queue.length) {
                                 const current = queue[head++];
                                 const children = childrenMap.get(current.index) || [];
                                 children.forEach(childIndex => {
@@ -745,7 +1077,7 @@ function updateVisibleHexes(transform) {
                                     .attr('fill', '#0ff')
                                     .style('fill-opacity', 1.0)
                                     .style('pointer-events', 'none');
-
+                                
                                 const childIndex = d.index;
                                 const parentIndex = superiorHex.index;
                                 const targetRoad = roadPathsData.find(road => {
@@ -764,7 +1096,7 @@ function updateVisibleHexes(transform) {
                                         if (!currentHex) continue;
                                         const prevHex = i > 0 ? pathHexes[i - 1] : null;
                                         const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
-
+                                        
                                         const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
                                         const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
                                         const controlPoint = [currentHex.cx, currentHex.cy];
@@ -837,9 +1169,8 @@ function updateVisibleHexes(transform) {
                         .attr('stroke-width', 5)
                         .style('pointer-events', 'none');
 
-                    infoContent.innerHTML = getInfoText(d);
+                    infoContent.textContent = getInfoText(d);
                     infoWindow.classList.remove('hidden');
-                    adjustSidebarHeight();
                     event.stopPropagation();
                 });
                 return newHexes;
@@ -863,7 +1194,7 @@ function updateMinimapViewport(transform) {
     const svgNode = svg.node();
     const svgWidth = svgNode.clientWidth;
     const svgHeight = svgNode.clientHeight;
-
+    
     // 現在の表示範囲の左上と右下の座標を、メインマップの座標系で計算
     const [topLeftX, topLeftY] = transform.invert([0, 0]);
     const [bottomRightX, bottomRightY] = transform.invert([svgWidth, svgHeight]);
@@ -893,15 +1224,15 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // ここからミニマップ関連の初期化を追加
     minimapContainer = d3.select('body').append('div').attr('id', 'minimap-container');
     minimapSvg = minimapContainer.append('svg').attr('id', 'minimap-svg');
-
+    
     // ミニマップ用の地形レイヤーを追加
     const minimapTerrain = minimapSvg.append('g');
-
+    
     // メインマップ全体のサイズを計算
     const hexWidth = 2 * config.r;
     const hexHeight = Math.sqrt(3) * config.r;
-    const mapTotalWidth = (config.COLS * hexWidth * 3 / 4 + hexWidth / 4);
-    const mapTotalHeight = (config.ROWS * hexHeight + hexHeight / 2);
+    const mapTotalWidth = (config.COLS * hexWidth * 3/4 + hexWidth/4);
+    const mapTotalHeight = (config.ROWS * hexHeight + hexHeight/2);
 
     // スケールを設定 (マップ全体が200x200のSVGに収まるように)
     minimapScaleX = 200 / mapTotalWidth;
@@ -913,71 +1244,34 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .data(allHexes)
         .enter()
         .append('rect')
-        .attr('x', d => (d.col * (hexWidth * 3 / 4)) * scale)
-        .attr('y', d => (d.row * hexHeight + (d.col % 2 === 0 ? 0 : hexHeight / 2)) * scale)
-        .attr('width', hexWidth * scale)
-        .attr('height', hexHeight * scale)
-        .attr('fill', d => {
-            if (d.properties.isWater) return '#004'; // 海洋
-            if (d.properties.settlement === '首都') return '#f0f'; // 首都
-            if (d.properties.settlement === '都市' || d.properties.settlement === '領都') return '#f00f'; // 領都
-            if (d.properties.settlement === '街') return '#f80f'; // 街
-            if (d.properties.settlement === '町') return '#ff0f'; // 町
-            if (d.properties.settlement === '村') return '#0f0f'; // 村
-            if (d.properties.elevation >= 4000) return '#000'; // 山岳
-            if (d.properties.elevation >= 3000) return '#111'; // 山岳
-            if (d.properties.elevation >= 2000) return '#222'; // 山岳
-            if (d.properties.elevation >= 1000) return '#333'; // 山岳
-            return '#444'; // 平地・森林
-        });
+            .attr('x', d => (d.col * (hexWidth * 3 / 4)) * scale)
+            .attr('y', d => (d.row * hexHeight + (d.col % 2 === 0 ? 0 : hexHeight / 2)) * scale)
+            .attr('width', hexWidth * scale)
+            .attr('height', hexHeight * scale)
+            .attr('fill', d => {
+                if (d.properties.isWater) return '#004'; // 海洋
+                if (d.properties.elevation >= 2000) return '#222'; // 山岳
+                if (d.properties.settlement === '首都') return '#f0f'; // 首都
+                if (d.properties.settlement === '都市' || d.properties.settlement === '領都') return '#f004'; // 領都
+                if (d.properties.settlement === '街') return '#f804'; // 街
+                if (d.properties.settlement === '町') return '#ff04'; // 町
+                if (d.properties.settlement === '村') return '#0f04'; // 村
+                return '#000'; // 平地・森林
+            });
 
     // ビューポート矩形を初期状態で追加
     minimapViewport = minimapSvg.append('rect').attr('id', 'minimap-viewport');
 
-    // ミニマップを初期状態で非表示（アイコン表示）にする
-    minimapContainer.style('display', 'block').classed('hidden', true);
-
-    // --- ミニマップの表示切り替え機能 ---
-    // アイコン要素の作成
-    const minimapIcon = d3.select('body').append('div')
-        .attr('id', 'minimap-icon')
-        .html('<span class="material-icons-round">map</span>')
-        .style('display', 'flex'); // 初期状態で表示
-
-    // 切り替え関数の定義
-    const toggleMinimap = () => {
-        const isHidden = minimapContainer.classed('hidden');
-        if (isHidden) {
-            // 表示する
-            minimapContainer.classed('hidden', false);
-            minimapIcon.style('display', 'none');
-        } else {
-            // 非表示にする（アイコン化）
-            minimapContainer.classed('hidden', true);
-            minimapIcon.style('display', 'flex');
-        }
-    };
-
-    // イベントリスナーの登録
-    minimapContainer.on('click', (event) => {
-        event.stopPropagation(); // マップへのクリック伝播を防ぐ
-        toggleMinimap();
-    });
-
-    minimapIcon.on('click', (event) => {
-        event.stopPropagation();
-        toggleMinimap();
-    });
+    // ミニマップを表示
+    minimapContainer.style('display', 'block');
 
     const hexOverlapScale = 1.01; // 隙間を埋めるための拡大率を定義。1%拡大
-
+    
     infoWindow = document.getElementById('info-window');
     infoContent = document.getElementById('info-window-content');
     const infoCloseBtn = document.getElementById('info-close-btn');
 
-    // infoWindowモジュールの初期化
-    initInfoWindow(document.getElementById('legend-container'));
-    setAllHexesData(allHexes);
+    legendContainer = document.getElementById('legend-container');
 
     // --- 2. 描画用データの事前計算 ---
     hexes = []; // データをリセット
@@ -1001,7 +1295,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                 if (southNeighbor) southElevation = southNeighbor.properties.elevation;
             }
             const elevationDifference = southElevation - northElevation;
-
+            
             // 河川の流下方向を計算
             let downstreamIndex = -1;
             if (hexData.properties.flow > 0 && !hexData.properties.isWater) {
@@ -1013,11 +1307,11 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                         lowestNeighbor = n;
                     }
                 });
-                if (lowestNeighbor) {
+                if(lowestNeighbor) {
                     downstreamIndex = getIndex(lowestNeighbor.col, lowestNeighbor.row);
                 }
             }
-
+            
             // 稜線の流れを計算するロジック
             let ridgeUpstreamIndex = -1;
             if (hexData.properties.ridgeFlow > 0 && !hexData.properties.isWater) {
@@ -1044,12 +1338,12 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                 points: d3.range(6).map(i => [cx + config.r * Math.cos(Math.PI / 3 * i), cy + config.r * Math.sin(Math.PI / 3 * i)]),
                 properties: { ...hexData.properties, shadingValue: elevationDifference },
                 downstreamIndex: downstreamIndex,
-                ridgeUpstreamIndex: ridgeUpstreamIndex,
+                ridgeUpstreamIndex: ridgeUpstreamIndex, 
                 neighbors: hexData.neighbors,
             });
         }
     }
-
+    
     updateChildrenMap(allHexes);
 
     // --- 3. レイヤー管理のセットアップ ---
@@ -1102,7 +1396,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // --- 4. 静的なレイヤーの描画 (初回のみ) ---
 
     // ヘックスに依存せず、ズーム中に再描画する必要がないレイヤーをここで描画
-
+    
     // 4f. 国境線 (初回描画)
     drawBorders();
 
@@ -1111,8 +1405,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // 4g. 等高線
     await addLogMessage("等高線の補間計算を開始します...");
     // getBBox() は初回描画前に正確な値が取れないため、計算でマップ全体のサイズを算出する
-    const mapBBox = { x: 0, y: 0, width: (config.COLS * hexWidth * 3 / 4 + hexWidth / 4), height: (config.ROWS * hexHeight + hexHeight / 2) };
-    const resolution = config.CONTOUR_RESOLUTION;
+    const mapBBox = {x:0, y:0, width: (config.COLS * hexWidth * 3/4 + hexWidth/4), height: (config.ROWS * hexHeight + hexHeight/2)};
+    const resolution = 10;
     const gridWidth = Math.floor(mapBBox.width / resolution);
     const gridHeight = Math.floor(mapBBox.height / resolution);
     const elevationValues = new Array(gridWidth * gridHeight);
@@ -1146,15 +1440,15 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
     await addLogMessage("等高線のパスを生成中...");
     const maxElevation = d3.max(hexes, h => h.properties.elevation);
-    const thresholds = d3.range(config.CONTOUR_INTERVAL, maxElevation, config.CONTOUR_INTERVAL);
+    const thresholds = d3.range(200, maxElevation, 200);
     const contours = d3.contours().size([gridWidth, gridHeight]).thresholds(thresholds)(elevationValues);
     contourLayer.selectAll("path")
         .data(contours).join("path")
         .attr("class", d => `contour-path ${d.value % 1000 === 0 ? 'contour-index' : 'contour-intermediate'}`)
-        .attr("d", d3.geoPath()).attr("transform", `translate(${mapBBox.x - resolution / 2}, ${mapBBox.y - resolution / 2}) scale(${resolution})`);
-
+        .attr("d", d3.geoPath()).attr("transform", `translate(${mapBBox.x}, ${mapBBox.y}) scale(${resolution})`);
+    
     // 4h. 河川と稜線
-
+    
     // --- 河川の曲線パスデータを生成 ---
     const riverPathData = [];
     hexes.forEach(d => {
@@ -1184,7 +1478,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             }
         }
     });
-
+    
     // --- 稜線の曲線パスデータを生成 ---
     const ridgePathData = [];
     hexes.forEach(sourceHex => {
@@ -1202,7 +1496,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             }
 
             if (!endPoint) return; // 終点が計算できなければスキップ
-
+            
             // 制御点をヘックスの中心に設定
             const controlPoint = [sourceHex.cx, sourceHex.cy];
 
@@ -1222,7 +1516,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             }
         }
     });
-
+    
     // --- 各レイヤーへの描画 ---
 
     // 河川レイヤーに描画
@@ -1230,48 +1524,48 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .data(riverPathData)
         .enter()
         .append('path')
-        .attr('class', 'river-segment')
-        .attr('d', d => d.path)
-        .attr('stroke', config.TERRAIN_COLORS.河川)
-        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
-        .attr('stroke-linecap', 'round')
-        .style('pointer-events', 'none');
-
+            .attr('class', 'river-segment')
+            .attr('d', d => d.path)
+            .attr('stroke', config.TERRAIN_COLORS.河川) 
+            .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
+            .attr('stroke-linecap', 'round')
+            .style('pointer-events', 'none');
+        
     // 稜線・水系図レイヤーに描画
     ridgeWaterSystemLayer.selectAll('.rws-water-hex')
         .data(hexes.filter(d => d.properties.isWater))
         .enter()
         .append('polygon')
-        .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-        .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-        .attr('fill', config.RIDGE_WATER_SYSTEM_COLORS.RIVER);
-
+            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
+            .attr('fill', config.RIDGE_WATER_SYSTEM_COLORS.RIVER);
+        
     ridgeWaterSystemLayer.selectAll('.rws-river-segment')
         .data(riverPathData)
         .enter()
         .append('path')
-        .attr('d', d => d.path)
-        .attr('stroke', config.RIDGE_WATER_SYSTEM_COLORS.RIVER)
-        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
-        .attr('stroke-linecap', 'round')
-        .style('fill', 'none');
-
+            .attr('d', d => d.path)
+            .attr('stroke', config.RIDGE_WATER_SYSTEM_COLORS.RIVER)
+            .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
+            .attr('stroke-linecap', 'round')
+            .style('fill', 'none');
+        
     ridgeWaterSystemLayer.selectAll('.rws-ridge-segment')
         .data(ridgePathData) // 稜線の曲線データを使用
         .enter()
         .append('path') // pathで描画
-        .attr('d', d => d.path)
-        .attr('stroke', config.RIDGE_WATER_SYSTEM_COLORS.RIDGE)
-        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 1.5, config.r * 0.8))
-        .attr('stroke-linecap', 'round')
-        .style('fill', 'none'); // fillを無効化
-
+            .attr('d', d => d.path)
+            .attr('stroke', config.RIDGE_WATER_SYSTEM_COLORS.RIDGE)
+            .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 1.5, config.r * 0.8))
+            .attr('stroke-linecap', 'round')
+            .style('fill', 'none'); // fillを無効化
+    
     // 4i. 道路網 (初回描画)
     drawRoads(roadPaths);
-
+        
     // --- 5. 情報ウィンドウとインタラクション ---
-
-
+    
+    
     // パフォーマンス向上のため、ズーム操作中のレイヤー表示を制御する
     const zoom = d3.zoom()
         .scaleExtent([0.2, 10])
@@ -1289,19 +1583,19 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .on('zoom', (event) => {
             // ズーム中は全体の変形のみ適用
             g.attr('transform', event.transform);
-            // 現在のズーム状態を保存
+            // ★★★ [新規] 現在のズーム状態を保存 ★★★
             currentTransform = event.transform;
             updateMinimapViewport(event.transform);
         })
         .on('end', (event) => {
             // ズーム終了時に、もともと表示すべきレイヤーを再表示する
             Object.entries(layers).forEach(([name, layer]) => {
-                if (layer.visible) {
+                 if (layer.visible) {
                     // 基本地図の切り替え状態を考慮
                     if (name === 'terrain' && d3.select('input[value="white"]').property('checked')) {
                         layer.group.style('display', 'none');
                     } else if (name === 'white-map-overlay' && !d3.select('input[value="white"]').property('checked')) {
-                        layer.group.style('display', 'none');
+                         layer.group.style('display', 'none');
                     } else {
                         layer.group.style('display', 'inline');
                     }
@@ -1317,16 +1611,15 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
     const closeInfoWindowAndHighlight = () => {
         infoWindow.classList.add('hidden');
-        adjustSidebarHeight();
         highlightOverlayLayer.selectAll('*').remove();
     };
     infoCloseBtn.addEventListener('click', closeInfoWindowAndHighlight);
     svg.on('click', closeInfoWindowAndHighlight);
 
     // --- 6. UIイベントハンドラの設定 ---
-
+    
     // 6a. 基本地図の切り替え
-    d3.selectAll('input[name="map-type"]').on('change', function () {
+     d3.selectAll('input[name="map-type"]').on('change', function() {
         const selectedType = d3.select(this).property('value');
         const isWhiteMap = selectedType === 'white';
         layers.terrain.group.style('display', isWhiteMap ? 'none' : 'inline');
@@ -1339,15 +1632,15 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
     // 6b. レイヤーカテゴリのボタン
     // 植生ボタンの処理を、他のボタンと統一する
-    d3.select('#toggleVegetationLayer').on('click', function () {
+    d3.select('#toggleVegetationLayer').on('click', function() {
         // 植生と積雪は連動させる
         toggleLayerVisibility('vegetation-overlay', this);
-        toggleLayerVisibility('snow', this);
+        toggleLayerVisibility('snow', this); 
         // 変更を即時反映するために描画関数を呼び出す
         updateVisibleHexes(d3.zoomTransform(svg.node()));
     });
-
-    d3.select('#toggleSettlementLayer').on('click', function () {
+    
+    d3.select('#toggleSettlementLayer').on('click', function() {
         toggleLayerVisibility('settlement', this);
         const isVisible = layers.settlement.visible;
         layers.border.visible = isVisible;
@@ -1356,28 +1649,28 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         updateVisibleHexes(d3.zoomTransform(svg.node()));
     });
 
-    d3.select('#toggleHexBorderLayer').on('click', function () {
-        toggleLayerVisibility('hex-border', this);
+    d3.select('#toggleHexBorderLayer').on('click', function() { 
+        toggleLayerVisibility('hex-border', this); 
         updateVisibleHexes(d3.zoomTransform(svg.node()));
     });
-    d3.select('#toggleReliefLayer').on('click', function () {
-        toggleLayerVisibility('shading', this);
+    d3.select('#toggleReliefLayer').on('click', function() { 
+        toggleLayerVisibility('shading', this); 
         updateVisibleHexes(d3.zoomTransform(svg.node()));
     });
-    d3.select('#toggleContourLayer').on('click', function () {
-        toggleLayerVisibility('contour', this);
+    d3.select('#toggleContourLayer').on('click', function() { 
+        toggleLayerVisibility('contour', this); 
         // 等高線は静的レイヤーなので直接表示を切り替えるだけで良い
     });
-    d3.select('#toggleRoadLayer').on('click', function () {
-        toggleLayerVisibility('road', this);
+    d3.select('#toggleRoadLayer').on('click', function() { 
+        toggleLayerVisibility('road', this); 
         // 道路網は静的レイヤーなので直接表示を切り替えるだけで良い
     });
-    d3.select('#toggleTerritoryLayer').on('click', function () {
-        toggleLayerVisibility('territory-overlay', this);
+    d3.select('#toggleTerritoryLayer').on('click', function() { 
+        toggleLayerVisibility('territory-overlay', this); 
         updateVisibleHexes(d3.zoomTransform(svg.node()));
     });
-    d3.select('#toggleRidgeWaterSystemLayer').on('click', function () {
-        toggleLayerVisibility('ridge-water-system', this);
+    d3.select('#toggleRidgeWaterSystemLayer').on('click', function() { 
+        toggleLayerVisibility('ridge-water-system', this); 
         // 稜線水系図は静的レイヤーなので直接表示を切り替えるだけで良い
     });
 
@@ -1394,7 +1687,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const geoInfoButtonSelectors = Object.keys(geoInfoButtons);
 
     geoInfoButtonSelectors.forEach(selector => {
-        d3.select(selector).on('click', function () {
+        d3.select(selector).on('click', function() {
             const clickedButton = this;
             const targetLayerName = geoInfoButtons[selector];
             const isDisabling = clickedButton.classList.contains('active');
@@ -1428,7 +1721,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // 6d. 資源カテゴリのボタン
     const resourceButtons = ['#toggleManaLayer', '#toggleAgriLayer', '#toggleForestLayer', '#toggleMiningLayer', '#toggleFishingLayer', '#toggleHuntingLayer', '#togglePastoralLayer', '#toggleLivestockLayer'];
     resourceButtons.forEach(selector => {
-        d3.select(selector).on('click', function () {
+        d3.select(selector).on('click', function() {
             const layerName = selector.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();
             toggleLayerVisibility(layerName, this);
             // 変更を即時反映するために描画関数を呼び出す
@@ -1443,10 +1736,10 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         const svgWidth = svg.node().getBoundingClientRect().width;
         const svgHeight = svg.node().getBoundingClientRect().height;
         const initialTransform = d3.zoomIdentity.translate(svgWidth / 2 - targetHex.cx, svgHeight / 2 - targetHex.cy).scale(1.0);
-
+        
         // D3にtransformを適用させる
         svg.call(zoom.transform, initialTransform);
-
+        
         // 適用されたtransformを基に、初回の表示要素を描画する
         updateVisibleHexes(initialTransform);
         updateOverallInfo(allHexes);
@@ -1467,7 +1760,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
  */
 function updateHexesData(updatedAllHexes) {
     if (!hexes || hexes.length === 0) return;
-
+    
     // ヘルパー関数を内部に定義
     function calculateShading(hexData, allHexes) {
         let northElevation = hexData.properties.elevation;
@@ -1485,7 +1778,7 @@ function updateHexesData(updatedAllHexes) {
 
     updatedAllHexes.forEach((h, index) => {
         if (hexes[index]) {
-            // プロパティをマージするのではなく、完全に上書きする
+            // ★★★ [ここを修正] プロパティをマージするのではなく、完全に上書きする ★★★
             // これにより、roadGeneratorで変更された nationId が確実に反映される
             hexes[index].properties = h.properties;
             // 描画用のシェーディング値のみ、追加で計算する
@@ -1500,7 +1793,7 @@ function updateHexesData(updatedAllHexes) {
  */
 export async function redrawClimate(allHexes) {
     updateHexesData(allHexes);
-    // updateVisibleHexesを呼び出して、表示を完全に再構築する
+    // ★★★ [修正] updateVisibleHexesを呼び出して、表示を完全に再構築する ★★★
     if (svg) updateVisibleHexes(currentTransform);
     console.log("気候・植生が更新され、再描画されました。");
 }
@@ -1511,10 +1804,9 @@ export async function redrawClimate(allHexes) {
  */
 export async function redrawSettlements(allHexes) {
     updateHexesData(allHexes);
-    setAllHexesData(allHexes); // infoWindow側のデータも更新
     updateChildrenMap(allHexes);
     updateOverallInfo(allHexes);
-    // updateVisibleHexesを呼び出して、表示を完全に再構築する
+    // ★★★ [修正] updateVisibleHexesを呼び出して、表示を完全に再構築する ★★★
     if (svg) updateVisibleHexes(currentTransform);
     console.log("集落が更新され、再描画されました。");
 }
@@ -1526,29 +1818,25 @@ export async function redrawSettlements(allHexes) {
  */
 export async function redrawRoadsAndNations(allHexes, roadPaths) {
     updateHexesData(allHexes);
-    setAllHexesData(allHexes); // infoWindow側のデータも更新
     updateChildrenMap(allHexes);
-    updateOverallInfo(allHexes);
+    updateOverallInfo(allHexes); // ？
 
     // 静的レイヤーを新しいデータで再描画
     drawRoads(roadPaths);
     drawBorders();
     drawBeaches(hexes);
-
-    // updateVisibleHexesを呼び出して、表示を完全に再構築する
+    
+    // ★★★ [修正] updateVisibleHexesを呼び出して、表示を完全に再構築する ★★★
     if (svg) updateVisibleHexes(currentTransform);
     console.log("道路・国家が更新され、再描画されました。");
 }
 
 /**
- * UIの状態をリセットする関数
+ * ★★★ [新規] UIの状態をリセットする関数 ★★★
  */
 export function resetUI() {
     if (minimapContainer) {
         minimapContainer.remove(); // 古いミニマップを削除
         minimapContainer = null;
     }
-    d3.select('#minimap-icon').remove(); // アイコンも削除
 }
-
-

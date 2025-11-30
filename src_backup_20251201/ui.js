@@ -1550,5 +1550,3 @@ export function resetUI() {
     }
     d3.select('#minimap-icon').remove(); // アイコンも削除
 }
-
-
