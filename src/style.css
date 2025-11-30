@@ -768,7 +768,11 @@ button.active:hover {
     overflow: visible;
     pointer-events: auto;
 
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, visibility 0.2s;
+}
+
+#info-window.hidden {
+    visibility: hidden;
 }
 
 .info-window-header {
