@@ -599,6 +599,9 @@ function downloadWorldData() {
 // ================================================================
 
 async function generateNewWorld() {
+    // 再生成の通知を送信 (非同期で実行し、完了を待たない)
+    notifyRegenerationAttempt();
+
     resetWorld();
 
     loadingOverlay.style.display = 'flex';

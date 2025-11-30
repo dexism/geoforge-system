@@ -4,6 +4,7 @@
 
 // ターゲットのスプレッドシートIDを設定
 const SPREADSHEET_ID = '1WJqsaohJoXxwRcREsyZzA0ihvSOpfMXI7CnQfZX68PE';
+const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1441760230688948335/zrk2DbmQY7t6LTYEaERiVZfofZDl8-7bAbTa8jsFAGWrjBOAX6eIwhybY1cpRIMM6wyo';
 
 // 各データを保存するシート名
 const HEX_SHEET_NAME = 'HexData';
@@ -52,6 +53,15 @@ function doGet(e) {
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
+
+    // --- 【追加】強制再生成の通知リクエストの場合 ---
+    if (data.type === 'notification' && data.action === 'force_regenerate') {
+      sendRegenerateNotification(data.ipData, data.userAgent);
+      return ContentService
+        .createTextOutput(JSON.stringify({ status: 'success', message: 'Notification sent' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     const allHexes = data.allHexes;
     const roadPaths = data.roadPaths;
 
@@ -157,4 +167,91 @@ function valuesToObjects(values) {
         objects.push(obj);
     }
     return objects;
+}
+
+/**
+ * 【新設】強制再生成の通知をDiscordに送る関数
+ */
+function sendRegenerateNotification(ipData, userAgent) {
+  // IPデータが取得できなかった場合のフォールバック
+  const ip = ipData.ip || "不明";
+  const location = `${ipData.city || "不明"}, ${ipData.region || ""} (${ipData.country_name || "不明"})`;
+  const org = ipData.org || "不明";
+  
+  const payload = {
+    username: "GeoForge監視システム", // 送信者名
+    content: "# 👀 誰かが「強制再生成」に興味があるようですね...\nhttps://geoforge-system.onrender.com/", // メッセージ本文
+    embeds: [{
+      title: `⚠️ 世界の再構築がリクエストされました`,
+      description: "Webアプリ上の「強制再生成」ボタンがクリックされました。",
+      color: 15158332, // 赤系 (0xE74C3C)
+      fields: [
+        {
+          name: "📡 IPアドレス",
+          value: ip,
+          inline: true
+        },
+        {
+          name: "📍 推定位置",
+          value: location,
+          inline: true
+        },
+        {
+          name: "🏢 プロバイダ/組織",
+          value: org,
+          inline: false
+        },
+        {
+          name: "💻 ユーザーエージェント",
+          value: userAgent || "不明",
+          inline: false
+        }
+      ],
+      footer: {
+        text: "GeoForge System Security Log"
+      },
+      timestamp: new Date().toISOString()
+    }]
+  };
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload)
+  };
+
+  try {
+    UrlFetchApp.fetch(DISCORD_WEBHOOK_URL, options);
+  } catch (e) {
+    // 通知エラーでもメイン処理は止めないためログのみ残す
+    console.error("Discord通知エラー: " + e.toString());
+  }
+}
+
+/**
+ * Discord通知のテストと権限承認用関数
+ * エディタ上部のプルダウンからこの関数を選択し、「実行」を押してください。
+ * 初回実行時に「外部サービスへの接続許可」が求められます。
+ */
+function testDiscordNotification() {
+  // テスト用のダミーIP情報
+  const testIpData = {
+    ip: "127.0.0.1 (Test)",
+    city: "Test City",
+    region: "Test Region",
+    country_name: "Test Country",
+    org: "Test Provider Auth Check"
+  };
+  
+  // テスト用のUserAgent
+  const testUserAgent = "GAS Debugger / Test Execution";
+  
+  Logger.log("通知テスト開始");
+  try {
+    // 実装済みの通知関数を呼び出し
+    sendRegenerateNotification(testIpData, testUserAgent);
+    Logger.log("通知テスト成功！Discordを確認してください。");
+  } catch (e) {
+    Logger.log("通知テスト失敗: " + e.toString());
+  }
 }
