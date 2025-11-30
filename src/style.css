@@ -500,6 +500,7 @@ button.active:hover {
     font-size: 12px;
     font-weight: 900;
     stroke-width: 0.6px;
+    pointer-events: none;
 }
 
 /* 座標ラベル (000 000) */
@@ -507,11 +508,13 @@ button.active:hover {
 .hex-label {
     fill: #333;
     font-weight: 900;
+    pointer-events: none;
 }
 
 /* 魔力・資源ラベル */
 .property-label {
     font-weight: bold;
+    pointer-events: none;
 }
 
 /* ================================================================
@@ -593,6 +596,7 @@ button.active:hover {
     white-space: pre-wrap;
     line-height: 1.6;
     box-sizing: border-box;
+    pointer-events: none;
 }
 
 /* ================================================================
@@ -609,12 +613,14 @@ button.active:hover {
 
 /* 主曲線 (200mごと) */
 .contour-intermediate {
-    stroke-width: 0.1px;
+    stroke-width: 0.05px;
+    pointer-events: none;
 }
 
 /* 計曲線 (1000mごと) */
 .contour-index {
-    stroke-width: 0.2px;
+    stroke-width: 0.1px;
+    pointer-events: none;
 }
 
 /* ================================================================

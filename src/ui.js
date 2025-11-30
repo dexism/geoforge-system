@@ -563,7 +563,7 @@ function getInfoText(d) {
     // --- ヘルパー: アイコン付き行の生成 ---
     const createRow = (icon, label, value, unit = '') => {
         return `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${icon}</span>${label}</span><span class="value">${value}${unit}</span></div>`;
-};
+    };
 
     // --- 1. 基本情報カード ---
     let basicInfoHtml = '';
@@ -646,7 +646,7 @@ function getInfoText(d) {
 
     // --- 3. 産業構造カード (存在する場合) ---
     let industryCard = '';
-    if (p.population > 0) { 
+    if (p.population > 0) {
         if (p.industry) {
             let industryHtml = '';
 
@@ -1546,7 +1546,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     await addLogMessage("等高線の補間計算を開始します...");
     // getBBox() は初回描画前に正確な値が取れないため、計算でマップ全体のサイズを算出する
     const mapBBox = { x: 0, y: 0, width: (config.COLS * hexWidth * 3 / 4 + hexWidth / 4), height: (config.ROWS * hexHeight + hexHeight / 2) };
-    const resolution = 10;
+    const resolution = config.CONTOUR_RESOLUTION;
     const gridWidth = Math.floor(mapBBox.width / resolution);
     const gridHeight = Math.floor(mapBBox.height / resolution);
     const elevationValues = new Array(gridWidth * gridHeight);
@@ -1580,12 +1580,12 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
     await addLogMessage("等高線のパスを生成中...");
     const maxElevation = d3.max(hexes, h => h.properties.elevation);
-    const thresholds = d3.range(200, maxElevation, 200);
+    const thresholds = d3.range(config.CONTOUR_INTERVAL, maxElevation, config.CONTOUR_INTERVAL);
     const contours = d3.contours().size([gridWidth, gridHeight]).thresholds(thresholds)(elevationValues);
     contourLayer.selectAll("path")
         .data(contours).join("path")
         .attr("class", d => `contour-path ${d.value % 1000 === 0 ? 'contour-index' : 'contour-intermediate'}`)
-        .attr("d", d3.geoPath()).attr("transform", `translate(${mapBBox.x}, ${mapBBox.y}) scale(${resolution})`);
+        .attr("d", d3.geoPath()).attr("transform", `translate(${mapBBox.x - resolution / 2}, ${mapBBox.y - resolution / 2}) scale(${resolution})`);
 
     // 4h. 河川と稜線
 
