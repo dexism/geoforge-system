@@ -323,7 +323,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
     allHexes.forEach(h => {
         h.properties.demographics = calculateDemographics(h);
         h.properties.facilities = calculateFacilities(h);
-    });
+            });
 
     allHexes.forEach(h => {
         h.properties.livingConditions = calculateLivingConditions(h, allHexes);
@@ -379,22 +379,6 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
             const dProps = descendant.properties;
 
             // 1. 配下集落のデータを合計に加算
-            aggregatedData.population += dProps.population;
-            aggregatedData.cultivatedArea += dProps.cultivatedArea;
-            for (const item in dProps.production) {
-                aggregatedData.production[item] = (aggregatedData.production[item] || 0) + dProps.production[item];
-            }
-
-            // 2. 「直轄地」の種類をカウント
-            if (dProps.parentHexId === hubIndex) {
-                if (dProps.settlement && aggregatedData.settlementCounts[dProps.settlement] !== undefined) {
-                    aggregatedData.settlementCounts[dProps.settlement]++;
-                }
-            }
-
-            // 3. さらにその下の子孫をキューに追加
-            const descendantIndex = getIndex(descendant.col, descendant.row);
-            const grandchildren = childrenMap.get(descendantIndex) || [];
             grandchildren.forEach(child => {
                 const childIndex = getIndex(child.col, child.row);
                 if (!visited.has(childIndex)) {
@@ -756,6 +740,7 @@ export function calculateFacilities(hex) {
         facilities['工房'] = Math.ceil(demo['職人'] / 10);
     }
 
+
     if (demo['神官・医師・薬師']) {
         facilities['教会'] = Math.ceil(demo['神官・医師・薬師'] / 10);
         facilities['診療所'] = Math.ceil(demo['神官・医師・薬師'] / 5);
@@ -763,6 +748,14 @@ export function calculateFacilities(hex) {
 
     if (demo['錬金術師']) {
         facilities['魔道具店'] = Math.ceil(demo['錬金術師'] / 15);
+        facilities['錬金工房'] = Math.ceil(demo['錬金術師'] / 10);
+    }
+    if (demo['学者・研究員']) {
+        facilities['図書館'] = Math.ceil(demo['学者・研究員'] / 50);
+        facilities['研究塔'] = Math.ceil(demo['学者・研究員'] / 30);
+        if (['首都', '都市', '領都', '街'].includes(p.settlement)) {
+            facilities['学院'] = Math.ceil(demo['学者・研究員'] / 100);
+        }
     }
     if (demo['冒険者']) {
         facilities['職能ギルド'] = Math.ceil(demo['冒険者'] / 100);
@@ -779,8 +772,10 @@ export function calculateFacilities(hex) {
         if (['首都', '都市', '領都'].includes(p.settlement)) {
             facilities['港湾'] = 1;
             facilities['造船所'] = 1;
+            facilities['魚市場'] = 1;
         } else if (['街', '町'].includes(p.settlement)) {
             facilities['船着場'] = 1;
+            facilities['魚市場'] = 1;
         }
     }
 
@@ -819,9 +814,12 @@ export function calculateLivingConditions(h, allHexes) {
     let baseHunger = Math.min(1.0, foodShortage / (totalFoodDemand || 1));
     if (isNaN(baseHunger)) baseHunger = 0;
 
-    // 輸入による飢餓緩和
-    if (['首都', '都市', '領都', '街'].includes(p.settlement) && (p.roadLevel || 0) >= 3) {
-        const importCap = (p.roadLevel || 0) * 0.1;
+    // 輸入による飢餓緩和 (港湾都市や交易路がある場合)
+    // 修正: 緩和効果を強化し、港湾都市はさらに優遇
+    if (['首都', '都市', '領都', '街'].includes(p.settlement)) {
+        let importCap = (p.roadLevel || 0) * 0.15; // 0.1 -> 0.15
+        if (p.isCoastal) importCap += 0.3; // 港湾ボーナス
+
         baseHunger = Math.max(0, baseHunger - importCap);
     }
     conditions.hunger = baseHunger;
@@ -830,9 +828,16 @@ export function calculateLivingConditions(h, allHexes) {
     const demo = p.demographics || {};
     const poorPop = (demo['浮浪者'] || 0) + (demo['スラム街住人'] || 0) +
         ((demo['農夫'] || 0) + (demo['鉱夫'] || 0) + (demo['漁師'] || 0) + (demo['木こり'] || 0)) * 0.5;
-    conditions.poverty = Math.min(1.0, poorPop / p.population);
 
-    // 3. Luxury (生活水準としての贅沢度)
+    let rawPoverty = Math.min(1.0, poorPop / p.population);
+
+    // 食料余剰による貧困感の緩和 (現金がなくても食べていける)
+    if (p.surplus && p.surplus['食料'] > 0) {
+        const surplusPerCapita = parseFloat(p.surplus['食料']) / (p.population || 1);
+        const mitigation = Math.min(0.4, surplusPerCapita * 2.0);
+        rawPoverty = rawPoverty * (1.0 - mitigation);
+    }
+    conditions.poverty = parseFloat(rawPoverty.toFixed(3));
     let luxurySupply = 0;
     if (p.production) {
         luxurySupply += (p.production['酒(穀物)'] || 0) + (p.production['酒(果実)'] || 0);
