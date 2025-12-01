@@ -302,26 +302,32 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         // 食料需給計算 (既存ロジックの維持)
         // =================================================
         const totalDemand = p.population * settlementInfo.consumption_t_per_person;
-            let totalSupply = 0;
+        let totalSupply = 0;
 
-            // 第一次産業で生産された食料品目を集計
-            const foodItems = ['小麦', '大麦', '雑穀', '稲', '魚介類', '狩猟肉', '牧畜肉', '家畜肉', '乳製品', '果物'];
-            foodItems.forEach(item => {
-                if (prod1[item]) {
-                    totalSupply += prod1[item];
-                }
-            });
-
-            const balance = totalSupply - totalDemand;
-
-            // 余剰・不足の計算
-            if (balance > 0) { p.surplus['食料'] = balance.toFixed(1); }
-            else { p.shortage['食料'] = Math.abs(balance).toFixed(1); }
-
-            // 人口構成と施設数の計算
-            p.demographics = calculateDemographics(h);
-            p.facilities = calculateFacilities(h);
+        // 第一次産業で生産された食料品目を集計
+        const foodItems = ['小麦', '大麦', '雑穀', '稲', '魚介類', '狩猟肉', '牧畜肉', '家畜肉', '乳製品', '果物'];
+        foodItems.forEach(item => {
+            if (prod1[item]) {
+                totalSupply += prod1[item];
+            }
         });
+
+        const balance = totalSupply - totalDemand;
+
+        // 余剰・不足の計算
+        if (balance > 0) { p.surplus['食料'] = balance.toFixed(1); }
+        else { p.shortage['食料'] = Math.abs(balance).toFixed(1); }
+    });
+
+    // 2nd Pass: Calculate Demographics, Facilities, and Living Conditions
+    allHexes.forEach(h => {
+        h.properties.demographics = calculateDemographics(h);
+        h.properties.facilities = calculateFacilities(h);
+    });
+
+    allHexes.forEach(h => {
+        h.properties.livingConditions = calculateLivingConditions(h, allHexes);
+    });
 
     return allHexes;
 }
@@ -628,11 +634,6 @@ export async function calculateRoadTraffic(allHexes, roadPaths, addLogMessage) {
     return allHexes;
 }
 
-/**
- * 人口構成（デモグラフィクス）を計算する
- * @param {object} hex - ヘックスオブジェクト
- * @returns {object} - 職業別人口
- */
 export function calculateDemographics(hex) {
     const p = hex.properties;
     const totalPop = p.population;
@@ -641,15 +642,12 @@ export function calculateDemographics(hex) {
     const demo = {};
 
     const settlementType = p.settlement || '散居';
-    // configから取得、なければデフォルト値
     const alloc = config.INDUSTRY_ALLOCATION[settlementType] || { 1: 0.8, 2: 0.1, 3: 0.1, 4: 0, 5: 0 };
     const settlementInfo = config.SETTLEMENT_PARAMS[settlementType] || { labor_rate: 0.6 };
 
     const laborPop = totalPop * settlementInfo.labor_rate;
 
-    // --- 階級別割り当て ---
-
-    // A. 上流階級 (貴族・騎士)
+    // A. 上流階級
     let nobleRate = 0;
     if (settlementType === '首都') nobleRate = 0.02;
     else if (settlementType === '都市') nobleRate = 0.01;
@@ -657,27 +655,22 @@ export function calculateDemographics(hex) {
     else if (settlementType === '街') nobleRate = 0.005;
 
     demo['貴族'] = Math.floor(totalPop * nobleRate);
-
-    // 騎士: 貴族の警護や軍事指導。貴族の数に比例 + 拠点防衛
     demo['騎士'] = Math.floor(demo['貴族'] * 2 + (p.fortress ? 50 : 0));
 
-    // B. 軍事・治安 (軍人・衛兵・傭兵)
-    let securityRate = 0.01; // 基本治安維持
+    // B. 軍事・治安
+    let securityRate = 0.01;
     if (p.monsterRank === 'S') securityRate += 0.05;
     else if (p.monsterRank === 'A') securityRate += 0.03;
     else if (p.monsterRank === 'B') securityRate += 0.02;
 
-    // 首都・都市は軍隊が駐屯
     if (['首都', '都市', '領都'].includes(settlementType)) securityRate += 0.02;
 
     const totalSecurity = Math.floor(totalPop * securityRate);
-
     demo['正規兵'] = Math.floor(totalSecurity * 0.6);
     demo['衛兵・自警団'] = Math.floor(totalSecurity * 0.3);
     demo['傭兵'] = Math.max(0, totalSecurity - demo['正規兵'] - demo['衛兵・自警団']);
 
     // C. 産業別労働者
-    // 第一次
     const labor1 = laborPop * alloc[1];
     const pot = {
         agri: p.agriPotential || 0,
@@ -695,34 +688,29 @@ export function calculateDemographics(hex) {
     demo['漁師'] = Math.floor(labor1 * (pot.fish / totalPot1));
     demo['牧童'] = Math.floor(labor1 * ((pot.pastoral + pot.livestock) / totalPot1));
 
-    // 第二次 (職人)
     const labor2 = laborPop * alloc[2];
     demo['鍛冶屋'] = Math.floor(labor2 * 0.2);
     demo['職人'] = Math.floor(labor2 * 0.5);
     demo['建築夫'] = Math.floor(labor2 * 0.3);
 
-    // 第三次 (商人・サービス)
     const labor3 = laborPop * alloc[3];
     demo['商人'] = Math.floor(labor3 * 0.4);
     demo['宿屋・店員'] = Math.floor(labor3 * 0.3);
     demo['神官・医師・薬師'] = Math.floor(labor3 * 0.1);
     demo['御者・船員'] = Math.floor(labor3 * 0.2);
 
-    // 第四次 (知識)
     const labor4 = laborPop * alloc[4];
     if (labor4 > 0) {
         demo['学者・研究員'] = Math.floor(labor4 * 0.6);
         demo['錬金術師'] = Math.floor(labor4 * 0.4);
     }
 
-    // 第五次 (統治・特殊)
     const labor5 = laborPop * alloc[5];
     if (labor5 > 0) {
         demo['官僚・役人'] = Math.floor(labor5 * 0.7);
         demo['芸術家'] = Math.floor(labor5 * 0.3);
     }
 
-    // D. その他 (冒険者、スラム)
     let adventurerRate = 0;
     if (['首都', '都市', '領都', '街'].includes(settlementType)) {
         adventurerRate = 0.005;
@@ -740,29 +728,21 @@ export function calculateDemographics(hex) {
     return demo;
 }
 
-/**
- * 施設数を計算する
- * @param {object} hex - ヘックスオブジェクト
- * @returns {object} - 施設数
- */
 export function calculateFacilities(hex) {
     const p = hex.properties;
     const demo = p.demographics || {};
     const facilities = {};
 
-    // 1. 商業施設
     if (demo['商人']) {
         facilities['商会・商店'] = Math.ceil(demo['商人'] / 5);
         facilities['行商・露店'] = Math.ceil(demo['商人'] / 2);
     }
 
-    // 2. 飲食・宿泊
     if (demo['宿屋・店員']) {
         facilities['宿屋'] = Math.ceil(demo['宿屋・店員'] / 10);
         facilities['酒場・食堂'] = Math.ceil(demo['宿屋・店員'] / 5);
     }
 
-    // 3. 工房
     if (demo['鍛冶屋']) {
         facilities['鍛冶屋'] = Math.ceil(demo['鍛冶屋'] / 3);
     }
@@ -770,13 +750,11 @@ export function calculateFacilities(hex) {
         facilities['工房'] = Math.ceil(demo['職人'] / 4);
     }
 
-    // 4. 医療・宗教
     if (demo['神官・医師・薬師']) {
         facilities['教会'] = Math.ceil(demo['神官・医師・薬師'] / 5);
         facilities['診療所'] = Math.ceil(demo['神官・医師・薬師'] / 3);
     }
 
-    // 5. 特殊
     if (demo['錬金術師']) {
         facilities['魔道具店'] = Math.ceil(demo['錬金術師'] / 10);
     }
@@ -784,7 +762,6 @@ export function calculateFacilities(hex) {
         facilities['職能ギルド'] = Math.ceil(demo['冒険者'] / 50);
     }
 
-    // 6. 公共
     if (['首都', '都市', '領都'].includes(p.settlement)) {
         facilities['役所'] = 1;
         if (p.settlement === '首都') facilities['王城'] = 1;
@@ -796,4 +773,141 @@ export function calculateFacilities(hex) {
     }
 
     return facilities;
+}
+
+export function calculateLivingConditions(h, allHexes) {
+    const p = h.properties;
+    const conditions = {
+        hunger: 0,
+        poverty: 0,
+        luxury: 0,
+        security: 50,
+        prices: { food: 1.0, necessities: 1.0, luxury: 1.0 },
+        tax: 0,
+        happiness: 50
+    };
+
+    if (!p.population || p.population <= 0) return conditions;
+
+    // 1. Hunger
+    const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement] || config.SETTLEMENT_PARAMS['散居'];
+    const consumptionUnit = settlementInfo ? settlementInfo.consumption_t_per_person : 0.1;
+    const totalFoodDemand = p.population * consumptionUnit;
+    const foodShortage = p.shortage && p.shortage['食料'] ? parseFloat(p.shortage['食料']) : 0;
+
+    conditions.hunger = Math.min(1.0, foodShortage / (totalFoodDemand || 1));
+    if (isNaN(conditions.hunger)) conditions.hunger = 0;
+
+    // 2. Poverty
+    const demo = p.demographics || {};
+    const poorPop = (demo['浮浪者'] || 0) + (demo['スラム街住人'] || 0) +
+        ((demo['農夫'] || 0) + (demo['鉱夫'] || 0) + (demo['漁師'] || 0) + (demo['木こり'] || 0)) * 0.5;
+    conditions.poverty = Math.min(1.0, poorPop / p.population);
+
+    // 3. Luxury
+    let luxurySupply = 0;
+    if (p.production) {
+        luxurySupply += (p.production['酒(穀物)'] || 0) + (p.production['酒(果実)'] || 0);
+        luxurySupply += (p.production['織物'] || 0) * 0.5;
+        luxurySupply += (p.production['ポーション・魔導具'] || 0) * 2;
+        luxurySupply += (p.production['芸術・文化'] || 0) * 5;
+    }
+    conditions.luxury = Math.min(1.0, luxurySupply / (p.population * 0.01));
+
+    // 4. Security
+    let securityScore = 50;
+    const securityForces = (demo['衛兵・自警団'] || 0) + (demo['騎士'] || 0) * 5 + (demo['正規兵'] || 0) * 2;
+    securityScore += Math.min(30, (securityForces / p.population) * 1000);
+
+    const facilities = p.facilities || {};
+    if (facilities['兵舎']) securityScore += 5;
+    if (facilities['砦']) securityScore += 10;
+    if (facilities['役所']) securityScore += 5;
+    if (facilities['教会']) securityScore += 3;
+
+    securityScore -= conditions.poverty * 30;
+    securityScore -= conditions.hunger * 20;
+
+    if (p.monsterRank === 'S') securityScore -= 30;
+    else if (p.monsterRank === 'A') securityScore -= 20;
+    else if (p.monsterRank === 'B') securityScore -= 10;
+    else if (p.monsterRank === 'C') securityScore -= 5;
+
+    conditions.security = Math.max(0, Math.min(100, Math.floor(securityScore)));
+
+    // 5. Prices
+    const foodSupplyRate = 1.0 - conditions.hunger;
+    conditions.prices.food = foodSupplyRate > 0 ? 1.0 / Math.max(0.1, foodSupplyRate) : 2.0;
+
+    let necessitySupply = 0;
+    if (p.production) {
+        necessitySupply += (p.production['武具・道具'] || 0) + (p.production['織物'] || 0) + (p.production['建築'] || 0);
+    }
+    const necessityPerCapita = necessitySupply / p.population;
+    conditions.prices.necessities = 0.05 / Math.max(0.001, necessityPerCapita);
+    conditions.prices.luxury = 1.0 / Math.max(0.1, conditions.luxury);
+
+    for (let key in conditions.prices) {
+        conditions.prices[key] = Math.max(0.5, Math.min(3.0, parseFloat(conditions.prices[key].toFixed(2))));
+    }
+
+    // 6. Tax
+    let estimatedGdp = 0;
+    if (p.industry) {
+        for (let k in p.industry.primary) estimatedGdp += (p.industry.primary[k] || 0) * 10;
+        for (let k in p.industry.secondary) estimatedGdp += (p.industry.secondary[k] || 0) * 20;
+        for (let k in p.industry.tertiary) estimatedGdp += (p.industry.tertiary[k] || 0) * 30;
+        for (let k in p.industry.quaternary) estimatedGdp += (p.industry.quaternary[k] || 0) * 50;
+        for (let k in p.industry.quinary) estimatedGdp += (p.industry.quinary[k] || 0) * 100;
+    }
+
+    let taxRate = 0.1;
+    if (p.settlement === '首都') taxRate += 0.10;
+    else if (p.settlement === '都市') taxRate += 0.05;
+
+    conditions.tax = Math.floor(estimatedGdp * taxRate);
+
+    // 7. Happiness
+    let happinessScore = 50;
+
+    happinessScore += conditions.luxury * 20;
+    happinessScore += (conditions.security - 50) * 0.5;
+    if (facilities['教会']) happinessScore += 5;
+    if (facilities['劇場・美術館']) happinessScore += 10;
+    if (facilities['診療所']) happinessScore += 5;
+
+    happinessScore -= conditions.hunger * 50;
+    happinessScore -= conditions.poverty * 30;
+    if (conditions.prices.food > 1.5) happinessScore -= 10;
+    if (conditions.prices.necessities > 1.5) happinessScore -= 5;
+
+    const taxPerCapita = conditions.tax / p.population;
+    if (taxPerCapita > 5) happinessScore -= 5;
+    if (taxPerCapita > 10) happinessScore -= 10;
+
+    // A. Connectivity
+    const connectivity = (p.roadLevel || 0) * 2;
+    happinessScore += connectivity;
+
+    // B. Distance to Ruler
+    if (p.parentHexId !== null && p.parentHexId !== undefined) {
+        const parent = allHexes[p.parentHexId];
+        if (parent) {
+            const dist = Math.abs(h.col - parent.col) + Math.abs(h.row - parent.row);
+            if (dist > 15) happinessScore -= 10;
+            else if (dist > 8) happinessScore -= 5;
+            else if (dist < 3) happinessScore += 5;
+        }
+    } else {
+        if (p.settlement !== '首都') happinessScore -= 5;
+    }
+
+    // C. Crowding
+    if (p.population > 20000) happinessScore -= 10;
+    else if (p.population > 5000) happinessScore -= 5;
+    else if (p.population < 100) happinessScore -= 5;
+
+    conditions.happiness = Math.max(0, Math.min(100, Math.floor(happinessScore)));
+
+    return conditions;
 }

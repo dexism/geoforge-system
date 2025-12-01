@@ -387,6 +387,58 @@ export function getInfoText(d) {
         }
     }
 
+    // --- 3.6. 生活水準カード (新規追加) ---
+    let livingCard = '';
+    if (p.livingConditions) {
+        const lc = p.livingConditions;
+        let livingHtml = '';
+
+        // 治安と幸福度
+        const getSecurityIcon = (score) => {
+            if (score >= 80) return 'verified_user';
+            if (score >= 50) return 'shield';
+            if (score >= 30) return 'gpp_maybe';
+            return 'gpp_bad';
+        };
+        const getHappinessIcon = (score) => {
+            if (score >= 80) return 'sentiment_very_satisfied';
+            if (score >= 50) return 'sentiment_satisfied';
+            if (score >= 30) return 'sentiment_dissatisfied';
+            return 'sentiment_very_dissatisfied';
+        };
+
+        livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${getSecurityIcon(lc.security)}</span>治安</span><span class="value">${lc.security}/100</span></div>`;
+        livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${getHappinessIcon(lc.happiness)}</span>幸福度</span><span class="value">${lc.happiness}/100</span></div>`;
+
+        // 租税
+        livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">account_balance_wallet</span>租税</span><span class="value">${(lc.tax || 0).toLocaleString()}G</span></div>`;
+
+        // 物価
+        livingHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">payments</span>物価指数 (基準1.0)</h6>`;
+        const getPriceClass = (val) => val > 1.5 ? 'shortage' : (val < 0.8 ? 'surplus' : '');
+        livingHtml += `<div class="industry-item"><span class="label">食料品</span><span class="value ${getPriceClass(lc.prices.food)}">${lc.prices.food.toFixed(2)}</span></div>`;
+        livingHtml += `<div class="industry-item"><span class="label">必需品</span><span class="value ${getPriceClass(lc.prices.necessities)}">${lc.prices.necessities.toFixed(2)}</span></div>`;
+        livingHtml += `<div class="industry-item"><span class="label">贅沢品</span><span class="value ${getPriceClass(lc.prices.luxury)}">${lc.prices.luxury.toFixed(2)}</span></div>`;
+        livingHtml += `</div>`;
+
+        // 詳細指標 (バー表示)
+        const createBar = (label, value, color) => {
+            const width = Math.min(100, value * 100);
+            return `<div class="industry-item" style="flex-direction:column; align-items:flex-start; gap:2px;">
+                <div style="display:flex; justify-content:space-between; width:100%; font-size:11px;"><span>${label}</span><span>${(value * 100).toFixed(0)}%</span></div>
+                <div style="width:100%; height:4px; background:#eee; border-radius:2px;"><div style="width:${width}%; height:100%; background:${color}; border-radius:2px;"></div></div>
+            </div>`;
+        };
+
+        livingHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">analytics</span>詳細指標</h6>`;
+        livingHtml += createBar('貧困度', lc.poverty, '#ff6b6b');
+        livingHtml += createBar('飢餓度', lc.hunger, '#e74c3c');
+        livingHtml += createBar('贅沢度', lc.luxury, '#f1c40f');
+        livingHtml += `</div>`;
+
+        livingCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">family_restroom</span>生活水準</div><div class="card-content">${livingHtml}</div></div>`;
+    }
+
     // --- 4. 領地集計カード (拠点の場合) ---
     let territoryCard = '';
     if (p.territoryData && ['首都', '都市', '領都', '街', '町'].includes(p.settlement)) {
@@ -427,7 +479,7 @@ export function getInfoText(d) {
     }
 
     // --- 結合してコンテナに入れる ---
-    return `<div class="info-scroll-container">${basicCard}${envCard}${resourceCard}${industryCard}${societyCard}${territoryCard}</div>`;
+    return `<div class="info-scroll-container">${basicCard}${envCard}${resourceCard}${industryCard}${societyCard}${livingCard}${territoryCard}</div>`;
 }
 
 // ================================================================
