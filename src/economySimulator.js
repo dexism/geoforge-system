@@ -733,39 +733,55 @@ export function calculateFacilities(hex) {
     const demo = p.demographics || {};
     const facilities = {};
 
+    // 施設数の計算: 単純な割り算ではなく、対数的なスケーリングを導入して過密を防ぐ
+    // Math.ceil(人数 / 係数) ではなく、 Math.ceil(Math.pow(人数, 0.8) / 係数) のようなイメージ
+    // あるいは、単純に係数を大きくする
+
     if (demo['商人']) {
-        facilities['商会・商店'] = Math.ceil(demo['商人'] / 5);
-        facilities['行商・露店'] = Math.ceil(demo['商人'] / 2);
+        // 商会: 大規模化する傾向
+        facilities['商会・商店'] = Math.ceil(demo['商人'] / 15);
+        facilities['行商・露店'] = Math.ceil(demo['商人'] / 5);
     }
 
     if (demo['宿屋・店員']) {
-        facilities['宿屋'] = Math.ceil(demo['宿屋・店員'] / 10);
-        facilities['酒場・食堂'] = Math.ceil(demo['宿屋・店員'] / 5);
+        // 宿屋: 1軒あたりの収容人数を増やす
+        facilities['宿屋'] = Math.ceil(demo['宿屋・店員'] / 20);
+        facilities['酒場・食堂'] = Math.ceil(demo['宿屋・店員'] / 10);
     }
 
     if (demo['鍛冶屋']) {
-        facilities['鍛冶屋'] = Math.ceil(demo['鍛冶屋'] / 3);
+        facilities['鍛冶屋'] = Math.ceil(demo['鍛冶屋'] / 8);
     }
     if (demo['職人']) {
-        facilities['工房'] = Math.ceil(demo['職人'] / 4);
+        facilities['工房'] = Math.ceil(demo['職人'] / 10);
     }
 
     if (demo['神官・医師・薬師']) {
-        facilities['教会'] = Math.ceil(demo['神官・医師・薬師'] / 5);
-        facilities['診療所'] = Math.ceil(demo['神官・医師・薬師'] / 3);
+        facilities['教会'] = Math.ceil(demo['神官・医師・薬師'] / 10);
+        facilities['診療所'] = Math.ceil(demo['神官・医師・薬師'] / 5);
     }
 
     if (demo['錬金術師']) {
-        facilities['魔道具店'] = Math.ceil(demo['錬金術師'] / 10);
+        facilities['魔道具店'] = Math.ceil(demo['錬金術師'] / 15);
     }
     if (demo['冒険者']) {
-        facilities['職能ギルド'] = Math.ceil(demo['冒険者'] / 50);
+        facilities['職能ギルド'] = Math.ceil(demo['冒険者'] / 100);
     }
 
     if (['首都', '都市', '領都'].includes(p.settlement)) {
         facilities['役所'] = 1;
         if (p.settlement === '首都') facilities['王城'] = 1;
         if (p.settlement === '領都') facilities['領主館'] = 1;
+    }
+
+    // 港湾施設の追加 (沿岸フラグがある場合)
+    if (p.isCoastal) {
+        if (['首都', '都市', '領都'].includes(p.settlement)) {
+            facilities['港湾'] = 1;
+            facilities['造船所'] = 1;
+        } else if (['街', '町'].includes(p.settlement)) {
+            facilities['船着場'] = 1;
+        }
     }
 
     if (p.settlement === '村') {

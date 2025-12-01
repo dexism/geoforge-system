@@ -169,7 +169,13 @@ function generateBaseProperties(col, row) {
         } else if (properties.temperature < config.TEMP_ZONES.TEMPERATE) {
             properties.climateZone = "温暖湿潤気候";
         } else {
-            properties.climateZone = "熱帯雨林気候";
+            // 熱帯の区分け: 降水量に基づいてサバナと雨林を分ける
+            // config.VEGETATION_PARAMS.TROPICAL_FOREST_MIN_PRECIP_MM (1500mm) を基準とする
+            if (properties.precipitation_mm < config.VEGETATION_PARAMS.TROPICAL_FOREST_MIN_PRECIP_MM) {
+                properties.climateZone = "熱帯サバナ気候";
+            } else {
+                properties.climateZone = "熱帯雨林気候";
+            }
         }
     }
 
@@ -673,14 +679,26 @@ function calculateFinalProperties(allHexes) {
         // 最終的な値を 0.0 ～ 1.0 の範囲に収める
         properties.miningPotential = Math.min(1.0, miningPotential);
 
+        // 沿岸フラグの計算
+        const isCoastal = !isWater && h.neighbors.some(nIndex => allHexes[nIndex].properties.isWater);
+        properties.isCoastal = isCoastal;
+
         let fishingPotential = 0;
         if (!isWater) {
             let waterBonus = 0;
+            // 沿岸であれば基礎ポテンシャルを与える
+            if (isCoastal) {
+                waterBonus = 0.4; // 沿岸基礎値
+            }
+
             h.neighbors.forEach(nIndex => {
                 const neighborHex = allHexes[nIndex];
                 if (neighborHex.properties.isWater) {
-                    if (neighborHex.properties.vegetation === '海洋' || neighborHex.properties.vegetation === '深海') waterBonus = Math.max(waterBonus, 0.9);
-                    else if (neighborHex.properties.vegetation === '湖沼') waterBonus = Math.max(waterBonus, 0.6);
+                    if (neighborHex.properties.vegetation === '海洋' || neighborHex.properties.vegetation === '深海') {
+                        waterBonus = Math.max(waterBonus, 0.9);
+                    } else if (neighborHex.properties.vegetation === '湖沼') {
+                        waterBonus = Math.max(waterBonus, 0.6);
+                    }
                 }
             });
             fishingPotential += waterBonus;

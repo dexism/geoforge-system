@@ -521,6 +521,7 @@ export function generateHexJson(d) {
         x: d.x,
         y: d.y,
         properties: d.properties,
+        isCoastal: d.properties.isCoastal, // 明示的にトップレベルにも置くか、properties内にあるので十分だが念のため
         neighbors: neighborsInfo
     };
     return JSON.stringify(exportData, null, 2);
