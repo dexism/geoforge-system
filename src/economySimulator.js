@@ -782,7 +782,12 @@ export function calculateLivingConditions(h, allHexes) {
         poverty: 0,
         luxury: 0,
         security: 50,
-        prices: { food: 1.0, necessities: 1.0, luxury: 1.0 },
+        prices: {
+            food: 1.0,
+            necessities: 1.0,
+            luxuries: 1.0,      // 嗜好品
+            high_luxuries: 1.0  // 贅沢品
+        },
         tax: 0,
         happiness: 50
     };
@@ -794,15 +799,13 @@ export function calculateLivingConditions(h, allHexes) {
     const consumptionUnit = settlementInfo ? settlementInfo.consumption_t_per_person : 0.1;
     const totalFoodDemand = p.population * consumptionUnit;
     const foodShortage = p.shortage && p.shortage['食料'] ? parseFloat(p.shortage['食料']) : 0;
-    
+
     let baseHunger = Math.min(1.0, foodShortage / (totalFoodDemand || 1));
     if (isNaN(baseHunger)) baseHunger = 0;
 
-    // 輸入による飢餓緩和 (User Feedback)
-    // 都市部は物流により食料を輸入できるため、飢餓度が下がる
+    // 輸入による飢餓緩和
     if (['首都', '都市', '領都', '街'].includes(p.settlement) && (p.roadLevel || 0) >= 3) {
-        // 道路レベルと集落規模に応じて緩和
-        const importCap = (p.roadLevel || 0) * 0.1; // Lv5なら50%緩和
+        const importCap = (p.roadLevel || 0) * 0.1;
         baseHunger = Math.max(0, baseHunger - importCap);
     }
     conditions.hunger = baseHunger;
@@ -810,24 +813,25 @@ export function calculateLivingConditions(h, allHexes) {
     // 2. Poverty
     const demo = p.demographics || {};
     const poorPop = (demo['浮浪者'] || 0) + (demo['スラム街住人'] || 0) +
-                    ((demo['農夫'] || 0) + (demo['鉱夫'] || 0) + (demo['漁師'] || 0) + (demo['木こり'] || 0)) * 0.5;
+        ((demo['農夫'] || 0) + (demo['鉱夫'] || 0) + (demo['漁師'] || 0) + (demo['木こり'] || 0)) * 0.5;
     conditions.poverty = Math.min(1.0, poorPop / p.population);
 
-    // 3. Luxury
+    // 3. Luxury (生活水準としての贅沢度)
     let luxurySupply = 0;
     if (p.production) {
         luxurySupply += (p.production['酒(穀物)'] || 0) + (p.production['酒(果実)'] || 0);
-        luxurySupply += (p.production['織物'] || 0) * 0.5;
+        luxurySupply += (p.production['果物'] || 0) * 0.5;
         luxurySupply += (p.production['ポーション・魔導具'] || 0) * 2;
         luxurySupply += (p.production['芸術・文化'] || 0) * 5;
+        luxurySupply += (p.production['魔鉱石'] || 0) * 1;
     }
-    conditions.luxury = Math.min(1.0, luxurySupply / (p.population * 0.01));
+    conditions.luxury = Math.min(1.0, luxurySupply / (p.population * 0.02));
 
     // 4. Security
     let securityScore = 50;
     const securityForces = (demo['衛兵・自警団'] || 0) + (demo['騎士'] || 0) * 5 + (demo['正規兵'] || 0) * 2;
     securityScore += Math.min(30, (securityForces / p.population) * 1000);
-    
+
     const facilities = p.facilities || {};
     if (facilities['兵舎']) securityScore += 5;
     if (facilities['砦']) securityScore += 10;
@@ -836,7 +840,7 @@ export function calculateLivingConditions(h, allHexes) {
 
     securityScore -= conditions.poverty * 30;
     securityScore -= conditions.hunger * 20;
-    
+
     if (p.monsterRank === 'S') securityScore -= 30;
     else if (p.monsterRank === 'A') securityScore -= 20;
     else if (p.monsterRank === 'B') securityScore -= 10;
@@ -844,20 +848,78 @@ export function calculateLivingConditions(h, allHexes) {
 
     conditions.security = Math.max(0, Math.min(100, Math.floor(securityScore)));
 
-    // 5. Prices
-    const foodSupplyRate = 1.0 - conditions.hunger;
-    conditions.prices.food = foodSupplyRate > 0 ? 1.0 / Math.max(0.1, foodSupplyRate) : 2.0;
-    
-    let necessitySupply = 0;
+    // 5. Prices (新ロジック)
+    const supply = {
+        food: 0,
+        necessities: 0,
+        luxuries: 0,
+        high_luxuries: 0
+    };
+
     if (p.production) {
-        necessitySupply += (p.production['武具・道具'] || 0) + (p.production['織物'] || 0) + (p.production['建築'] || 0);
+        // 食料品
+        supply.food += (p.production['雑穀'] || 0) + (p.production['大麦'] || 0) + (p.production['小麦'] || 0) + (p.production['稲'] || 0);
+        supply.food += (p.production['魚介類'] || 0) + (p.production['牧畜肉'] || 0) + (p.production['家畜肉'] || 0) + (p.production['狩猟肉'] || 0);
+        supply.food += (p.production['乳製品'] || 0) + (p.production['果物'] || 0);
+
+        // 必需品
+        supply.necessities += (p.production['織物'] || 0);
+        supply.necessities += (p.production['武具・道具'] || 0);
+        supply.necessities += (p.production['建築'] || 0);
+        supply.necessities += (p.production['木材'] || 0) * 0.5;
+        supply.necessities += (p.production['薬草'] || 0) * 0.5;
+        supply.necessities += (p.production['革'] || 0);
+
+        // 嗜好品
+        supply.luxuries += (p.production['酒(穀物)'] || 0) + (p.production['酒(果実)'] || 0);
+        supply.luxuries += (p.production['果物'] || 0) * 0.5;
+        supply.luxuries += (p.production['魚介類'] || 0) * 0.2;
+        supply.luxuries += (p.production['乳製品'] || 0) * 0.3;
+
+        // 贅沢品
+        supply.high_luxuries += (p.production['ポーション・魔導具'] || 0);
+        supply.high_luxuries += (p.production['芸術・文化'] || 0);
+        supply.high_luxuries += (p.production['魔鉱石'] || 0) * 0.5;
+        supply.high_luxuries += (p.production['魔獣素材'] || 0) * 0.5;
+        supply.high_luxuries += (p.production['織物'] || 0) * 0.1;
     }
-    const necessityPerCapita = necessitySupply / p.population;
-    conditions.prices.necessities = 0.05 / Math.max(0.001, necessityPerCapita);
-    conditions.prices.luxury = 1.0 / Math.max(0.1, conditions.luxury);
+
+    // 需要量
+    const demandPerCapita = {
+        food: 0.3,
+        necessities: 0.05,
+        luxuries: 0.01,
+        high_luxuries: 0.001
+    };
+
+    let demandMultiplier = 1.0;
+    if (p.settlement === '首都') demandMultiplier = 1.5;
+    else if (p.settlement === '都市') demandMultiplier = 1.3;
+    else if (p.settlement === '領都') demandMultiplier = 1.2;
+
+    const demand = {
+        food: p.population * demandPerCapita.food * demandMultiplier,
+        necessities: p.population * demandPerCapita.necessities * demandMultiplier,
+        luxuries: p.population * demandPerCapita.luxuries * demandMultiplier,
+        high_luxuries: p.population * demandPerCapita.high_luxuries * demandMultiplier
+    };
+
+    const calculatePrice = (s, d) => {
+        if (d <= 0) return 1.0;
+        if (s <= 0) return 5.0;
+
+        const ratio = d / s;
+        let price = Math.pow(ratio, 0.6);
+        return Math.max(0.5, Math.min(10.0, price));
+    };
+
+    conditions.prices.food = calculatePrice(supply.food, demand.food);
+    conditions.prices.necessities = calculatePrice(supply.necessities, demand.necessities);
+    conditions.prices.luxuries = calculatePrice(supply.luxuries, demand.luxuries);
+    conditions.prices.high_luxuries = calculatePrice(supply.high_luxuries, demand.high_luxuries);
 
     for (let key in conditions.prices) {
-        conditions.prices[key] = Math.max(0.5, Math.min(3.0, parseFloat(conditions.prices[key].toFixed(2))));
+        conditions.prices[key] = parseFloat(conditions.prices[key].toFixed(2));
     }
 
     // 6. Tax
@@ -869,37 +931,36 @@ export function calculateLivingConditions(h, allHexes) {
         for (let k in p.industry.quaternary) estimatedGdp += (p.industry.quaternary[k] || 0) * 50;
         for (let k in p.industry.quinary) estimatedGdp += (p.industry.quinary[k] || 0) * 100;
     }
-    
+
     let taxRate = 0.1;
     if (p.settlement === '首都') taxRate += 0.10;
     else if (p.settlement === '都市') taxRate += 0.05;
-    
+
     conditions.tax = Math.floor(estimatedGdp * taxRate);
 
     // 7. Happiness
     let happinessScore = 50;
-    
-    // 贅沢度の影響 (User Feedback: 村などは質素でも幸福)
+
     if (['首都', '都市', '領都'].includes(p.settlement)) {
-        happinessScore += conditions.luxury * 20; // 都市部は贅沢が重要
+        happinessScore += conditions.luxury * 20;
     } else {
-        happinessScore += conditions.luxury * 10; // 村落部はそこまで重要ではない
-        happinessScore += 10; // 質素な暮らしボーナス (コミュニティの絆)
+        happinessScore += conditions.luxury * 10;
+        happinessScore += 10;
     }
 
+    happinessScore -= conditions.hunger * 40;
+    happinessScore -= conditions.poverty * 20;
     happinessScore += (conditions.security - 50) * 0.5;
-    if (facilities['教会']) happinessScore += 5;
-    if (facilities['劇場・美術館']) happinessScore += 10;
-    if (facilities['診療所']) happinessScore += 5;
-    
-    happinessScore -= conditions.hunger * 50;
-    happinessScore -= conditions.poverty * 30;
-    if (conditions.prices.food > 1.5) happinessScore -= 10;
-    if (conditions.prices.necessities > 1.5) happinessScore -= 5;
-    
-    const taxPerCapita = conditions.tax / p.population;
-    if (taxPerCapita > 5) happinessScore -= 5;
-    if (taxPerCapita > 10) happinessScore -= 10;
+
+    // 物価高による不幸
+    const avgPrice = (conditions.prices.food + conditions.prices.necessities) / 2;
+    if (avgPrice > 2.0) {
+        happinessScore -= (avgPrice - 2.0) * 10;
+    }
+
+    const taxBurden = conditions.tax / (p.population || 1);
+    if (taxBurden > 5) happinessScore -= 5;
+    if (taxBurden > 10) happinessScore -= 10;
 
     // A. Connectivity
     const connectivity = (p.roadLevel || 0) * 2;

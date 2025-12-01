@@ -418,7 +418,8 @@ export function getInfoText(d) {
         const getPriceClass = (val) => val > 1.5 ? 'shortage' : (val < 0.8 ? 'surplus' : '');
         livingHtml += `<div class="industry-item"><span class="label">食料品</span><span class="value ${getPriceClass(lc.prices.food)}">${lc.prices.food.toFixed(2)}</span></div>`;
         livingHtml += `<div class="industry-item"><span class="label">必需品</span><span class="value ${getPriceClass(lc.prices.necessities)}">${lc.prices.necessities.toFixed(2)}</span></div>`;
-        livingHtml += `<div class="industry-item"><span class="label">贅沢品</span><span class="value ${getPriceClass(lc.prices.luxury)}">${lc.prices.luxury.toFixed(2)}</span></div>`;
+        livingHtml += `<div class="industry-item"><span class="label">嗜好品</span><span class="value ${getPriceClass(lc.prices.luxuries)}">${(lc.prices.luxuries || 1.0).toFixed(2)}</span></div>`;
+        livingHtml += `<div class="industry-item"><span class="label">贅沢品</span><span class="value ${getPriceClass(lc.prices.high_luxuries)}">${(lc.prices.high_luxuries || 1.0).toFixed(2)}</span></div>`;
         livingHtml += `</div>`;
 
         // 詳細指標 (バー表示)
