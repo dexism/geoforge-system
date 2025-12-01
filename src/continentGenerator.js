@@ -850,6 +850,9 @@ export async function generateClimateAndVegetation(allHexes, addLogMessage) {
  * @param {Array<object>} allHexes - 全ヘックスのデータ
  */
 function generateBeaches(allHexes) {
+    console.log("DEBUG: generateBeaches started."); // [DEBUG] 開始ログ
+    let totalBeachSegments = 0; // [DEBUG] 生成数カウンタ
+
     // --- スケール関数を事前に定義 ---
     const landElevationScale = d3.scaleLinear().domain([50, 300]).range([1.0, 0.0]).clamp(true);
     const seaDepthScale = d3.scaleLinear().domain([0, -500]).range([1.0, 0.0]).clamp(true);
@@ -899,9 +902,15 @@ function generateBeaches(allHexes) {
             // --- 最終判定 ---
             if (beachScore > 0.8) {
                 p.beachNeighbors.push(neighborIndex);
+                totalBeachSegments++; // [DEBUG] カウントアップ
+                // [DEBUG] 最初の5件だけ詳細ログを出す
+                if (totalBeachSegments <= 5) {
+                    console.log(`DEBUG: Beach created at Hex[${h.index}] -> Neighbor[${neighborIndex}]. Score: ${beachScore.toFixed(3)}`);
+                }
             }
         });
     });
+    console.log(`DEBUG: generateBeaches finished. Total segments created: ${totalBeachSegments}`); // [DEBUG] 終了ログ
 }
 
 // main.jsから呼び出すために、個別の関数をエクスポートする

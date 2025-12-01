@@ -123,6 +123,7 @@ export class WorldMap {
         this.surplus = new Array(this.size).fill(null);
         this.shortage = new Array(this.size).fill(null);
         this.territoryData = new Array(this.size).fill(null);
+        this.beachNeighbors = new Array(this.size).fill(null);
 
         // Road Usage (Float32)
         this.roadUsage = new Float32Array(this.size);
@@ -212,6 +213,8 @@ class Hex {
         // Properties proxy to maintain compatibility with h.properties.xxx
         this.properties = this;
     }
+
+    get index() { return this._index; }
 
     get col() { return this._map.col[this._index]; }
     set col(v) { this._map.col[this._index] = v; }
@@ -389,6 +392,9 @@ class Hex {
 
     get territoryData() { return this._map.territoryData[this._index]; }
     set territoryData(v) { this._map.territoryData[this._index] = v; }
+
+    get beachNeighbors() { return this._map.beachNeighbors[this._index]; }
+    set beachNeighbors(v) { this._map.beachNeighbors[this._index] = v; }
 
     get roadUsage() { return this._map.roadUsage[this._index]; }
     set roadUsage(v) { this._map.roadUsage[this._index] = v; }

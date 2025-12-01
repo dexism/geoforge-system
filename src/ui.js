@@ -1466,6 +1466,7 @@ function updateHexesData(updatedAllHexes) {
  */
 export async function redrawClimate(allHexes) {
     updateHexesData(allHexes);
+    drawBeaches(hexes); // 砂浜を再描画
     // updateVisibleHexesを呼び出して、表示を完全に再構築する
     if (svg) updateVisibleHexes(currentTransform);
     console.log("気候・植生が更新され、再描画されました。");
