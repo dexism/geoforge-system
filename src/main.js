@@ -6,7 +6,7 @@ import * as d3 from 'd3';
 import * as config from './config.js';
 import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
-import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic } from './economySimulator.js';
+import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex } from './utils.js';
@@ -405,7 +405,8 @@ const KEY_MAP = {
 
     // 社会構成
     demographics: 'dem',
-    facilities: 'fac'
+    facilities: 'fac',
+    livingConditions: 'lc'
 };
 
 // 逆マッピング（解凍用）
@@ -442,7 +443,10 @@ const INDUSTRY_ITEM_MAP = {
     '商会・商店': 'shp', '行商・露店': 'ped', '宿屋': 'inn', '酒場・食堂': 'tav',
     '鍛冶屋': 'smi', '工房': 'wor', '診療所': 'cli', '教会': 'chu', '運送屋': 'car', '厩舎': 'sta',
     '研究所': 'lab', '学校': 'col', '兵舎': 'bar', '砦': 'for', '役所': 'off', 'ギルド': 'gui',
-    '劇場・美術館': 'the', '儀式場': 'rit', '魔道具店': 'mag'
+    '劇場・美術館': 'the', '儀式場': 'rit', '魔道具店': 'mag',
+    // 生活水準
+    'hunger': 'hun', 'poverty': 'pov', 'luxury': 'lux', 'security': 'sec', 'prices': 'prc',
+    'tax': 'tax', 'happiness': 'hap', 'food': 'fd', 'necessities': 'nec'
 };
 const REVERSE_INDUSTRY_ITEM_MAP = Object.fromEntries(Object.entries(INDUSTRY_ITEM_MAP).map(([k, v]) => [v, k]));
 
@@ -546,6 +550,13 @@ function compressWorldData() {
             if (key === 'facilities' && value) {
                 const cFac = compressNestedObject(value);
                 if (cFac) cHex[KEY_MAP['facilities']] = cFac;
+                return;
+            }
+
+            // livingConditionsの特別処理
+            if (key === 'livingConditions' && value) {
+                const cLc = compressNestedObject(value);
+                if (cLc) cHex[KEY_MAP['livingConditions']] = cLc;
                 return;
             }
 
@@ -677,6 +688,30 @@ async function recalculateDistances(worldData) {
             s.properties.travelDaysToParent = travelDays;
         }
     }
+}
+
+/**
+ * 経済指標（治安、物価、租税、幸福度）を再計算する関数
+ * ロード時にデータが不足している場合や、最新のロジックを適用する場合に使用
+ */
+async function recalculateEconomyMetrics(worldData) {
+    await addLogMessage("経済指標を再計算しています...");
+    const { allHexes } = worldData;
+    if (!allHexes) return;
+
+    allHexes.forEach(h => {
+        // 人口構成がなければ計算
+        if (!h.properties.demographics) {
+            h.properties.demographics = calculateDemographics(h);
+        }
+        // 施設がなければ計算
+        if (!h.properties.facilities) {
+            h.properties.facilities = calculateFacilities(h);
+        }
+        // 生活水準を計算 (常に最新ロジックで上書き推奨だが、既存値がある場合は維持するか？
+        // ここでは「表示されない」問題解決のため、無条件で再計算して最新化する)
+        h.properties.livingConditions = calculateLivingConditions(h, allHexes);
+    });
 }
 
 async function loadExistingWorld() {
@@ -823,6 +858,12 @@ async function processLoadedData(loadedData) {
                 // facilities (ネスト解凍)
                 if (originalKey === 'facilities') {
                     props.facilities = decompressNestedObject(v);
+                    return;
+                }
+
+                // livingConditions (ネスト解凍)
+                if (originalKey === 'livingConditions') {
+                    props.livingConditions = decompressNestedObject(v);
                     return;
                 }
 
@@ -988,6 +1029,9 @@ async function processLoadedData(loadedData) {
 
     // 距離の再計算
     await recalculateDistances(worldData);
+
+    // 経済指標の再計算 (不足データの補完)
+    await recalculateEconomyMetrics(worldData);
 
     // UI初期化・再描画
     if (!uiInitialized) {
