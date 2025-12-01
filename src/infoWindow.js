@@ -417,10 +417,12 @@ export function getInfoText(d) {
         livingHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">restaurant</span>食料事情</h6>`;
         livingHtml += `<div class="info-row"><span class="label">月間消費</span><span class="value">${Math.round(monthlyDemand).toLocaleString()}t</span></div>`;
         livingHtml += `<div class="info-row"><span class="label">自給率</span><span class="value" style="${selfSufficiency < 1.0 ? 'color:#e74c3c;' : 'color:#2ecc71;'}">${(selfSufficiency * 100).toFixed(1)}%</span></div>`;
+        /*
         if (p.shortage && p.shortage['食料'] > 0) {
             // 不足分も月間に換算して表示するか？とりあえず年間のままだと誤解を招くので月間に
             livingHtml += `<div class="info-row"><span class="label">月間不足</span><span class="value" style="color:#e74c3c;">-${Math.round(p.shortage['食料'] / 12).toLocaleString()}t</span></div>`;
         }
+        */
         livingHtml += `</div>`;
 
         // 租税
