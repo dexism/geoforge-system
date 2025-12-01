@@ -138,9 +138,18 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 
         // 漁業
         if (workers.fish > 0.1) {
-            const laborYield = workers.fish * C.YIELD_PER_WORKER.FISHING * p.fishingPotential;
+            let coastalBonus = 1.0;
+            if (p.isCoastal) {
+                // 港町ボーナス: 沖合漁業が可能になり、生産効率と資源限界が大幅アップ
+                coastalBonus = 2.5;
+                if (['都市', '領都', '街'].includes(p.settlement)) {
+                    coastalBonus = 4.0; // 大規模港湾
+                }
+            }
+
+            const laborYield = workers.fish * C.YIELD_PER_WORKER.FISHING * p.fishingPotential * coastalBonus;
             // 資源限界チェック (面積ベース)
-            const resourceLimit = config.HEX_AREA_HA * C.MAX_YIELD_PER_HA.FISHING;
+            const resourceLimit = config.HEX_AREA_HA * C.MAX_YIELD_PER_HA.FISHING * coastalBonus;
             prod1['魚介類'] = Math.min(laborYield, resourceLimit);
         }
 
@@ -164,15 +173,27 @@ export async function simulateEconomy(allHexes, addLogMessage) {
             prod1['乳製品'] = workers.pastoral * C.YIELD_PER_WORKER.PASTORAL_DAIRY * p.pastoralPotential;
             prod1['革'] = workers.pastoral * 0.05 * p.pastoralPotential;
 
+            // 特産品: 高品質なチーズや毛織物
+            if (p.pastoralPotential > 0.8) {
+                prod1['特産チーズ'] = prod1['乳製品'] * 0.1;
+                prod1['高級羊毛'] = prod1['革'] * 0.5; // 革の代わりに羊毛として扱う
+            }
+
             // 魔獣素材 (高ランク魔物地域での牧畜)
             if (p.monsterRank && ['A', 'B'].includes(p.monsterRank)) {
                 prod1['魔獣素材'] = workers.pastoral * 0.01;
             }
         }
 
-        // 家畜 (定住的)
+        // 家畜 (定住的 - 舎飼い)
         if (workers.livestock > 0.1) {
-            prod1['家畜肉'] = workers.livestock * C.YIELD_PER_WORKER.LIVESTOCK_MEAT * p.livestockPotential;
+            const feedEfficiency = 0.5 + (p.agriPotential * 0.5);
+            prod1['家畜肉'] = workers.livestock * C.YIELD_PER_WORKER.LIVESTOCK_MEAT * p.livestockPotential * feedEfficiency;
+
+            // 特産品: ブランド豚/鶏など
+            if (p.livestockPotential > 0.8 && p.agriPotential > 0.7) {
+                prod1['高級肉'] = prod1['家畜肉'] * 0.1;
+            }
         }
 
         // 狩猟 (人口の一部が狩人として活動 - 設定値に基づく)
@@ -219,8 +240,6 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         }
 
         // 酒造 (既存ロジックの統合)
-        // 食料需給計算前に余剰予測を行うのは難しいため、ここでは生産能力としての酒造を計算
-        // 実際の生産量は、後段の余剰計算後に補正される可能性があるが、ここでは産業規模として算出
         const grainAvailable = (prod1['小麦'] || 0) + (prod1['雑穀'] || 0);
         const fruitAvailable = (prod1['果物'] || 0);
         if (grainAvailable > 0) prod2['酒(穀物)'] = grainAvailable * 0.1 * C.PROCESSING_RATES.GRAIN_TO_ALCOHOL;
@@ -237,7 +256,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 
         // 商業: 道路Lvが高いほど発展
         const roadBonus = (p.roadLevel || 1) * 0.5;
-        prod3['商業・交易'] = labor3 * 0.4 * roadBonus * I.COMMERCE_BASE;
+        prod3['商業・交易'] = labor3 * 0.15 * roadBonus * I.COMMERCE_BASE;
 
         // 宿泊・飲食
         prod3['宿屋・酒場'] = labor3 * 0.3 * (roadBonus * 0.8);
@@ -283,11 +302,11 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 
             // 王政・行政: 自国IDがある場合
             if (p.nationId > 0) {
-                prod5['行政・税収'] = labor5 * 0.4 * rankBonus * 100;
+                prod5['行政・税収'] = labor5 * 0.1 * rankBonus * 100;
             }
 
             // ギルド運営
-            prod5['ギルド統括'] = labor5 * 0.3 * rankBonus * 50;
+            prod5['ギルド統括'] = labor5 * 0.1 * rankBonus * 50;
 
             // 芸術・文化
             prod5['芸術・文化'] = labor5 * 0.2 * (1 + p.manaValue);
@@ -317,13 +336,14 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         // 余剰・不足の計算
         if (balance > 0) { p.surplus['食料'] = balance.toFixed(1); }
         else { p.shortage['食料'] = Math.abs(balance).toFixed(1); }
-    });
+
+    }); // End of first pass loop
 
     // 2nd Pass: Calculate Demographics, Facilities, and Living Conditions
     allHexes.forEach(h => {
         h.properties.demographics = calculateDemographics(h);
         h.properties.facilities = calculateFacilities(h);
-            });
+    });
 
     allHexes.forEach(h => {
         h.properties.livingConditions = calculateLivingConditions(h, allHexes);
@@ -379,6 +399,21 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
             const dProps = descendant.properties;
 
             // 1. 配下集落のデータを合計に加算
+            aggregatedData.population += dProps.population;
+            aggregatedData.cultivatedArea += dProps.cultivatedArea;
+            for (const item in dProps.production) {
+                aggregatedData.production[item] = (aggregatedData.production[item] || 0) + dProps.production[item];
+            }
+
+            // 2. 「直轄地」の種類をカウント
+            // ハブ自身はカウントせず、配下の集落のみをカウントする
+            if (dProps.settlement && aggregatedData.settlementCounts[dProps.settlement] !== undefined) {
+                aggregatedData.settlementCounts[dProps.settlement]++;
+            }
+
+            // 3. さらにその下の子孫をキューに追加
+            const descendantIndex = getIndex(descendant.col, descendant.row);
+            const grandchildren = childrenMap.get(descendantIndex) || [];
             grandchildren.forEach(child => {
                 const childIndex = getIndex(child.col, child.row);
                 if (!visited.has(childIndex)) {
