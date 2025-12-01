@@ -172,7 +172,7 @@ function generateBaseProperties(col, row) {
             // 熱帯の区分け: 降水量に基づいてサバナと雨林を分ける
             // config.VEGETATION_PARAMS.TROPICAL_FOREST_MIN_PRECIP_MM (1500mm) を基準とする
             if (properties.precipitation_mm < config.VEGETATION_PARAMS.TROPICAL_FOREST_MIN_PRECIP_MM) {
-                properties.climateZone = "熱帯サバナ気候";
+                properties.climateZone = "熱帯草原気候";
             } else {
                 properties.climateZone = "熱帯雨林気候";
             }

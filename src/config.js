@@ -335,7 +335,7 @@ export const CLIMATE_ZONE_COLORS = {
     "地中海性気候": '#58d68d',
     "温暖湿潤気候": '#239b56',
     "砂漠気候(熱)": '#f4d03f',
-    "熱帯サバナ気候": '#f5b041',
+    "熱帯草原気候": '#f5b041',
     "熱帯雨林気候": '#145a32'
 };
 export const manaColor = d3.scaleSequential(d3.interpolatePurples).domain([0, 1]);
