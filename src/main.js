@@ -570,6 +570,10 @@ function compressWorldData() {
             if (key === 'isWater' && value === false) return;
             if (key === 'flow' && value === 0) return;
             if (key === 'population' && value === 0) return;
+
+            // 容量削減: ロード時に再計算可能なデータは保存しない
+            if (key === 'livingConditions' || key === 'demographics' || key === 'facilities') return;
+
             // 空のオブジェクトは保存しない
             if (typeof value === 'object' && Object.keys(value).length === 0) return;
 
