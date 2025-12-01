@@ -74,7 +74,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         // 【農業ロジック】 (既存の詳細ロジックを完全移植)
         // ---------------------------------------------------------
         if (workers.agri > 0.1) {
-            const climate = p.climateZone;
+            const climate = p.climateZone || "";
             let mainCrops = {};
 
             // --- 作物決定ロジック (既存仕様を維持) ---
