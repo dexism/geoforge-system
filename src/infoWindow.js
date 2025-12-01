@@ -226,15 +226,15 @@ export function getInfoText(d) {
 
     if (p.characteristics && p.characteristics.length > 0) {
         basicInfoHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">stars</span>特　徴</h6>`;
-        basicInfoHtml += `<div class="industry-group" style="display:flex; flex-wrap:wrap; gap:4px;">`;
         p.characteristics.forEach(c => {
-            let label = c;
+            let key = '特徴';
+            let val = c;
             if (c.includes(':')) {
-                label = c.split(':')[1].trim();
+                [key, val] = c.split(':');
             }
-            basicInfoHtml += `<div class="industry-item" style="width:auto; background:#f5f5f5; padding:2px 6px; border-radius:4px;"><span class="value" style="font-weight:normal; font-size:12px; color:#333;">${label}</span></div>`;
+            basicInfoHtml += createRow('label_important', key.trim(), val.trim());
         });
-        basicInfoHtml += `</div></div>`;
+        basicInfoHtml += `</div>`;
     }
 
 
@@ -365,11 +365,11 @@ export function getInfoText(d) {
         // 施設
         if (p.facilities && p.facilities.length > 0) {
             societyHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">storefront</span>施設</h6>`;
-            societyHtml += `<div class="industry-group" style="display:flex; flex-wrap:wrap; gap:4px;">`;
+            // 以前の「2軒」などの表記に戻すため、ここではシンプルにリスト表示する（「あり」を削除）
             p.facilities.forEach(facility => {
-                societyHtml += `<div class="industry-item" style="width:100%;"><span class="label">${facility}</span><span class="value">あり</span></div>`;
+                societyHtml += `<div class="info-row"><span class="label">${facility}</span><span class="value"></span></div>`;
             });
-            societyHtml += `</div></div>`;
+            societyHtml += `</div>`;
         }
 
         if (societyHtml) {
@@ -462,11 +462,11 @@ export function getInfoText(d) {
             }
 
             if (p.isWater) {
-                const ships = (p.roadUsage / 100).toFixed(1);
-                logisticsHtml += `<div class="info-row"><span class="label">船舶換算</span><span class="value">${ships}隻分</span></div>`;
+                const ships = Math.round(p.roadUsage); // 船舶換算ではなくtそのまま
+                logisticsHtml += `<div class="info-row"><span class="label">海運能力</span><span class="value">${ships.toLocaleString()}t</span></div>`;
             } else {
-                const wagons = Math.round(p.roadUsage);
-                logisticsHtml += `<div class="info-row"><span class="label">荷馬車換算</span><span class="value">${wagons}台分</span></div>`;
+                const wagons = Math.round(p.roadUsage); // 荷馬車換算ではなくtそのまま
+                logisticsHtml += `<div class="info-row"><span class="label">陸運能力</span><span class="value">${wagons.toLocaleString()}t</span></div>`;
             }
             logisticsHtml += `</div>`;
         }
