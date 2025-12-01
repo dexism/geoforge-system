@@ -480,7 +480,50 @@ export function getInfoText(d) {
     }
 
     // --- 結合してコンテナに入れる ---
-    return `<div class="info-scroll-container">${basicCard}${envCard}${resourceCard}${industryCard}${societyCard}${livingCard}${territoryCard}</div>`;
+    // コピーボタンを追加
+    const copyBtnHtml = `<button id="copy-info-json-btn" class="copy-btn" title="JSONでコピー"><span class="material-icons-round" style="font-size: 18px; vertical-align: middle; margin-right: 4px;">content_copy</span></button>`;
+
+    return `<div class="info-scroll-container">${copyBtnHtml}${basicCard}${envCard}${resourceCard}${industryCard}${societyCard}${livingCard}${territoryCard}</div>`;
+}
+
+/**
+ * ヘックスデータをJSON形式で返す
+ * @param {object} d - ヘックスデータ
+ * @returns {string} - JSON文字列
+ */
+export function generateHexJson(d) {
+    // 隣接ヘックスの情報を取得
+    const neighborsInfo = [];
+    if (d.neighbors && d.neighbors.length > 0) {
+        d.neighbors.forEach(neighborIndex => {
+            const neighborHex = allHexesData[neighborIndex];
+            if (neighborHex) {
+                const p = neighborHex.properties;
+                neighborsInfo.push({
+                    index: neighborIndex,
+                    x: neighborHex.col, // allHexesData uses col/row
+                    y: neighborHex.row,
+                    isWater: p.isWater,
+                    elevation: p.elevation,
+                    terrainType: p.terrainType,
+                    vegetation: p.vegetation,
+                    isAlluvial: p.isAlluvial,
+                    hasSnow: p.hasSnow,
+                    beachNeighbors: p.beachNeighbors,
+                    settlement: p.settlement
+                });
+            }
+        });
+    }
+
+    const exportData = {
+        index: d.index,
+        x: d.x,
+        y: d.y,
+        properties: d.properties,
+        neighbors: neighborsInfo
+    };
+    return JSON.stringify(exportData, null, 2);
 }
 
 // ================================================================

@@ -971,3 +971,33 @@ button.active:hover {
     font-feature-settings: 'liga';
     vertical-align: middle;
 }
+/* ================================================================
+   コピーボタン スタイル
+   ================================================================ */
+.copy-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+    margin-bottom: 10px;
+    background-color: #445;
+    color: #fff;
+    border: 1px solid #667;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.copy-btn:hover {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.copy-btn:active {
+    transform: translateY(1px);
+}
+

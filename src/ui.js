@@ -16,7 +16,8 @@ import {
     updateOverallInfo,
     getInfoText,
     updateLegend,
-    childrenMap
+    childrenMap,
+    generateHexJson
 } from './infoWindow.js';
 
 // --- グローバル変数 ---
@@ -838,6 +839,21 @@ function updateVisibleHexes(transform) {
                         .style('pointer-events', 'none');
 
                     infoContent.innerHTML = getInfoText(d);
+
+                    // コピーボタンのイベントリスナーを設定
+                    const copyBtn = document.getElementById('copy-info-json-btn');
+                    if (copyBtn) {
+                        copyBtn.addEventListener('click', () => {
+                            const jsonStr = generateHexJson(d);
+                            navigator.clipboard.writeText(jsonStr).then(() => {
+                                alert('JSONをクリップボードにコピーしました。');
+                            }).catch(err => {
+                                console.error('コピーに失敗しました:', err);
+                                alert('コピーに失敗しました。');
+                            });
+                        });
+                    }
+
                     infoWindow.classList.remove('hidden');
                     adjustSidebarHeight();
                     event.stopPropagation();
