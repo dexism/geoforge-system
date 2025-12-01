@@ -423,9 +423,34 @@ export function calculateFacilities(allHexes) {
         if (p.industry.quinary['世界儀式'] > 0) addFacility('大聖堂', 1, 5);
 
         // 物流能力
-        const wagonCount = Math.floor(p.population / 60);
-        const totalDraftAnimals = Math.floor(wagonCount * 2.2);
-        const drivers = Math.floor(wagonCount * 1.3);
+        const roadLevel = p.roadLevel || 0;
+        let wagonCount = Math.floor(p.population / 60);
+
+        // ユーザーヒント: 水運が使える場合、荷馬車を2-3割削減
+        if (isCoastal || isLakeside) {
+            wagonCount = Math.floor(wagonCount * 0.75);
+        }
+        // ユーザーヒント: 道路が悪い場合、荷馬車を減らす (破損対策)
+        if (roadLevel < 3) {
+            wagonCount = Math.floor(wagonCount * 0.9);
+        }
+
+        // 予備率 (10-15%)
+        wagonCount = Math.floor(wagonCount * 1.15);
+
+        let totalDraftAnimals = Math.floor(wagonCount * 2.2);
+        // ユーザーヒント: 道路が悪い場合、牽引動物を増やす
+        if (roadLevel < 3) {
+            totalDraftAnimals = Math.floor(totalDraftAnimals * 1.2);
+        }
+        // 予備率 (15-20%)
+        totalDraftAnimals = Math.floor(totalDraftAnimals * 1.2);
+
+        let drivers = Math.floor(wagonCount * 1.3);
+        // ユーザーヒント: 水運がある場合、御者→船頭/荷役へ一部置換
+        if (isCoastal || isLakeside) {
+            drivers = Math.floor(drivers * 1.1);
+        }
 
         // 役畜の構成比率を決定
         const animals = {};
@@ -437,6 +462,12 @@ export function calculateFacilities(allHexes) {
         let oxRatio = 0.4;
         let otherType = null;
         let otherRatio = 0;
+
+        // ユーザーヒント: 道路が悪い場合、牛比率を上げる
+        if (roadLevel < 3) {
+            horseRatio -= 0.2;
+            oxRatio += 0.2;
+        }
 
         if (climate.includes('ツンドラ') || climate.includes('氷雪')) {
             horseRatio = 0.1; oxRatio = 0.1; otherType = 'トナカイ'; otherRatio = 0.8;
@@ -462,7 +493,6 @@ export function calculateFacilities(allHexes) {
             const availableTypes = config.SHIP_AVAILABILITY[settlementLevel];
             availableTypes.forEach(typeKey => {
                 const shipData = config.SHIP_TYPES[typeKey];
-                // 人口と産業規模に応じて保有数を決定
                 let count = 0;
                 if (typeKey === 'dinghy') count = Math.floor(p.population / 200);
                 else if (typeKey === 'small_trader') count = Math.floor(p.population / 1000);
@@ -476,8 +506,8 @@ export function calculateFacilities(allHexes) {
 
         p.logistics = {
             wagons: wagonCount,
-            animals: animals, // オブジェクトに変更
-            ships: ships,     // 追加
+            animals: animals,
+            ships: ships,
             drivers: drivers
         };
     });

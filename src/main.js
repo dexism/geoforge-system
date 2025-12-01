@@ -406,7 +406,8 @@ const KEY_MAP = {
     // 社会構成
     demographics: 'dem',
     facilities: 'fac',
-    livingConditions: 'lc'
+    livingConditions: 'lc',
+    logistics: 'log'
 };
 
 // 逆マッピング（解凍用）
@@ -444,6 +445,13 @@ const INDUSTRY_ITEM_MAP = {
     '鍛冶屋': 'smi', '工房': 'wor', '診療所': 'cli', '教会': 'chu', '運送屋': 'car', '厩舎': 'sta',
     '研究所': 'lab', '学校': 'col', '兵舎': 'bar', '砦': 'for', '役所': 'off', 'ギルド': 'gui',
     '劇場・美術館': 'the', '儀式場': 'rit', '魔道具店': 'mag',
+    // 施設(港湾)
+    '大型港湾': 'lpt', '港': 'prt', '船着き場': 'dck', '桟橋': 'pie', '渡し場': 'fer', '造船所': 'shy',
+    // 物流
+    'wagons': 'wag', 'animals': 'ani', 'ships': 'shp_l', 'drivers': 'dri',
+    '馬': 'hrs', '牛': 'ox', 'ラクダ': 'cam', 'トナカイ': 'rei', '水牛': 'buf', '象': 'ele', 'ラバ': 'mul', '犬': 'dog',
+    'dinghy': 'din', 'small_trader': 's_tr', 'coastal_trader': 'c_tr', 'medium_merchant': 'm_mr', 'large_sailing_ship': 'l_ss',
+    '小舟': 's_bt', '商船': 'm_bt', '大型帆船': 'l_bt',
     // 生活水準
     'hunger': 'hun', 'poverty': 'pov', 'luxury': 'lux', 'security': 'sec', 'prices': 'prc',
     'tax': 'tax', 'happiness': 'hap', 'food': 'fd', 'necessities': 'nec'
@@ -553,6 +561,13 @@ function compressWorldData() {
                 return;
             }
 
+            // logisticsの特別処理
+            if (key === 'logistics' && value) {
+                const cLog = compressNestedObject(value);
+                if (cLog) cHex[KEY_MAP['logistics']] = cLog;
+                return;
+            }
+
             // livingConditionsの特別処理
             if (key === 'livingConditions' && value) {
                 const cLc = compressNestedObject(value);
@@ -572,7 +587,7 @@ function compressWorldData() {
             if (key === 'population' && value === 0) return;
 
             // 容量削減: ロード時に再計算可能なデータは保存しない
-            if (key === 'livingConditions' || key === 'demographics' || key === 'facilities') return;
+            if (key === 'livingConditions' || key === 'demographics' || key === 'facilities' || key === 'logistics') return;
 
             // 空のオブジェクトは保存しない
             if (typeof value === 'object' && Object.keys(value).length === 0) return;
@@ -855,6 +870,12 @@ async function processLoadedData(loadedData) {
                 // facilities (ネスト解凍)
                 if (originalKey === 'facilities') {
                     props.facilities = decompressNestedObject(v);
+                    return;
+                }
+
+                // logistics (ネスト解凍)
+                if (originalKey === 'logistics') {
+                    props.logistics = decompressNestedObject(v);
                     return;
                 }
 

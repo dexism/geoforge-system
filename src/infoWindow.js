@@ -255,6 +255,8 @@ export function getInfoText(d) {
     const features = [];
     if (p.isAlluvial) features.push('河川');
     if (p.hasSnow) features.push('積雪');
+    if (p.isCoastal) features.push('海岸');
+    if (p.isLakeside) features.push('湖岸');
     if (p.beachNeighbors && p.beachNeighbors.length > 0) features.push('砂浜');
     envInfoHtml += createRow('star', '特　性', features.length > 0 ? features.join('・') : 'なし');
 
