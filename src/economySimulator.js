@@ -357,7 +357,16 @@ export function calculateDemographics(allHexes) {
 
         // 第四次・第五次
         demographics['学者'] = Math.floor(totalPop * 0.02);
-        demographics['兵士'] = Math.floor(totalPop * 0.03);
+        
+        // 兵士の細分化
+        const soldierTotal = Math.floor(totalPop * 0.03);
+        if (soldierTotal > 0) {
+            // 都市規模や施設によって比率を変えるのが理想だが、まずは基本比率で
+            demographics['騎士'] = Math.floor(soldierTotal * 0.05); // エリート
+            demographics['正規兵'] = Math.floor(soldierTotal * 0.45); // 主力
+            demographics['衛兵・自警団'] = Math.max(0, soldierTotal - demographics['騎士'] - demographics['正規兵']);
+        }
+
         demographics['官僚'] = Math.floor(totalPop * 0.01);
         demographics['聖職者'] = Math.floor(totalPop * 0.02);
 
@@ -369,68 +378,106 @@ export function calculateDemographics(allHexes) {
 export function calculateFacilities(allHexes) {
     allHexes.forEach(h => {
         const p = h.properties;
-        p.facilities = [];
+        p.facilities = []; // オブジェクト配列に変更: { name: string, count: number, level: number }
 
         if (p.population <= 0) return;
 
+        const addFacility = (name, count = 1, level = 1) => {
+            p.facilities.push({ name, count, level });
+        };
+
         // 基本施設
-        if (p.population > 100) p.facilities.push('集会所');
-        if (p.population > 500) p.facilities.push('市場');
-        if (p.population > 1000) p.facilities.push('宿屋');
+        if (p.population > 100) addFacility('集会所', 1, 1);
+        if (p.population > 500) addFacility('市場', Math.ceil(p.population / 2000), 1);
+        if (p.population > 1000) addFacility('宿屋', Math.ceil(p.population / 1000), 1);
 
         // 産業施設
-        if (p.industry.secondary['武具・道具'] > 50) p.facilities.push('鍛冶屋');
-        if (p.industry.secondary['織物'] > 50) p.facilities.push('機織り小屋');
-        if (p.industry.secondary['酒(穀物)'] > 50 || p.industry.secondary['酒(果実)'] > 50) p.facilities.push('酒造所');
+        if (p.industry.secondary['武具・道具'] > 50) addFacility('鍛冶屋', Math.ceil(p.industry.secondary['武具・道具'] / 100), 1);
+        if (p.industry.secondary['織物'] > 50) addFacility('機織り小屋', Math.ceil(p.industry.secondary['織物'] / 100), 1);
+        if (p.industry.secondary['酒(穀物)'] > 50 || p.industry.secondary['酒(果実)'] > 50) addFacility('酒造所', 1, 1);
 
         // 港湾・水運
         const isCoastal = p.isCoastal;
         const isLakeside = p.isLakeside || (h.neighbors.some(n => allHexes[n].properties.isWater) && !isCoastal);
+        const settlementLevel = p.settlement || '散居';
 
-        if (isCoastal && p.population > 500) p.facilities.push('港');
-        if (isCoastal && p.population > 5000) p.facilities.push('大型造船所');
-        if (isLakeside && p.population > 100) p.facilities.push('渡し場');
-        if (isLakeside && p.population > 1000) p.facilities.push('桟橋');
+        // 領都以上で海に面していれば必ず港を持つ
+        if (isCoastal) {
+            if (['首都', '都市', '領都'].includes(settlementLevel)) {
+                addFacility('大型港湾', 1, 3);
+                addFacility('造船所', 1, 2);
+            } else if (['街', '町'].includes(settlementLevel) || p.population > 500) {
+                addFacility('港', 1, 2);
+            } else {
+                addFacility('船着き場', 1, 1);
+            }
+        } else if (isLakeside) {
+            if (p.population > 1000) addFacility('桟橋', 2, 1);
+            else addFacility('渡し場', 1, 1);
+        }
 
         // 特殊施設
-        if (p.industry.quaternary['魔法研究'] > 50) p.facilities.push('魔導塔');
-        if (p.industry.quaternary['学問・歴史'] > 50) p.facilities.push('図書館');
-        if (p.industry.quinary['芸術・文化'] > 50) p.facilities.push('劇場');
-        if (p.industry.quinary['世界儀式'] > 0) p.facilities.push('大聖堂');
+        if (p.industry.quaternary['魔法研究'] > 50) addFacility('魔導塔', 1, Math.ceil(p.industry.quaternary['魔法研究'] / 500));
+        if (p.industry.quaternary['学問・歴史'] > 50) addFacility('図書館', 1, 1);
+        if (p.industry.quinary['芸術・文化'] > 50) addFacility('劇場', 1, 1);
+        if (p.industry.quinary['世界儀式'] > 0) addFacility('大聖堂', 1, 5);
 
         // 物流能力
         const wagonCount = Math.floor(p.population / 60);
-        const draftAnimals = Math.floor(wagonCount * 2.2);
+        const totalDraftAnimals = Math.floor(wagonCount * 2.2);
         const drivers = Math.floor(wagonCount * 1.3);
 
-        // 役畜の種類を決定
-        let animalType = '馬';
+        // 役畜の構成比率を決定
+        const animals = {};
         const climate = p.climateZone || '';
-        const vegetation = p.vegetation || '';
         const terrain = p.terrainType || '';
 
+        // デフォルト構成 (馬と牛のミックス)
+        let horseRatio = 0.6;
+        let oxRatio = 0.4;
+        let otherType = null;
+        let otherRatio = 0;
+
         if (climate.includes('ツンドラ') || climate.includes('氷雪')) {
-            animalType = 'トナカイ';
-            if (p.population < 500) animalType = '犬'; // 小規模集落は犬ぞり
+            horseRatio = 0.1; oxRatio = 0.1; otherType = 'トナカイ'; otherRatio = 0.8;
+            if (p.population < 500) { otherType = '犬'; otherRatio = 1.0; horseRatio = 0; oxRatio = 0; }
         } else if (climate.includes('砂漠')) {
-            animalType = 'ラクダ';
+            horseRatio = 0.2; oxRatio = 0.1; otherType = 'ラクダ'; otherRatio = 0.7;
         } else if (climate.includes('熱帯')) {
-            if (p.isAlluvial || p.industry.primary['稲']) {
-                animalType = '水牛';
-            } else if (vegetation === '密林') {
-                animalType = '象';
-            }
+            horseRatio = 0.1; oxRatio = 0.2; otherType = '水牛'; otherRatio = 0.7;
+            if (p.vegetation === '密林') { otherType = '象'; otherRatio = 0.2; oxRatio = 0.7; horseRatio = 0.1; }
         } else if (terrain === '山岳' || terrain === '山地') {
-            animalType = 'ラバ';
-            if (p.population < 1000) animalType = 'ロバ';
-        } else if (p.industry.primary['小麦'] || p.industry.primary['大麦']) {
-            if ((h.col + h.row) % 2 === 0) animalType = '牛';
+            horseRatio = 0.1; oxRatio = 0.1; otherType = 'ラバ'; otherRatio = 0.8;
+        }
+
+        if (totalDraftAnimals > 0) {
+            if (horseRatio > 0) animals['馬'] = Math.floor(totalDraftAnimals * horseRatio);
+            if (oxRatio > 0) animals['牛'] = Math.floor(totalDraftAnimals * oxRatio);
+            if (otherType && otherRatio > 0) animals[otherType] = Math.floor(totalDraftAnimals * otherRatio);
+        }
+
+        // 船舶の保有
+        const ships = {};
+        if (isCoastal && config.SHIP_AVAILABILITY[settlementLevel]) {
+            const availableTypes = config.SHIP_AVAILABILITY[settlementLevel];
+            availableTypes.forEach(typeKey => {
+                const shipData = config.SHIP_TYPES[typeKey];
+                // 人口と産業規模に応じて保有数を決定
+                let count = 0;
+                if (typeKey === 'dinghy') count = Math.floor(p.population / 200);
+                else if (typeKey === 'small_trader') count = Math.floor(p.population / 1000);
+                else if (typeKey === 'coastal_trader') count = Math.floor(p.population / 5000);
+                else if (typeKey === 'medium_merchant') count = Math.floor(p.population / 20000);
+                else if (typeKey === 'large_sailing_ship') count = Math.floor(p.population / 50000);
+                
+                if (count > 0) ships[shipData.name] = count;
+            });
         }
 
         p.logistics = {
             wagons: wagonCount,
-            animals: draftAnimals,
-            animalType: animalType,
+            animals: animals, // オブジェクトに変更
+            ships: ships,     // 追加
             drivers: drivers
         };
     });
@@ -565,7 +612,7 @@ export function calculateLivingConditions(allHexes) {
         if (p.population <= 0) return;
 
         const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement || '散居'];
-        const totalDemand = p.population * (settlementInfo ? settlementInfo.consumption_t_per_person : 1.0);
+        const totalDemand = p.population * (settlementInfo ? settlementInfo.consumption_t_per_person : 0.2);
 
         // 供給 = 自給 + 輸入
         let localSupply = 0;
@@ -577,6 +624,7 @@ export function calculateLivingConditions(allHexes) {
         const imports = p.imports ? (p.imports['食料'] || 0) : 0;
         const totalSupply = localSupply + imports;
 
+        // 自給率は地産地消分のみで計算
         p.selfSufficiencyRate = (totalDemand > 0) ? (localSupply / totalDemand) : 1.0;
 
         // 実質不足

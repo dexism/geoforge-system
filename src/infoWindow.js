@@ -365,9 +365,13 @@ export function getInfoText(d) {
         // 施設
         if (p.facilities && p.facilities.length > 0) {
             societyHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">storefront</span>施設</h6>`;
-            // 以前の「2軒」などの表記に戻すため、ここではシンプルにリスト表示する（「あり」を削除）
-            p.facilities.forEach(facility => {
-                societyHtml += `<div class="info-row"><span class="label">${facility}</span><span class="value"></span></div>`;
+            p.facilities.forEach(f => {
+                if (typeof f === 'string') {
+                    societyHtml += `<div class="info-row"><span class="label">${f}</span><span class="value"></span></div>`;
+                } else {
+                    const levelStr = f.level > 1 ? ` <span style="font-size:0.8em; color:#666;">Lv.${f.level}</span>` : '';
+                    societyHtml += `<div class="info-row"><span class="label">${f.name}${levelStr}</span><span class="value">${f.count}</span></div>`;
+                }
             });
             societyHtml += `</div>`;
         }
@@ -462,11 +466,11 @@ export function getInfoText(d) {
             }
 
             if (p.isWater) {
-                const ships = Math.round(p.roadUsage); // 船舶換算ではなくtそのまま
-                logisticsHtml += `<div class="info-row"><span class="label">海運能力</span><span class="value">${ships.toLocaleString()}t</span></div>`;
+                const ships = Math.round(p.roadUsage);
+                logisticsHtml += `<div class="info-row"><span class="label">海運輸送量</span><span class="value">${ships.toLocaleString()}t</span></div>`;
             } else {
-                const wagons = Math.round(p.roadUsage); // 荷馬車換算ではなくtそのまま
-                logisticsHtml += `<div class="info-row"><span class="label">陸運能力</span><span class="value">${wagons.toLocaleString()}t</span></div>`;
+                const wagons = Math.round(p.roadUsage);
+                logisticsHtml += `<div class="info-row"><span class="label">陸運輸送量</span><span class="value">${wagons.toLocaleString()}t</span></div>`;
             }
             logisticsHtml += `</div>`;
         }
@@ -476,7 +480,24 @@ export function getInfoText(d) {
             logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">inventory</span>物流資産 (保有)</h6>`;
             logisticsHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
             logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">荷馬車</span><span class="value">${p.logistics.wagons}台</span></div>`;
-            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${p.logistics.animalType || '役畜'}</span><span class="value">${p.logistics.animals}頭</span></div>`;
+
+            // 役畜 (複数種類対応)
+            if (p.logistics.animals && typeof p.logistics.animals === 'object') {
+                for (const [type, count] of Object.entries(p.logistics.animals)) {
+                    logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${type}</span><span class="value">${count}頭</span></div>`;
+                }
+            } else {
+                // 旧形式互換
+                logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${p.logistics.animalType || '役畜'}</span><span class="value">${p.logistics.animals}頭</span></div>`;
+            }
+
+            // 船舶 (新規追加)
+            if (p.logistics.ships && Object.keys(p.logistics.ships).length > 0) {
+                for (const [type, count] of Object.entries(p.logistics.ships)) {
+                    logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${type}</span><span class="value">${count}隻</span></div>`;
+                }
+            }
+
             logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">御者</span><span class="value">${p.logistics.drivers}人</span></div>`;
             logisticsHtml += `</div></div>`;
         }
