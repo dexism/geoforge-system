@@ -426,7 +426,18 @@ export function getInfoText(d) {
         livingHtml += `</div>`;
 
         // 租税
-        livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">account_balance_wallet</span>租税</span><span class="value">${(lc.tax || 0).toLocaleString()}G</span></div>`;
+        // livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">account_balance_wallet</span>租税</span><span class="value">${(lc.tax || 0).toLocaleString()}G</span></div>`;
+
+        // 世帯収入・租税 (v2.2)
+        if (lc.householdIncome !== undefined) {
+            livingHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">account_balance_wallet</span>世帯経済 (月間)</h6>`;
+            // 平均世帯人数 (v2.3)
+            const householdSize = config.HOUSEHOLD_SIZE[p.settlement || '散居'] || 5.0;
+            livingHtml += `<div class="info-row"><span class="label">平均世帯人数</span><span class="value">${householdSize.toFixed(1)}人</span></div>`;
+            livingHtml += `<div class="info-row"><span class="label">平均世帯収入</span><span class="value">${Math.round(lc.householdIncome).toLocaleString()}G</span></div>`;
+            livingHtml += `<div class="info-row"><span class="label">平均租税支出</span><span class="value" style="color:#e74c3c;">-${Math.round(lc.monthlyTax).toLocaleString()}G</span></div>`;
+            livingHtml += `</div>`;
+        }
 
         // 物価
         livingHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">payments</span>物価指数 (基準1.0)</h6>`;

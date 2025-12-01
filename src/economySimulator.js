@@ -370,6 +370,33 @@ export function calculateDemographics(allHexes) {
         demographics['官僚'] = Math.floor(totalPop * 0.01);
         demographics['聖職者'] = Math.floor(totalPop * 0.02);
 
+        // --- スラム・孤児の推計 (v2.1) ---
+        // スラム: 都市部('街'以上)で発生。産業構造の歪みや治安悪化で増えるが、ここでは簡易的に人口の一定割合とする。
+        // 街: 3%, 領都: 5%, 都市: 7%, 首都: 10% (仮)
+        let slumRate = 0;
+        const settlement = p.settlement || '散居';
+        if (settlement === '街') slumRate = 0.03;
+        else if (settlement === '領都') slumRate = 0.05;
+        else if (settlement === '都市') slumRate = 0.07;
+        else if (settlement === '首都') slumRate = 0.10;
+
+        if (slumRate > 0) {
+            demographics['スラム'] = Math.floor(totalPop * slumRate);
+        } else {
+            demographics['スラム'] = 0;
+        }
+
+        // 孤児: 基本2%。治安(security)が低いと増えるが、この時点ではsecurity計算前なので、
+        // 前回のsecurityを使うか、簡易的に固定+ランダムで計算。
+        // ここでは基本2% + 魔物ランクによる補正とする。
+        let orphanRate = 0.02;
+        if (p.monsterRank) {
+            if (p.monsterRank === 'S') orphanRate += 0.05;
+            else if (p.monsterRank === 'A') orphanRate += 0.03;
+            else if (p.monsterRank === 'B') orphanRate += 0.01;
+        }
+        demographics['孤児'] = Math.floor(totalPop * orphanRate);
+
         p.demographics = demographics;
     });
     return allHexes;
@@ -663,7 +690,7 @@ export function calculateLivingConditions(allHexes) {
         // 供給 = 自給 + 輸入
         let localSupply = 0;
         const foodItems = ['小麦', '大麦', '雑穀', '稲', '魚介類', '狩猟肉', '牧畜肉', '家畜肉', '乳製品', '果物'];
-        
+
         if (p.industry && p.industry.primary) {
             foodItems.forEach(item => {
                 if (p.industry.primary[item]) localSupply += p.industry.primary[item];
@@ -673,26 +700,32 @@ export function calculateLivingConditions(allHexes) {
         const imports = p.imports ? (p.imports['食料'] || 0) : 0;
         const totalSupply = localSupply + imports;
 
-        // 自給率は地産地消分のみで計算 (年間供給 / 年間需要)
-        // 例: 生産260t / 需要2928t = 0.088 (8.8%)
-        // 0除算防止: 需要が極端に少ない場合は100%とする
-        p.selfSufficiencyRate = (totalDemand > 1.0) ? (localSupply / totalDemand) : 1.0;
-        
-        // 上限キャップ (念のため、表示側でもキャップするがここでも)
-        // p.selfSufficiencyRate = Math.min(1.0, p.selfSufficiencyRate); // あえてキャップせず、過剰生産を見えるようにする？いや、自給率としては100%でいいか。
-        // ユーザー指摘「100%になっている」への対応として、計算が正しいことを確認。
-        // もし localSupply > totalDemand なら 1.0 を超える。
+        // 自給率は「主食（穀物）」のみで計算 (v2.4)
+        // 対象: 小麦, 大麦, 雑穀, 稲
+        let stapleSupply = 0;
+        const stapleItems = ['小麦', '大麦', '雑穀', '稲'];
+        if (p.industry && p.industry.primary) {
+            stapleItems.forEach(item => {
+                if (p.industry.primary[item]) stapleSupply += p.industry.primary[item];
+            });
+        }
+
+        // 自給率 = 主食年間生産量 / 主食年間需要 (人口 * 0.1t)
+        const stapleDemand = p.population * 0.1;
+        p.selfSufficiencyRate = (stapleDemand > 0) ? Math.min(1.0, stapleSupply / stapleDemand) : 1.0;
 
         // 実質不足 (供給 >= 需要 なら 0)
+        // こちらは全食料供給(totalSupply)で計算する
         const netShortage = Math.max(0, totalDemand - totalSupply);
         p.netShortage = netShortage;
 
         // 価格計算 (上限3.0)
         let price = 1.0;
+
         if (totalDemand > 0) {
             const shortageRate = netShortage / totalDemand;
             price = 1.0 + (shortageRate * 2.0); // 不足率100%で価格3.0
-            
+
             // 過剰供給時の価格低下
             if (totalSupply > totalDemand * 1.1) {
                 const surplusRate = (totalSupply - totalDemand) / totalDemand;
@@ -709,7 +742,7 @@ export function calculateLivingConditions(allHexes) {
         } else {
             happiness += 5; // 食料充足ボーナス
         }
-        
+
         if (price > 1.5) {
             happiness -= (price - 1.5) * 10;
         } else if (price < 0.8) {
@@ -723,6 +756,53 @@ export function calculateLivingConditions(allHexes) {
         happiness = Math.max(0, Math.min(100, happiness));
         p.happiness = happiness;
 
+        // --- 貧困度・飢餓度の算定 (v2.1) ---
+        // 1. 貧困度 (Poverty)
+        // 労働人口 * 所得 / 人口 = 一人当たり月収
+        // これを基準生活費と比較する
+        let totalIncome = 0;
+        let workerCount = 0;
+        if (p.demographics) {
+            Object.entries(p.demographics).forEach(([job, count]) => {
+                const income = config.JOB_INCOME[job] || 20; // 未定義は20G(農村レベル)
+                totalIncome += count * income;
+                workerCount += count;
+            });
+        }
+
+        // 一人当たり月収 (世帯ではなく個人ベース)
+        const perCapitaIncome = p.population > 0 ? (totalIncome / p.population) : 0;
+
+        // 基準生活費
+        const livingCost = config.LIVING_COST[p.settlement || '散居'] || 20;
+
+        // 貧困度 = 1.0 - (収入 / 生活費)
+        // 収入が生活費と同じなら0.0、半分なら0.5、ゼロなら1.0
+        // 収入が生活費を超えていれば0.0 (マイナスにはしない)
+        let poverty = 0;
+        if (livingCost > 0) {
+            poverty = 1.0 - (perCapitaIncome / livingCost);
+        }
+        poverty = Math.max(0, Math.min(1.0, poverty));
+
+        // 2. 飢餓度 (Hunger)
+        // (スラム人口 + (孤児 / 2)) / 人口
+        let hunger = 0;
+        if (p.population > 0 && p.demographics) {
+            const slum = p.demographics['スラム'] || 0;
+            const orphan = p.demographics['孤児'] || 0;
+            hunger = (slum + (orphan / 2)) / p.population;
+        }
+        hunger = Math.max(0, Math.min(1.0, hunger));
+
+        // --- 世帯収入・租税の計算 (v2.2) ---
+        const settlementType = p.settlement || '散居';
+        const householdSize = config.HOUSEHOLD_SIZE[settlementType] || 5.0;
+        const taxRate = config.TAX_RATE[settlementType] || 0.3;
+
+        const householdIncome = perCapitaIncome * householdSize;
+        const taxAmount = householdIncome * taxRate;
+
         // InfoWindow用のオブジェクト構造を作成
         p.livingConditions = {
             prices: {
@@ -733,11 +813,18 @@ export function calculateLivingConditions(allHexes) {
             },
             happiness: happiness,
             security: 100 - (p.monsterRank ? (p.monsterRank === 'S' ? 50 : (p.monsterRank === 'A' ? 30 : (p.monsterRank === 'B' ? 20 : 10))) : 0),
-            poverty: (netShortage / totalDemand) || 0,
-            hunger: (netShortage / totalDemand) || 0,
-            luxury: 0.5,
-            tax: p.population * 10,
-            // デバッグ用情報を追加してもよいが、データ構造が変わるので控える
+            poverty: poverty,
+            hunger: hunger,
+            luxury: (perCapitaIncome > livingCost * 2) ? 1.0 : (perCapitaIncome > livingCost ? (perCapitaIncome - livingCost) / livingCost : 0), // 簡易的な贅沢度
+            tax: p.population * 10, // 旧ロジック(互換性のため残す)
+
+            // 新規追加項目
+            householdIncome: householdIncome,
+            monthlyTax: taxAmount,
+
+            // デバッグ用情報を追加
+            perCapitaIncome: perCapitaIncome,
+            livingCost: livingCost,
             monthlyDemand: totalDemand / 12,
             monthlySupply: localSupply / 12
         };
