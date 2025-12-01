@@ -514,28 +514,140 @@ export function calculateFacilities(allHexes) {
             if (otherType && otherRatio > 0) animals[otherType] = Math.floor(totalDraftAnimals * otherRatio);
         }
 
-        // 船舶の保有
+        // 船舶の保有 (v2.5: 詳細ロジック)
         const ships = {};
-        if (isCoastal && config.SHIP_AVAILABILITY[settlementLevel]) {
-            const availableTypes = config.SHIP_AVAILABILITY[settlementLevel];
-            availableTypes.forEach(typeKey => {
-                const shipData = config.SHIP_TYPES[typeKey];
-                let count = 0;
-                if (typeKey === 'dinghy') count = Math.floor(p.population / 200);
-                else if (typeKey === 'small_trader') count = Math.floor(p.population / 1000);
-                else if (typeKey === 'coastal_trader') count = Math.floor(p.population / 5000);
-                else if (typeKey === 'medium_merchant') count = Math.floor(p.population / 20000);
-                else if (typeKey === 'large_sailing_ship') count = Math.floor(p.population / 50000);
+        if ((isCoastal || isLakeside) && config.SHIP_AVAILABILITY[settlementLevel]) {
+            const availTypes = config.SHIP_AVAILABILITY[settlementLevel];
 
-                if (count > 0) ships[shipData.name] = count;
+            // 1. 基準艦数 (H0) の決定
+            let minShips = 0;
+            let maxShips = 0;
+            let isOcean = isCoastal; // 外洋アクセスがあるか
+
+            // 基準テーブル
+            if (settlementLevel === '村') {
+                if (isOcean) { minShips = 12; maxShips = 30; }
+                else { minShips = 8; maxShips = 20; }
+            } else if (settlementLevel === '町') {
+                if (isOcean) { minShips = 35; maxShips = 80; }
+                else { minShips = 25; maxShips = 60; }
+            } else if (settlementLevel === '街') {
+                if (isOcean) { minShips = 70; maxShips = 140; }
+                else { minShips = 50; maxShips = 100; }
+            } else if (['領都', '都市'].includes(settlementLevel)) {
+                if (isOcean) { minShips = 150; maxShips = 250; }
+                else { minShips = 120; maxShips = 200; }
+            } else if (settlementLevel === '首都') {
+                if (isOcean) { minShips = 300; maxShips = 500; }
+                else { minShips = 220; maxShips = 380; }
+            }
+
+            // ランダムな基準値
+            let baseShips = minShips + Math.floor(Math.random() * (maxShips - minShips + 1));
+
+            // 2. スケーリング (人口・交易・水系)
+            // H ≈ H0 + 0.8 * (Pop/1000) + 10*T + 8*P
+            const popFactor = (p.population / 1000) * 0.8;
+
+            // 交易係数 T (0-3)
+            let tradeFactor = 0;
+            if (settlementLevel === '町') tradeFactor = 1;
+            else if (settlementLevel === '街') tradeFactor = 2;
+            else if (['領都', '都市', '首都'].includes(settlementLevel)) tradeFactor = 3;
+
+            // 水系係数 P (0-2)
+            let waterFactor = 0;
+            if (isOcean) waterFactor = 1;
+            if (p.fishingPotential > 0.7) waterFactor += 1; // 良港の代替指標
+
+            const totalShips = Math.floor(baseShips + popFactor + (10 * tradeFactor) + (8 * waterFactor));
+
+            // 3. タイプ別配分 (Mix)
+            let ratios = {}; // { typeKey: percentage }
+
+            if (settlementLevel === '村') {
+                if (isOcean) ratios = { 'dinghy': 0.90, 'small_trader': 0.10 };
+                else ratios = { 'dinghy': 1.0 };
+            } else if (settlementLevel === '町') {
+                if (isOcean) ratios = { 'dinghy': 0.65, 'small_trader': 0.30, 'coastal_trader': 0.05 };
+                else ratios = { 'dinghy': 0.80, 'small_trader': 0.20 };
+            } else if (settlementLevel === '街') {
+                if (isOcean) ratios = { 'dinghy': 0.55, 'small_trader': 0.30, 'coastal_trader': 0.15 };
+                else ratios = { 'dinghy': 0.70, 'small_trader': 0.30 }; // 内陸の街は沿岸交易船を持たない想定だが、河川交易としてsmallまで
+            } else if (['領都', '都市'].includes(settlementLevel)) {
+                if (isOcean) ratios = { 'dinghy': 0.45, 'small_trader': 0.25, 'coastal_trader': 0.20, 'medium_merchant': 0.10 };
+                else ratios = { 'dinghy': 0.60, 'small_trader': 0.30, 'coastal_trader': 0.10 };
+            } else if (settlementLevel === '首都') {
+                if (isOcean) ratios = { 'dinghy': 0.40, 'small_trader': 0.25, 'coastal_trader': 0.20, 'medium_merchant': 0.10, 'large_sailing_ship': 0.05 };
+                else ratios = { 'dinghy': 0.50, 'small_trader': 0.30, 'coastal_trader': 0.20 };
+            }
+
+            // 4. 配分適用と外洋対応最低保証
+            Object.entries(ratios).forEach(([typeKey, ratio]) => {
+                if (availTypes.includes(typeKey)) {
+                    let count = Math.floor(totalShips * ratio);
+                    if (count > 0) {
+                        const shipName = config.SHIP_TYPES[typeKey].name;
+                        ships[shipName] = count;
+                    }
+                }
             });
+
+            // 外洋対応最低保証 (沿岸のみ)
+            if (isOcean) {
+                let minOcean = 0;
+                if (settlementLevel === '街') minOcean = Math.floor(Math.random() * 5); // 0-4
+                else if (['領都', '都市'].includes(settlementLevel)) minOcean = 2 + Math.floor(Math.random() * 11); // 2-12
+                else if (settlementLevel === '首都') minOcean = 8 + Math.floor(Math.random() * 18); // 8-25
+
+                if (minOcean > 0) {
+                    // medium_merchant以上を確保
+                    const mediumName = config.SHIP_TYPES['medium_merchant'].name;
+                    const largeName = config.SHIP_TYPES['large_sailing_ship'].name;
+
+                    let currentOcean = (ships[mediumName] || 0) + (ships[largeName] || 0);
+                    if (currentOcean < minOcean) {
+                        // 不足分をmedium_merchantに追加 (availチェック)
+                        if (availTypes.includes('medium_merchant')) {
+                            ships[mediumName] = (ships[mediumName] || 0) + (minOcean - currentOcean);
+                        }
+                    }
+                }
+            }
         }
+
+        // 輸送能力の計算 (v2.6)
+        let waterCapacity = 0;
+        Object.entries(ships).forEach(([shipName, count]) => {
+            // 名前からタイプを逆引き
+            const typeKey = Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key].name === shipName);
+            if (typeKey) {
+                waterCapacity += count * config.SHIP_TYPES[typeKey].cargo_capacity_t;
+            }
+        });
+
+        let landCapacity = 0;
+        landCapacity += wagonCount * (config.TRANSPORT_CAPACITY.wagon || 1.0);
+        // 荷馬車以外の駄獣も考慮 (荷馬車用以外の動物)
+        // ここでは簡易的に、荷馬車牽引に使われていない動物を駄獣とする
+        // 牽引必要数: wagonCount * 2 (馬/牛)
+        let usedDraftAnimals = wagonCount * 2;
+        let totalAnimals = Object.values(animals).reduce((sum, count) => sum + count, 0);
+        let packAnimals = Math.max(0, totalAnimals - usedDraftAnimals);
+        landCapacity += packAnimals * (config.TRANSPORT_CAPACITY.pack_animal || 0.15);
+
+        const totalCapacity = waterCapacity + landCapacity;
 
         p.logistics = {
             wagons: wagonCount,
             animals: animals,
             ships: ships,
-            drivers: drivers
+            drivers: drivers,
+            transportCapacity: {
+                water: waterCapacity,
+                land: landCapacity,
+                total: totalCapacity
+            }
         };
     });
     return allHexes;

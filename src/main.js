@@ -4,7 +4,7 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines } from './continentGenerator.js';
+import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
 import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
@@ -1049,6 +1049,9 @@ async function processLoadedData(loadedData) {
 
     // 稜線データの再生成 (保存されていないため)
     generateRidgeLines(worldData.allHexes);
+
+    // 地理的フラグ（沿岸・湖岸）の再計算
+    recalculateGeographicFlags(worldData.allHexes);
 
     // 距離の再計算
     await recalculateDistances(worldData);

@@ -679,9 +679,24 @@ function calculateFinalProperties(allHexes) {
         // 最終的な値を 0.0 ～ 1.0 の範囲に収める
         properties.miningPotential = Math.min(1.0, miningPotential);
 
-        // 沿岸フラグの計算
-        const isCoastal = !isWater && h.neighbors.some(nIndex => allHexes[nIndex].properties.isWater);
+        // 沿岸・湖岸フラグの計算
+        let isCoastal = false;
+        let isLakeside = false;
+        if (!isWater) {
+            h.neighbors.forEach(nIndex => {
+                const nHex = allHexes[nIndex];
+                if (nHex.properties.isWater) {
+                    const veg = nHex.properties.vegetation;
+                    if (veg === '海洋' || veg === '深海') {
+                        isCoastal = true;
+                    } else if (veg === '湖沼') {
+                        isLakeside = true;
+                    }
+                }
+            });
+        }
         properties.isCoastal = isCoastal;
+        properties.isLakeside = isLakeside;
 
         let fishingPotential = 0;
         if (!isWater) {
@@ -920,3 +935,35 @@ export {
     generateRidgeLines,
     calculateFinalProperties
 };
+/**
+ * ロード時に地理的フラグ（沿岸・湖岸）を再計算する
+ * @param {Array<object>} allHexes 
+ */
+export function recalculateGeographicFlags(allHexes) {
+    allHexes.forEach(h => {
+        const p = h.properties;
+        if (p.isWater) {
+            p.isCoastal = false;
+            p.isLakeside = false;
+            return;
+        }
+
+        let isCoastal = false;
+        let isLakeside = false;
+
+        h.neighbors.forEach(nIndex => {
+            const nHex = allHexes[nIndex];
+            if (nHex && nHex.properties.isWater) {
+                const veg = nHex.properties.vegetation;
+                if (veg === '海洋' || veg === '深海') {
+                    isCoastal = true;
+                } else if (veg === '湖沼') {
+                    isLakeside = true;
+                }
+            }
+        });
+
+        p.isCoastal = isCoastal;
+        p.isLakeside = isLakeside;
+    });
+}

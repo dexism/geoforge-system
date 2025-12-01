@@ -468,65 +468,48 @@ export function getInfoText(d) {
 
     // --- 3.7. 物流・交通カード (新規追加) ---
     let logisticsCard = '';
-    if (p.roadUsage > 0 || p.logistics) {
+    if (p.logistics) {
         let logisticsHtml = '';
 
-        // 交通量 (フロー)
-        if (p.roadUsage > 0) {
-            logisticsHtml += `<div class="sector-block"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">local_shipping</span>月間輸送量 (フロー)</h6>`;
-            logisticsHtml += `<div class="info-row"><span class="label">総輸送量</span><span class="value">${Math.round(p.roadUsage).toLocaleString()}t</span></div>`;
-
-            if (p.roadLoss > 0) {
-                logisticsHtml += `<div class="info-row"><span class="label">輸送損失</span><span class="value" style="color:#ff6b6b;">${Math.round(p.roadLoss).toLocaleString()}t</span></div>`;
-            }
-
-            // 陸運・海運の内訳表示
-            // calculateRoadTrafficで landUsage, waterUsage を計算している場合
-            if (p.landUsage !== undefined && p.waterUsage !== undefined) {
-                if (p.landUsage > 0) logisticsHtml += `<div class="info-row"><span class="label">陸運輸送量</span><span class="value">${Math.round(p.landUsage).toLocaleString()}t</span></div>`;
-                if (p.waterUsage > 0) logisticsHtml += `<div class="info-row"><span class="label">海運輸送量</span><span class="value">${Math.round(p.waterUsage).toLocaleString()}t</span></div>`;
-            } else {
-                // 旧ロジック互換 (念のため)
-                if (p.isWater) {
-                    const ships = Math.round(p.roadUsage);
-                    logisticsHtml += `<div class="info-row"><span class="label">海運輸送量</span><span class="value">${ships.toLocaleString()}t</span></div>`;
-                } else {
-                    const wagons = Math.round(p.roadUsage);
-                    logisticsHtml += `<div class="info-row"><span class="label">陸運輸送量</span><span class="value">${wagons.toLocaleString()}t</span></div>`;
-                }
+        // 輸送能力 (v2.6) - 最上部に移動
+        if (p.logistics.transportCapacity) {
+            const tc = p.logistics.transportCapacity;
+            logisticsHtml += `<div class="sector-block"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">local_shipping</span>輸送能力 (月間)</h6>`;
+            logisticsHtml += `<div class="info-row"><span class="label">総輸送力</span><span class="value" style="font-weight:bold;">${Math.round(tc.total).toLocaleString()} t</span></div>`;
+            logisticsHtml += `<div class="info-row"><span class="label">陸上輸送</span><span class="value">${Math.round(tc.land).toLocaleString()} t</span></div>`;
+            if (tc.water > 0) {
+                logisticsHtml += `<div class="info-row"><span class="label">水上輸送</span><span class="value">${Math.round(tc.water).toLocaleString()} t</span></div>`;
             }
             logisticsHtml += `</div>`;
         }
 
         // 物流資産 (ストック)
-        if (p.logistics) {
-            logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">inventory</span>物流資産 (保有)</h6>`;
-            logisticsHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
-            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">荷馬車</span><span class="value">${p.logistics.wagons}台</span></div>`;
+        logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">inventory</span>物流資産 (保有)</h6>`;
+        logisticsHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
+        logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">荷馬車</span><span class="value">${p.logistics.wagons}台</span></div>`;
 
-            // 役畜 (複数種類対応)
-            if (p.logistics.animals && typeof p.logistics.animals === 'object') {
-                for (const [type, count] of Object.entries(p.logistics.animals)) {
-                    logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${type}</span><span class="value">${count}頭</span></div>`;
-                }
-            } else {
-                // 旧形式互換
-                logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">役畜</span><span class="value">${p.logistics.animals}頭</span></div>`;
+        // 役畜 (複数種類対応)
+        if (p.logistics.animals && typeof p.logistics.animals === 'object') {
+            for (const [type, count] of Object.entries(p.logistics.animals)) {
+                logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${type}</span><span class="value">${count}頭</span></div>`;
             }
-
-            // 船舶
-            if (p.logistics.ships && typeof p.logistics.ships === 'object') {
-                for (const [type, count] of Object.entries(p.logistics.ships)) {
-                    logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${type}</span><span class="value">${count}隻</span></div>`;
-                }
-            }
-
-            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">人員(御者/船頭)</span><span class="value">${p.logistics.drivers}人</span></div>`;
-            logisticsHtml += `</div></div>`;
+        } else {
+            // 旧形式互換
+            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">役畜</span><span class="value">${p.logistics.animals}頭</span></div>`;
         }
 
+        // 船舶
+        if (p.logistics.ships && typeof p.logistics.ships === 'object') {
+            for (const [type, count] of Object.entries(p.logistics.ships)) {
+                logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${type}</span><span class="value">${count}隻</span></div>`;
+            }
+        }
+
+        logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">人員(御者/船頭)</span><span class="value">${p.logistics.drivers}人</span></div>`;
+        logisticsHtml += `</div></div>`;
+
         if (logisticsHtml) {
-            logisticsCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">swap_horiz</span>物流・交通</div><div class="card-content">${logisticsHtml}</div></div>`;
+            logisticsCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">commute</span>物流・交通</div><div class="card-content">${logisticsHtml}</div></div>`;
         }
     }
 
@@ -611,7 +594,12 @@ export function generateHexJson(d) {
         x: d.x,
         y: d.y,
         properties: d.properties,
-        isCoastal: d.properties.isCoastal, // 明示的にトップレベルにも置くか、properties内にあるので十分だが念のため
+        // ユーザー要望の地理フラグを明示的に追加
+        isCoastal: d.properties.isCoastal,
+        isLakeside: d.properties.isLakeside,
+        beachNeighbors: d.properties.beachNeighbors,
+        isRiver: d.properties.isRiver,
+        riverFlow: d.properties.riverFlow,
         neighbors: neighborsInfo
     };
     return JSON.stringify(exportData, null, 2);

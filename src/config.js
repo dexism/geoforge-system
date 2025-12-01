@@ -512,6 +512,12 @@ export const TAX_RATE = {
     '散居': 0.30
 };
 
+// 輸送能力パラメータ (v2.6)
+export const TRANSPORT_CAPACITY = {
+    'wagon': 1.0, // 荷馬車1台あたりの積載量 (トン)
+    'pack_animal': 0.15 // 駄獣1頭あたりの積載量 (トン)
+};
+
 // ================================================================
 // ■ 8. 海運パラメータ (v1.0 - 船種定義)
 // ================================================================
@@ -526,7 +532,7 @@ export const SHIP_TYPES = {
         avg_speed_kmh: 4          // 平均速度 (km/h)
     },
     'small_trader': {
-        name: '小型商船・大型漁船',
+        name: '商船・大型漁船',
         cargo_capacity_t: 10,
         range_km: 100,
         max_offshore_km: 20,
