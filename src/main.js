@@ -6,7 +6,7 @@ import * as d3 from 'd3';
 import * as config from './config.js';
 import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
-import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions } from './economySimulator.js';
+import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex } from './utils.js';
@@ -703,19 +703,12 @@ async function recalculateEconomyMetrics(worldData) {
     const { allHexes } = worldData;
     if (!allHexes) return;
 
-    allHexes.forEach(h => {
-        // 人口構成がなければ計算
-        if (!h.properties.demographics) {
-            h.properties.demographics = calculateDemographics(h);
-        }
-        // 施設がなければ計算
-        if (!h.properties.facilities) {
-            h.properties.facilities = calculateFacilities(h);
-        }
-        // 生活水準を計算 (常に最新ロジックで上書き推奨だが、既存値がある場合は維持するか？
-        // ここでは「表示されない」問題解決のため、無条件で再計算して最新化する)
-        h.properties.livingConditions = calculateLivingConditions(h, allHexes);
-    });
+    // 一括計算関数を呼び出し (順序重要)
+    generateCityCharacteristics(allHexes);
+    calculateDemographics(allHexes);
+    calculateFacilities(allHexes);
+    calculateTerritoryAggregates(allHexes);
+    calculateLivingConditions(allHexes);
 }
 
 async function loadExistingWorld() {

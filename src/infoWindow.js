@@ -224,23 +224,7 @@ export function getInfoText(d) {
     basicInfoHtml += createRow('agriculture', '農　地', Math.round(p.cultivatedArea || 0).toLocaleString(), ' ha');
     basicInfoHtml += createRow('home', '居住適性', (p.habitability || 0).toFixed(1));
 
-    if (p.roadUsage > 0) {
-        basicInfoHtml += createRow('local_shipping', '月間輸送', `${Math.round(p.roadUsage).toLocaleString()}t`);
-        if (p.roadLoss > 0) {
-            basicInfoHtml += createRow('warning', '輸送損失', `${Math.round(p.roadLoss).toLocaleString()}t`, '', 'color:#ff6b6b;');
-        }
 
-        // 荷馬車・船の換算表示
-        if (p.isWater) {
-            // 海上: 大型船換算 (1隻=100トンと仮定)
-            const ships = (p.roadUsage / 100).toFixed(1);
-            basicInfoHtml += createRow('sailing', '船舶換算', `${ships}隻`);
-        } else {
-            // 陸上: 荷馬車換算 (1台=1トン)
-            const wagons = Math.round(p.roadUsage);
-            basicInfoHtml += createRow('groups', '荷馬車換算', `${wagons}台`);
-        }
-    }
 
     const basicCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">info</span>基本情報</div><div class="card-content">${basicInfoHtml}</div></div>`;
 
@@ -408,7 +392,7 @@ export function getInfoText(d) {
         };
 
         livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${getSecurityIcon(lc.security)}</span>治安</span><span class="value">${lc.security}/100</span></div>`;
-        livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${getHappinessIcon(lc.happiness)}</span>幸福度</span><span class="value">${lc.happiness}/100</span></div>`;
+        livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${getHappinessIcon(lc.happiness)}</span>幸福度</span><span class="value">${Math.round(lc.happiness)}/100</span></div>`;
 
         // 租税
         livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">account_balance_wallet</span>租税</span><span class="value">${(lc.tax || 0).toLocaleString()}G</span></div>`;
@@ -438,6 +422,43 @@ export function getInfoText(d) {
         livingHtml += `</div>`;
 
         livingCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">family_restroom</span>生活水準</div><div class="card-content">${livingHtml}</div></div>`;
+    }
+
+    // --- 3.7. 物流・交通カード (新規追加) ---
+    let logisticsCard = '';
+    if (p.roadUsage > 0 || p.logistics) {
+        let logisticsHtml = '';
+
+        // 交通量 (フロー)
+        if (p.roadUsage > 0) {
+            logisticsHtml += `<div class="sector-block"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">local_shipping</span>月間輸送量 (フロー)</h6>`;
+            logisticsHtml += `<div class="info-row"><span class="label">総輸送量</span><span class="value">${Math.round(p.roadUsage).toLocaleString()}t</span></div>`;
+
+            if (p.roadLoss > 0) {
+                logisticsHtml += `<div class="info-row"><span class="label">輸送損失</span><span class="value" style="color:#ff6b6b;">${Math.round(p.roadLoss).toLocaleString()}t</span></div>`;
+            }
+
+            if (p.isWater) {
+                const ships = (p.roadUsage / 100).toFixed(1);
+                logisticsHtml += `<div class="info-row"><span class="label">船舶換算</span><span class="value">${ships}隻分</span></div>`;
+            } else {
+                const wagons = Math.round(p.roadUsage);
+                logisticsHtml += `<div class="info-row"><span class="label">荷馬車換算</span><span class="value">${wagons}台分</span></div>`;
+            }
+            logisticsHtml += `</div>`;
+        }
+
+        // 物流資産 (ストック)
+        if (p.logistics) {
+            logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">inventory</span>物流資産 (保有)</h6>`;
+            logisticsHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
+            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">荷馬車</span><span class="value">${p.logistics.wagons}台</span></div>`;
+            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">役畜</span><span class="value">${p.logistics.animals}頭</span></div>`;
+            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">御者</span><span class="value">${p.logistics.drivers}人</span></div>`;
+            logisticsHtml += `</div></div>`;
+        }
+
+        logisticsCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">commute</span>物流・交通</div><div class="card-content">${logisticsHtml}</div></div>`;
     }
 
     // --- 4. 領地集計カード (拠点の場合) ---
@@ -483,7 +504,7 @@ export function getInfoText(d) {
     // コピーボタンを追加
     const copyBtnHtml = `<button id="copy-info-json-btn" class="copy-btn" title="JSONでコピー"><span class="material-icons-round" style="font-size: 18px; vertical-align: middle; margin-right: 4px;">content_copy</span></button>`;
 
-    return `<div class="info-scroll-container">${copyBtnHtml}${basicCard}${envCard}${resourceCard}${industryCard}${societyCard}${livingCard}${territoryCard}</div>`;
+    return `<div class="info-scroll-container">${copyBtnHtml}${basicCard}${envCard}${resourceCard}${industryCard}${societyCard}${livingCard}${logisticsCard}${territoryCard}</div>`;
 }
 
 /**

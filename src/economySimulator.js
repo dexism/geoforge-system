@@ -29,6 +29,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         p.surplus = {};
         p.shortage = {};
         p.cultivatedArea = 0;
+        p.imports = { '食料': 0 }; // 初期化
 
         if (p.population <= 0 || p.isWater) return;
 
@@ -125,83 +126,39 @@ export async function simulateEconomy(allHexes, addLogMessage) {
                 // 農業労働者の10%が従事すると仮定し、適性に基づいて算出
                 prod1['果物'] = (workers.agri * 0.1) * (p.agriPotential * 0.5);
             }
-
-            // 薬草 (魔法産業の基礎 - 新規追加要素だが既存ロジックと競合しない形で配置)
-            if (p.manaValue > 0.3) {
-                prod1['薬草'] = workers.agri * 0.05 * p.manaValue * 10;
-            }
         }
 
-        // ---------------------------------------------------------
-        // 【その他 第一次産業】
-        // ---------------------------------------------------------
+        // --- 狩猟・林業 ---
+        if (workers.forest > 0) {
+            prod1['木材'] = workers.forest * 10 * p.forestPotential;
+            prod1['狩猟肉'] = workers.forest * 2 * p.huntingPotential;
+            prod1['薬草'] = workers.forest * 1 * p.manaValue;
+        }
 
-        // 漁業
-        if (workers.fish > 0.1) {
+        // --- 鉱業 ---
+        if (workers.mining > 0) {
+            prod1['鉱石'] = workers.mining * 20 * p.miningPotential;
+            prod1['鉄'] = workers.mining * 5 * p.miningPotential;
+            if (p.manaValue > 1.5) prod1['魔鉱石'] = workers.mining * 0.5 * p.manaValue;
+        }
+
+        // --- 漁業 ---
+        if (workers.fish > 0) {
             let coastalBonus = 1.0;
-            if (p.isCoastal) {
-                // 港町ボーナス: 沖合漁業が可能になり、生産効率と資源限界が大幅アップ
-                coastalBonus = 2.5;
-                if (['都市', '領都', '街'].includes(p.settlement)) {
-                    coastalBonus = 4.0; // 大規模港湾
-                }
-            }
-
-            const laborYield = workers.fish * C.YIELD_PER_WORKER.FISHING * p.fishingPotential * coastalBonus;
-            // 資源限界チェック (面積ベース)
-            const resourceLimit = config.HEX_AREA_HA * C.MAX_YIELD_PER_HA.FISHING * coastalBonus;
-            prod1['魚介類'] = Math.min(laborYield, resourceLimit);
+            if (p.isCoastal) coastalBonus = 1.5;
+            prod1['魚介類'] = workers.fish * 15 * p.fishingPotential * coastalBonus;
         }
 
-        // 林業
-        if (workers.forest > 0.1) {
-            prod1['木材'] = workers.forest * C.YIELD_PER_WORKER.FORESTRY * p.forestPotential;
+        // --- 牧畜・畜産 ---
+        if (workers.pastoral > 0) {
+            prod1['牧畜肉'] = workers.pastoral * 8 * p.pastoralPotential;
+            prod1['乳製品'] = workers.pastoral * 10 * p.pastoralPotential;
+            prod1['羊毛'] = workers.pastoral * 5 * p.pastoralPotential;
+            if (p.pastoralPotential > 0.8) prod1['特産チーズ'] = workers.pastoral * 1;
         }
-
-        // 鉱業
-        if (workers.mining > 0.1) {
-            prod1['鉱石'] = workers.mining * C.YIELD_PER_WORKER.MINING * p.miningPotential;
-            // 魔鉱石 (魔力依存)
-            if (p.manaValue > 0.5) {
-                prod1['魔鉱石'] = prod1['鉱石'] * p.manaValue * 0.1;
-            }
-        }
-
-        // 牧畜 (遊牧的)
-        if (workers.pastoral > 0.1) {
-            prod1['牧畜肉'] = workers.pastoral * C.YIELD_PER_WORKER.PASTORAL_MEAT * p.pastoralPotential;
-            prod1['乳製品'] = workers.pastoral * C.YIELD_PER_WORKER.PASTORAL_DAIRY * p.pastoralPotential;
-            prod1['革'] = workers.pastoral * 0.05 * p.pastoralPotential;
-
-            // 特産品: 高品質なチーズや毛織物
-            if (p.pastoralPotential > 0.8) {
-                prod1['特産チーズ'] = prod1['乳製品'] * 0.1;
-                prod1['高級羊毛'] = prod1['革'] * 0.5; // 革の代わりに羊毛として扱う
-            }
-
-            // 魔獣素材 (高ランク魔物地域での牧畜)
-            if (p.monsterRank && ['A', 'B'].includes(p.monsterRank)) {
-                prod1['魔獣素材'] = workers.pastoral * 0.01;
-            }
-        }
-
-        // 家畜 (定住的 - 舎飼い)
-        if (workers.livestock > 0.1) {
-            const feedEfficiency = 0.5 + (p.agriPotential * 0.5);
-            prod1['家畜肉'] = workers.livestock * C.YIELD_PER_WORKER.LIVESTOCK_MEAT * p.livestockPotential * feedEfficiency;
-
-            // 特産品: ブランド豚/鶏など
-            if (p.livestockPotential > 0.8 && p.agriPotential > 0.7) {
-                prod1['高級肉'] = prod1['家畜肉'] * 0.1;
-            }
-        }
-
-        // 狩猟 (人口の一部が狩人として活動 - 設定値に基づく)
-        const hunterPopulation = p.population * settlementInfo.hunter_rate;
-        if (hunterPopulation > 0.1 && p.huntingPotential > 0) {
-            const laborYield = hunterPopulation * config.HUNTING_PARAMS.BASE_HUNTING_YIELD_T_PER_HUNTER * p.huntingPotential;
-            const resourceYield = config.HEX_AREA_HA * config.HUNTING_PARAMS.MAX_HUNTING_YIELD_T_PER_HA * p.huntingPotential;
-            prod1['狩猟肉'] = Math.min(laborYield, resourceYield);
+        if (workers.livestock > 0) {
+            prod1['家畜肉'] = workers.livestock * 12 * p.livestockPotential;
+            if (p.livestockPotential > 0.8) prod1['高級肉'] = workers.livestock * 2;
         }
 
         // 旧データ構造へのコピー（互換性確保）
@@ -224,7 +181,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
         }
 
         // 織物・染色: 革や植物繊維(農業の副産物と仮定)を利用
-        const resourceFiber = (prod1['革'] || 0) + (prod1['雑穀'] || 0) * 0.2;
+        const resourceFiber = (prod1['革'] || 0) + (prod1['雑穀'] || 0) * 0.2 + (prod1['羊毛'] || 0);
         if (resourceFiber > 0 && labor2 > 0) {
             const capacity = labor2 * 0.3;
             prod2['織物'] = Math.min(capacity * 2, resourceFiber * 1.5);
@@ -331,716 +288,308 @@ export async function simulateEconomy(allHexes, addLogMessage) {
             }
         });
 
-        const balance = totalSupply - totalDemand;
-
-        // 余剰・不足の計算
-        if (balance > 0) { p.surplus['食料'] = balance.toFixed(1); }
-        else { p.shortage['食料'] = Math.abs(balance).toFixed(1); }
-
-    }); // End of first pass loop
-
-    // 2nd Pass: Calculate Demographics, Facilities, and Living Conditions
-    allHexes.forEach(h => {
-        h.properties.demographics = calculateDemographics(h);
-        h.properties.facilities = calculateFacilities(h);
+        p.surplus['食料'] = Math.max(0, totalSupply - totalDemand);
+        p.shortage['食料'] = Math.max(0, totalDemand - totalSupply);
     });
 
-    allHexes.forEach(h => {
-        h.properties.livingConditions = calculateLivingConditions(h, allHexes);
-    });
-
-    return allHexes;
+    // 第2パス: 統計、施設、交通、生活水準
+    generateCityCharacteristics(allHexes);
+    calculateDemographics(allHexes);
+    calculateFacilities(allHexes);
+    calculateTerritoryAggregates(allHexes);
+    await calculateRoadTraffic(allHexes, addLogMessage);
+    calculateLivingConditions(allHexes);
 }
 
-/**
- * 主要都市の庇護下にある領土の各種データを集計する関数
- * @param {Array<object>} allHexes - 経済シミュレーション後の全ヘックスデータ
- * @param {Function} addLogMessage - ログ出力用の関数
- * @returns {Array<object>} - 集計データが追加された全ヘックスデータ
- */
-export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
-    await addLogMessage("主要都市の支配領域データを集計しています...");
-
-    // 集計対象を「町」以上の、実質的な拠点となりうる集落に限定する
-    const territoryHubs = allHexes.filter(h => ['首都', '都市', '領都', '街', '町'].includes(h.properties.settlement));
-
-    // --- STEP 1: 親から子の関係をマップ化する ---
-    const childrenMap = new Map();
+export function generateCityCharacteristics(allHexes) {
     allHexes.forEach(h => {
         const p = h.properties;
-        if (p.parentHexId !== null) {
-            if (!childrenMap.has(p.parentHexId)) {
-                childrenMap.set(p.parentHexId, []);
-            }
-            childrenMap.get(p.parentHexId).push(h);
-        }
+        p.characteristics = [];
+
+        // 特産品
+        if (p.industry.primary['特産チーズ']) p.characteristics.push('特産品: チーズ');
+        if (p.industry.primary['高級肉']) p.characteristics.push('特産品: 高級肉');
+        if (p.industry.primary['魚介類'] > 500) p.characteristics.push('特産品: 海産物');
+        if (p.industry.secondary['織物'] > 200) p.characteristics.push('特産品: 織物');
+        if (p.industry.secondary['酒(果実)'] > 100) p.characteristics.push('特産品: 果実酒');
+
+        // 基幹サービス
+        if (p.industry.tertiary['医療・教会'] > 100) p.characteristics.push('基幹: 医療・教会');
+        if (p.industry.tertiary['宿屋・酒場'] > 200) p.characteristics.push('基幹: 観光・宿泊');
+
+        // 文化・祭礼
+        if (p.industry.quinary['芸術・文化'] > 50) p.characteristics.push('文化: 芸術の都');
+        if (p.industry.quinary['世界儀式'] > 0) p.characteristics.push('文化: 聖地');
+
+        // 戦略的役割
+        if (p.industry.quaternary['戦略・軍事'] > 100) p.characteristics.push('戦略: 軍事拠点');
+        if (p.industry.quaternary['魔法研究'] > 100) p.characteristics.push('戦略: 魔導研究');
+
+        // 象徴・ブランド
+        if (p.settlement === '首都') p.characteristics.push('象徴: 王都');
+        if (p.population > 10000) p.characteristics.push('象徴: 大都市');
     });
-
-    // --- STEP 2: 各ハブごとに、配下の全領域を集計する ---
-    territoryHubs.forEach(hub => {
-        const hubIndex = getIndex(hub.col, hub.row);
-        const hubProps = hub.properties;
-
-        // 集計の初期値を「ハブ自身の値」からスタートさせる
-        const aggregatedData = {
-            population: hubProps.population,
-            cultivatedArea: hubProps.cultivatedArea,
-            production: { ...hubProps.production },
-            settlementCounts: { '都市': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
-        };
-
-        // --- 幅優先探索で、ハブ配下のすべての子孫（孫、ひ孫...）をたどる ---
-        const queue = [...(childrenMap.get(hubIndex) || [])];
-        const visited = new Set(queue.map(h => getIndex(h.col, h.row)));
-        let head = 0;
-
-        while (head < queue.length) {
-            const descendant = queue[head++];
-            const dProps = descendant.properties;
-
-            // 1. 配下集落のデータを合計に加算
-            aggregatedData.population += dProps.population;
-            aggregatedData.cultivatedArea += dProps.cultivatedArea;
-            for (const item in dProps.production) {
-                aggregatedData.production[item] = (aggregatedData.production[item] || 0) + dProps.production[item];
-            }
-
-            // 2. 「直轄地」の種類をカウント
-            // ハブ自身はカウントせず、配下の集落のみをカウントする
-            if (dProps.settlement && aggregatedData.settlementCounts[dProps.settlement] !== undefined) {
-                aggregatedData.settlementCounts[dProps.settlement]++;
-            }
-
-            // 3. さらにその下の子孫をキューに追加
-            const descendantIndex = getIndex(descendant.col, descendant.row);
-            const grandchildren = childrenMap.get(descendantIndex) || [];
-            grandchildren.forEach(child => {
-                const childIndex = getIndex(child.col, child.row);
-                if (!visited.has(childIndex)) {
-                    visited.add(childIndex);
-                    queue.push(child);
-                }
-            });
-        }
-
-        // --- STEP 3: 計算した集計データをハブのプロパティに格納 ---
-        hubProps.territoryData = aggregatedData;
-    });
-
-    return allHexes;
 }
 
-/**
- * 街道の交通量（月間輸送量：トン）を計算する
- * ユーザー定義: 街などのキャラバンは荷馬車20台を1個小隊として、数個小隊が年に6回ほど行動する。
- * 1回のキャラバン = 20台 * 3小隊 = 60台 と仮定。
- * 年6回 = 2ヶ月に1回 => 月あたり0.5回。
- * 月間荷馬車数 = 30台。
- * 荷馬車1台 = 積載量1トン (御者1人+護衛1人=2人) とする。
- * 
- * 追加要件:
- * 1. 街道上の魔物や治安に応じた輸送成功量と損失を加味する。
- * 2. 海上輸送も考慮する（船種により大量輸送可能）。
- * 
- * @param {Array<object>} allHexes - 全ヘックスデータ
- * @param {Array<object>} roadPaths - 生成された全道路パス
- * @param {Function} addLogMessage - ログ出力用
- */
-export async function calculateRoadTraffic(allHexes, roadPaths, addLogMessage) {
-    if (!roadPaths) return allHexes;
-    await addLogMessage("街道および海路の交通量（月間輸送量・損失）を計算しています...");
+export function calculateDemographics(allHexes) {
+    allHexes.forEach(h => {
+        const p = h.properties;
+        if (p.population <= 0) return;
 
-    // 1. 初期化: 全ヘックスの交通量と損失をリセット
+        const totalPop = p.population;
+        const demographics = {};
+
+        // 職業人口の推計 (産業配分に基づく)
+        // 第一次
+        demographics['農民'] = Math.floor(totalPop * 0.4 * (p.agriPotential || 0.5));
+        demographics['漁師'] = Math.floor(totalPop * 0.1 * (p.fishingPotential || 0));
+        demographics['鉱夫'] = Math.floor(totalPop * 0.1 * (p.miningPotential || 0));
+        demographics['木こり'] = Math.floor(totalPop * 0.1 * (p.forestPotential || 0));
+        demographics['畜夫'] = Math.floor(totalPop * 0.1 * ((p.pastoralPotential || 0) + (p.livestockPotential || 0)));
+
+        // 第二次
+        demographics['職人'] = Math.floor(totalPop * 0.1);
+
+        // 第三次
+        demographics['商人'] = Math.floor(totalPop * 0.05);
+
+        // 第四次・第五次
+        demographics['学者'] = Math.floor(totalPop * 0.02);
+        demographics['兵士'] = Math.floor(totalPop * 0.03);
+        demographics['官僚'] = Math.floor(totalPop * 0.01);
+        demographics['聖職者'] = Math.floor(totalPop * 0.02);
+
+        p.demographics = demographics;
+    });
+}
+
+export function calculateFacilities(allHexes) {
+    allHexes.forEach(h => {
+        const p = h.properties;
+        p.facilities = [];
+
+        if (p.population <= 0) return;
+
+        // 基本施設
+        if (p.population > 100) p.facilities.push('集会所');
+        if (p.population > 500) p.facilities.push('市場');
+        if (p.population > 1000) p.facilities.push('宿屋');
+
+        // 産業施設
+        if (p.industry.secondary['武具・道具'] > 50) p.facilities.push('鍛冶屋');
+        if (p.industry.secondary['織物'] > 50) p.facilities.push('機織り小屋');
+        if (p.industry.secondary['酒(穀物)'] > 50 || p.industry.secondary['酒(果実)'] > 50) p.facilities.push('酒造所');
+
+        // 港湾・水運
+        const isCoastal = p.isCoastal;
+        const isLakeside = p.isLakeside || (h.neighbors.some(n => allHexes[n].properties.isWater) && !isCoastal);
+
+        if (isCoastal && p.population > 500) p.facilities.push('港');
+        if (isCoastal && p.population > 5000) p.facilities.push('大型造船所');
+        if (isLakeside && p.population > 100) p.facilities.push('渡し場');
+        if (isLakeside && p.population > 1000) p.facilities.push('桟橋');
+
+        // 特殊施設
+        if (p.industry.quaternary['魔法研究'] > 50) p.facilities.push('魔導塔');
+        if (p.industry.quaternary['学問・歴史'] > 50) p.facilities.push('図書館');
+        if (p.industry.quinary['芸術・文化'] > 50) p.facilities.push('劇場');
+        if (p.industry.quinary['世界儀式'] > 0) p.facilities.push('大聖堂');
+
+        // 物流能力
+        const wagonCount = Math.floor(p.population / 60);
+        const draftAnimals = Math.floor(wagonCount * 2.2);
+        const drivers = Math.floor(wagonCount * 1.3);
+
+        p.logistics = {
+            wagons: wagonCount,
+            animals: draftAnimals,
+            drivers: drivers
+        };
+    });
+}
+
+export function calculateTerritoryAggregates(allHexes) {
+    // 支配領域の集計
+    allHexes.forEach(h => {
+        if (['首都', '都市', '領都'].includes(h.properties.settlement)) {
+            h.properties.territoryStats = {
+                totalPopulation: h.properties.population,
+                totalFoodProduction: 0,
+                settlementCounts: { [h.properties.settlement]: 1 }
+            };
+        }
+    });
+
+    allHexes.forEach(h => {
+        const p = h.properties;
+        if (p.parentHexId !== undefined && p.parentHexId !== null) {
+            const parentIndex = p.parentHexId;
+            const parentHex = allHexes[parentIndex];
+            if (parentHex && parentHex.properties.territoryStats) {
+                const stats = parentHex.properties.territoryStats;
+                stats.totalPopulation += p.population;
+
+                let foodProd = 0;
+                const foodItems = ['小麦', '大麦', '雑穀', '稲', '魚介類', '狩猟肉', '牧畜肉', '家畜肉', '乳製品', '果物'];
+                foodItems.forEach(item => {
+                    if (p.industry.primary[item]) foodProd += p.industry.primary[item];
+                });
+                stats.totalFoodProduction += foodProd;
+
+                stats.settlementCounts[p.settlement] = (stats.settlementCounts[p.settlement] || 0) + 1;
+            }
+        }
+    });
+}
+
+export async function calculateRoadTraffic(allHexes, addLogMessage) {
+    // Reset traffic
     allHexes.forEach(h => {
         h.properties.roadUsage = 0;
         h.properties.roadLoss = 0;
     });
 
-    // -------------------------------------------------------
-    // A. 陸路の交通量計算
-    // -------------------------------------------------------
-    roadPaths.forEach(route => {
-        if (!route.path || route.path.length < 2) return;
-
-        const startNode = route.path[0];
-        const endNode = route.path[route.path.length - 1];
-        const startHex = allHexes[getIndex(startNode.x, startNode.y)];
-        const endHex = allHexes[getIndex(endNode.x, endNode.y)];
-
-        if (!startHex || !endHex) return;
-
-        const pStart = startHex.properties;
-        const pEnd = endHex.properties;
-
-        let trafficTons = 0;
-
-        // --- 1. 定期交易キャラバン ---
-        const getBaseTradeVolume = (settlement) => {
-            if (settlement === '首都') return 300;
-            if (settlement === '都市') return 150;
-            if (settlement === '領都') return 100;
-            if (settlement === '街') return 30;
-            if (settlement === '町') return 5;
-            return 1;
-        };
-
-        // 相乗平均 (幾何平均) を採用することで、片方が小さければ交通量も抑制されるようにする
-        const volA = getBaseTradeVolume(pStart.settlement);
-        const volB = getBaseTradeVolume(pEnd.settlement);
-        const baseVolume = Math.sqrt(volA * volB);
-
-        const distanceDecay = Math.max(0.1, 1.0 - (route.travelDays || 0) / 60);
-        trafficTons += baseVolume * distanceDecay;
-
-        // --- 2. 物流需給 (食料・資源の輸送) ---
-        const startFoodSurplus = parseFloat(pStart.surplus['食料'] || 0);
-        const endFoodSurplus = parseFloat(pEnd.surplus['食料'] || 0);
-        const startFoodShortage = parseFloat(pStart.shortage['食料'] || 0);
-        const endFoodShortage = parseFloat(pEnd.shortage['食料'] || 0);
-
-        let foodTraffic = 0;
-        if (startFoodSurplus > 0 && endFoodShortage > 0) foodTraffic += Math.min(startFoodSurplus, endFoodShortage);
-        if (endFoodSurplus > 0 && startFoodShortage > 0) foodTraffic += Math.min(endFoodSurplus, startFoodShortage);
-
-        // 食料需給は「年間」なので、月間に換算して加算 (1/12)
-        trafficTons += foodTraffic / 12;
-
-        const getResourceExport = (p) => {
-            let out = 0;
-            if (p.production) {
-                out += (p.production['鉱石'] || 0);
-                out += (p.production['木材'] || 0);
-                out += (p.production['鉄'] || 0);
-                out += (p.production['魚介類'] || 0);
-            }
-            return out * 0.5;
-        };
-        if (['首都', '都市', '領都'].includes(pStart.settlement)) trafficTons += getResourceExport(pEnd);
-        if (['首都', '都市', '領都'].includes(pEnd.settlement)) trafficTons += getResourceExport(pStart);
-
-        // --- 3. 租税輸送 ---
-        let taxTraffic = 0;
-        if (pStart.parentHexId === getIndex(endNode.x, endNode.y)) {
-            let totalProd = 0;
-            for (let k in pStart.production) totalProd += pStart.production[k];
-            taxTraffic += totalProd * 0.1;
-        }
-        if (pEnd.parentHexId === getIndex(startNode.x, startNode.y)) {
-            let totalProd = 0;
-            for (let k in pEnd.production) totalProd += pEnd.production[k];
-            taxTraffic += totalProd * 0.1;
-        }
-        trafficTons += taxTraffic;
-
-        // --- 4. 損失計算 (魔物ランク・治安) ---
-        // パス上の最大危険度または累積危険度を計算
-        let totalRisk = 0;
-        route.path.forEach(node => {
-            const h = allHexes[getIndex(node.x, node.y)];
-            const rank = h.properties.monsterRank;
-            // ランクごとの損失率 (通過するごとに発生)
-            // S: 5%, A: 2%, B: 1%, C: 0.5%, D: 0.1%
-            if (rank === 'S') totalRisk += 0.05;
-            else if (rank === 'A') totalRisk += 0.02;
-            else if (rank === 'B') totalRisk += 0.01;
-            else if (rank === 'C') totalRisk += 0.005;
-            else if (rank === 'D') totalRisk += 0.001;
-        });
-
-        // 損失率は最大50%で頭打ち
-        const lossRate = Math.min(0.5, totalRisk);
-        const lossAmount = trafficTons * lossRate;
-
-        // パス上の全ヘックスに加算
-        route.path.forEach(node => {
-            const index = getIndex(node.x, node.y);
-            const hex = allHexes[index];
-            if (hex) {
-                hex.properties.roadUsage += trafficTons;
-                hex.properties.roadLoss += lossAmount;
-            }
-        });
-    });
-
-    // -------------------------------------------------------
-    // B. 海上輸送の計算 (主要港湾間)
-    // -------------------------------------------------------
-    // 港湾候補: 「首都」「都市」「領都」で、かつ水域に隣接している場所
-    const ports = allHexes.filter(h => {
+    // 1. Hierarchy Traffic (Tax/Tribute from child to parent)
+    for (const h of allHexes) {
         const p = h.properties;
-        if (!['首都', '都市', '領都'].includes(p.settlement)) return false;
-        // 隣接ヘックスに水域があるか
-        const neighbors = h.neighbors; // neighborsはインデックスの配列と仮定
-        return neighbors.some(nIdx => allHexes[nIdx].properties.isWater);
-    });
-
-    if (ports.length >= 2) {
-        await addLogMessage(`主要港湾数: ${ports.length} - 海路を計算中...`);
-
-        // 港湾間の組み合わせ (総当たりは重いので、距離制限またはハブ＆スポークにする)
-        // ここではシンプルに、各港から「最も近い他の3つの港」に対してルートを引く
-        for (let i = 0; i < ports.length; i++) {
-            const startHex = ports[i];
-
-            // 距離でソートして近い順に3つ選ぶ
-            const targets = ports.filter((_, idx) => idx !== i)
-                .map(p => ({ hex: p, dist: Math.abs(p.col - startHex.col) + Math.abs(p.row - startHex.row) }))
-                .sort((a, b) => a.dist - b.dist)
-                .slice(0, 3);
-
-            for (const target of targets) {
-                const endHex = target.hex;
-
-                // A* で海路探索
-                // コスト関数: 水域なら1、それ以外はInfinity (ただし発着点は陸地なので例外処理必要)
-                const seaPath = findAStarPath({
-                    start: { x: startHex.col, y: startHex.row },
-                    goal: { x: endHex.col, y: endHex.row },
+        if (p.parentHexId !== undefined && p.parentHexId !== null) {
+            const parent = allHexes[p.parentHexId];
+            if (parent) {
+                const path = findAStarPath({
+                    start: { x: h.col, y: h.row },
+                    goal: { x: parent.col, y: parent.row },
                     getNeighbors: (node) => {
                         const idx = getIndex(node.x, node.y);
-                        const h = allHexes[idx];
-                        if (!h) return [];
-                        return h.neighbors.map(nIdx => {
+                        const hex = allHexes[idx];
+                        if (!hex) return [];
+                        return hex.neighbors.map(nIdx => {
                             const nHex = allHexes[nIdx];
                             return { x: nHex.col, y: nHex.row };
                         });
                     },
                     heuristic: (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y),
                     cost: (a, b) => {
-                        const idxB = getIndex(b.x, b.y);
-                        const hexB = allHexes[idxB];
-                        // 目的地なら陸地でもOK
-                        if (b.x === endHex.col && b.y === endHex.row) return 1;
-                        // 水域ならコスト1
-                        if (hexB.properties.isWater) return 1;
-                        // それ以外（陸地）は通行不可
-                        return Infinity;
+                        const idx = getIndex(b.x, b.y);
+                        const hex = allHexes[idx];
+                        // Road level reduces cost
+                        const roadLevel = hex.properties.roadLevel || 0;
+                        return 10 - roadLevel;
                     }
                 });
 
-                if (seaPath && seaPath.path.length > 0) {
-                    // 海上交通量: 陸路の10倍 (大型船)
-                    // 基礎量は都市ランク依存
-                    const pStart = startHex.properties;
-                    const pEnd = endHex.properties;
-
-                    const getSeaBaseVolume = (settlement) => {
-                        if (settlement === '首都') return 3000;
-                        if (settlement === '都市') return 1500;
-                        if (settlement === '領都') return 1000;
-                        return 100;
-                    };
-                    const seaVolume = (getSeaBaseVolume(pStart.settlement) + getSeaBaseVolume(pEnd.settlement)) / 2;
-
-                    // 海路には魔物による損失も発生する (クラーケンなど)
-                    // 海域の魔物ランクは未設定の場合が多いが、便宜上ランダムまたは固定リスク
-                    // ここでは一律 1% の海難事故リスクとする
-                    const seaLoss = seaVolume * 0.01 * seaPath.path.length; // 距離比例
-
-                    seaPath.path.forEach(node => {
-                        const index = getIndex(node.x, node.y);
-                        const hex = allHexes[index];
-                        if (hex && hex.properties.isWater) {
-                            hex.properties.roadUsage += seaVolume;
-                            hex.properties.roadLoss += seaLoss;
-                        }
+                if (path && path.path) {
+                    const volume = (p.population || 0) * 0.01;
+                    path.path.forEach(node => {
+                        const idx = getIndex(node.x, node.y);
+                        if (allHexes[idx]) allHexes[idx].properties.roadUsage += volume;
                     });
                 }
             }
         }
     }
 
-    return allHexes;
-}
-
-export function calculateDemographics(hex) {
-    const p = hex.properties;
-    const totalPop = p.population;
-    if (totalPop <= 0) return {};
-
-    const demo = {};
-
-    const settlementType = p.settlement || '散居';
-    const alloc = config.INDUSTRY_ALLOCATION[settlementType] || { 1: 0.8, 2: 0.1, 3: 0.1, 4: 0, 5: 0 };
-    const settlementInfo = config.SETTLEMENT_PARAMS[settlementType] || { labor_rate: 0.6 };
-
-    const laborPop = totalPop * settlementInfo.labor_rate;
-
-    // A. 上流階級
-    let nobleRate = 0;
-    if (settlementType === '首都') nobleRate = 0.02;
-    else if (settlementType === '都市') nobleRate = 0.01;
-    else if (settlementType === '領都') nobleRate = 0.015;
-    else if (settlementType === '街') nobleRate = 0.005;
-
-    demo['貴族'] = Math.floor(totalPop * nobleRate);
-    demo['騎士'] = Math.floor(demo['貴族'] * 2 + (p.fortress ? 50 : 0));
-
-    // B. 軍事・治安
-    let securityRate = 0.01;
-    if (p.monsterRank === 'S') securityRate += 0.05;
-    else if (p.monsterRank === 'A') securityRate += 0.03;
-    else if (p.monsterRank === 'B') securityRate += 0.02;
-
-    if (['首都', '都市', '領都'].includes(settlementType)) securityRate += 0.02;
-
-    const totalSecurity = Math.floor(totalPop * securityRate);
-    demo['正規兵'] = Math.floor(totalSecurity * 0.6);
-    demo['衛兵・自警団'] = Math.floor(totalSecurity * 0.3);
-    demo['傭兵'] = Math.max(0, totalSecurity - demo['正規兵'] - demo['衛兵・自警団']);
-
-    // C. 産業別労働者
-    const labor1 = laborPop * alloc[1];
-    const pot = {
-        agri: p.agriPotential || 0,
-        forest: p.forestPotential || 0,
-        mining: p.miningPotential || 0,
-        fish: p.fishingPotential || 0,
-        pastoral: p.pastoralPotential || 0,
-        livestock: p.livestockPotential || 0
-    };
-    const totalPot1 = Object.values(pot).reduce((a, b) => a + b, 0) || 1;
-
-    demo['農夫'] = Math.floor(labor1 * (pot.agri / totalPot1));
-    demo['木こり'] = Math.floor(labor1 * (pot.forest / totalPot1));
-    demo['鉱夫'] = Math.floor(labor1 * (pot.mining / totalPot1));
-    demo['漁師'] = Math.floor(labor1 * (pot.fish / totalPot1));
-    demo['牧童'] = Math.floor(labor1 * ((pot.pastoral + pot.livestock) / totalPot1));
-
-    const labor2 = laborPop * alloc[2];
-    demo['鍛冶屋'] = Math.floor(labor2 * 0.2);
-    demo['職人'] = Math.floor(labor2 * 0.5);
-    demo['建築夫'] = Math.floor(labor2 * 0.3);
-
-    const labor3 = laborPop * alloc[3];
-    demo['商人'] = Math.floor(labor3 * 0.4);
-    demo['宿屋・店員'] = Math.floor(labor3 * 0.3);
-    demo['神官・医師・薬師'] = Math.floor(labor3 * 0.1);
-    demo['御者・船員'] = Math.floor(labor3 * 0.2);
-
-    const labor4 = laborPop * alloc[4];
-    if (labor4 > 0) {
-        demo['学者・研究員'] = Math.floor(labor4 * 0.6);
-        demo['錬金術師'] = Math.floor(labor4 * 0.4);
-    }
-
-    const labor5 = laborPop * alloc[5];
-    if (labor5 > 0) {
-        demo['官僚・役人'] = Math.floor(labor5 * 0.7);
-        demo['芸術家'] = Math.floor(labor5 * 0.3);
-    }
-
-    let adventurerRate = 0;
-    if (['首都', '都市', '領都', '街'].includes(settlementType)) {
-        adventurerRate = 0.005;
-        if (p.monsterRank && ['S', 'A', 'B'].includes(p.monsterRank)) adventurerRate *= 3;
-    }
-    demo['冒険者'] = Math.floor(totalPop * adventurerRate);
-
-    let slumRate = 0;
-    if (settlementType === '首都') slumRate = 0.15;
-    else if (settlementType === '都市') slumRate = 0.10;
-    else if (settlementType === '領都') slumRate = 0.05;
-
-    demo['スラム街住人'] = Math.floor(totalPop * slumRate);
-
-    return demo;
-}
-
-export function calculateFacilities(hex) {
-    const p = hex.properties;
-    const demo = p.demographics || {};
-    const facilities = {};
-
-    // 施設数の計算: 単純な割り算ではなく、対数的なスケーリングを導入して過密を防ぐ
-    // Math.ceil(人数 / 係数) ではなく、 Math.ceil(Math.pow(人数, 0.8) / 係数) のようなイメージ
-    // あるいは、単純に係数を大きくする
-
-    if (demo['商人']) {
-        // 商会: 大規模化する傾向
-        facilities['商会・商店'] = Math.ceil(demo['商人'] / 15);
-        facilities['行商・露店'] = Math.ceil(demo['商人'] / 5);
-    }
-
-    if (demo['宿屋・店員']) {
-        // 宿屋: 1軒あたりの収容人数を増やす
-        facilities['宿屋'] = Math.ceil(demo['宿屋・店員'] / 20);
-        facilities['酒場・食堂'] = Math.ceil(demo['宿屋・店員'] / 10);
-    }
-
-    if (demo['鍛冶屋']) {
-        facilities['鍛冶屋'] = Math.ceil(demo['鍛冶屋'] / 8);
-    }
-    if (demo['職人']) {
-        facilities['工房'] = Math.ceil(demo['職人'] / 10);
-    }
-
-
-    if (demo['神官・医師・薬師']) {
-        facilities['教会'] = Math.ceil(demo['神官・医師・薬師'] / 10);
-        facilities['診療所'] = Math.ceil(demo['神官・医師・薬師'] / 5);
-    }
-
-    if (demo['錬金術師']) {
-        facilities['魔道具店'] = Math.ceil(demo['錬金術師'] / 15);
-        facilities['錬金工房'] = Math.ceil(demo['錬金術師'] / 10);
-    }
-    if (demo['学者・研究員']) {
-        facilities['図書館'] = Math.ceil(demo['学者・研究員'] / 50);
-        facilities['研究塔'] = Math.ceil(demo['学者・研究員'] / 30);
-        if (['首都', '都市', '領都', '街'].includes(p.settlement)) {
-            facilities['学院'] = Math.ceil(demo['学者・研究員'] / 100);
+    // 2. Trade Traffic (Between major cities)
+    const cities = allHexes.filter(h => ['首都', '都市', '領都'].includes(h.properties.settlement));
+    for (let i = 0; i < cities.length; i++) {
+        for (let j = i + 1; j < cities.length; j++) {
+            const c1 = cities[i];
+            const c2 = cities[j];
+            const dist = Math.abs(c1.col - c2.col) + Math.abs(c1.row - c2.row);
+            if (dist < 30) {
+                const path = findAStarPath({
+                    start: { x: c1.col, y: c1.row },
+                    goal: { x: c2.col, y: c2.row },
+                    getNeighbors: (node) => {
+                        const idx = getIndex(node.x, node.y);
+                        const hex = allHexes[idx];
+                        if (!hex) return [];
+                        return hex.neighbors.map(nIdx => {
+                            const nHex = allHexes[nIdx];
+                            return { x: nHex.col, y: nHex.row };
+                        });
+                    },
+                    heuristic: (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y),
+                    cost: (a, b) => {
+                        const idx = getIndex(b.x, b.y);
+                        const hex = allHexes[idx];
+                        const roadLevel = hex.properties.roadLevel || 0;
+                        return 10 - roadLevel;
+                    }
+                });
+                if (path && path.path) {
+                    const volume = 100;
+                    path.path.forEach(node => {
+                        const idx = getIndex(node.x, node.y);
+                        if (allHexes[idx]) allHexes[idx].properties.roadUsage += volume;
+                    });
+                }
+            }
         }
     }
-    if (demo['冒険者']) {
-        facilities['職能ギルド'] = Math.ceil(demo['冒険者'] / 100);
-    }
-
-    if (['首都', '都市', '領都'].includes(p.settlement)) {
-        facilities['役所'] = 1;
-        if (p.settlement === '首都') facilities['王城'] = 1;
-        if (p.settlement === '領都') facilities['領主館'] = 1;
-    }
-
-    // 港湾施設の追加 (沿岸フラグがある場合)
-    if (p.isCoastal) {
-        if (['首都', '都市', '領都'].includes(p.settlement)) {
-            facilities['港湾'] = 1;
-            facilities['造船所'] = 1;
-            facilities['魚市場'] = 1;
-        } else if (['街', '町'].includes(p.settlement)) {
-            facilities['船着場'] = 1;
-            facilities['魚市場'] = 1;
-        }
-    }
-
-    if (p.settlement === '村') {
-        facilities['集会場'] = 1;
-    }
-
-    return facilities;
 }
 
-export function calculateLivingConditions(h, allHexes) {
-    const p = h.properties;
-    const conditions = {
-        hunger: 0,
-        poverty: 0,
-        luxury: 0,
-        security: 50,
-        prices: {
-            food: 1.0,
-            necessities: 1.0,
-            luxuries: 1.0,      // 嗜好品
-            high_luxuries: 1.0  // 贅沢品
-        },
-        tax: 0,
-        happiness: 50
-    };
+export function calculateLivingConditions(allHexes) {
+    allHexes.forEach(h => {
+        const p = h.properties;
+        if (p.population <= 0) return;
 
-    if (!p.population || p.population <= 0) return conditions;
+        const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement || '散居'];
+        const totalDemand = p.population * (settlementInfo ? settlementInfo.consumption_t_per_person : 1.0);
 
-    // 1. Hunger
-    const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement] || config.SETTLEMENT_PARAMS['散居'];
-    const consumptionUnit = settlementInfo ? settlementInfo.consumption_t_per_person : 0.1;
-    const totalFoodDemand = p.population * consumptionUnit;
-    const foodShortage = p.shortage && p.shortage['食料'] ? parseFloat(p.shortage['食料']) : 0;
+        // 供給 = 自給 + 輸入
+        let localSupply = 0;
+        const foodItems = ['小麦', '大麦', '雑穀', '稲', '魚介類', '狩猟肉', '牧畜肉', '家畜肉', '乳製品', '果物'];
+        foodItems.forEach(item => {
+            if (p.industry.primary[item]) localSupply += p.industry.primary[item];
+        });
 
-    let baseHunger = Math.min(1.0, foodShortage / (totalFoodDemand || 1));
-    if (isNaN(baseHunger)) baseHunger = 0;
+        const imports = p.imports ? (p.imports['食料'] || 0) : 0;
+        const totalSupply = localSupply + imports;
 
-    // 輸入による飢餓緩和 (港湾都市や交易路がある場合)
-    // 修正: 緩和効果を強化し、港湾都市はさらに優遇
-    if (['首都', '都市', '領都', '街'].includes(p.settlement)) {
-        let importCap = (p.roadLevel || 0) * 0.15; // 0.1 -> 0.15
-        if (p.isCoastal) importCap += 0.3; // 港湾ボーナス
+        p.selfSufficiencyRate = (totalDemand > 0) ? (localSupply / totalDemand) : 1.0;
 
-        baseHunger = Math.max(0, baseHunger - importCap);
-    }
-    conditions.hunger = baseHunger;
+        // 実質不足
+        const netShortage = Math.max(0, totalDemand - totalSupply);
+        p.netShortage = netShortage;
 
-    // 2. Poverty
-    const demo = p.demographics || {};
-    const poorPop = (demo['浮浪者'] || 0) + (demo['スラム街住人'] || 0) +
-        ((demo['農夫'] || 0) + (demo['鉱夫'] || 0) + (demo['漁師'] || 0) + (demo['木こり'] || 0)) * 0.5;
-
-    let rawPoverty = Math.min(1.0, poorPop / p.population);
-
-    // 食料余剰による貧困感の緩和 (現金がなくても食べていける)
-    if (p.surplus && p.surplus['食料'] > 0) {
-        const surplusPerCapita = parseFloat(p.surplus['食料']) / (p.population || 1);
-        const mitigation = Math.min(0.4, surplusPerCapita * 2.0);
-        rawPoverty = rawPoverty * (1.0 - mitigation);
-    }
-    conditions.poverty = parseFloat(rawPoverty.toFixed(3));
-    let luxurySupply = 0;
-    if (p.production) {
-        luxurySupply += (p.production['酒(穀物)'] || 0) + (p.production['酒(果実)'] || 0);
-        luxurySupply += (p.production['果物'] || 0) * 0.5;
-        luxurySupply += (p.production['ポーション・魔導具'] || 0) * 2;
-        luxurySupply += (p.production['芸術・文化'] || 0) * 5;
-        luxurySupply += (p.production['魔鉱石'] || 0) * 1;
-    }
-    conditions.luxury = Math.min(1.0, luxurySupply / (p.population * 0.02));
-
-    // 4. Security
-    let securityScore = 50;
-    const securityForces = (demo['衛兵・自警団'] || 0) + (demo['騎士'] || 0) * 5 + (demo['正規兵'] || 0) * 2;
-    securityScore += Math.min(30, (securityForces / p.population) * 1000);
-
-    const facilities = p.facilities || {};
-    if (facilities['兵舎']) securityScore += 5;
-    if (facilities['砦']) securityScore += 10;
-    if (facilities['役所']) securityScore += 5;
-    if (facilities['教会']) securityScore += 3;
-
-    securityScore -= conditions.poverty * 30;
-    securityScore -= conditions.hunger * 20;
-
-    if (p.monsterRank === 'S') securityScore -= 30;
-    else if (p.monsterRank === 'A') securityScore -= 20;
-    else if (p.monsterRank === 'B') securityScore -= 10;
-    else if (p.monsterRank === 'C') securityScore -= 5;
-
-    conditions.security = Math.max(0, Math.min(100, Math.floor(securityScore)));
-
-    // 5. Prices (新ロジック)
-    const supply = {
-        food: 0,
-        necessities: 0,
-        luxuries: 0,
-        high_luxuries: 0
-    };
-
-    if (p.production) {
-        // 食料品
-        supply.food += (p.production['雑穀'] || 0) + (p.production['大麦'] || 0) + (p.production['小麦'] || 0) + (p.production['稲'] || 0);
-        supply.food += (p.production['魚介類'] || 0) + (p.production['牧畜肉'] || 0) + (p.production['家畜肉'] || 0) + (p.production['狩猟肉'] || 0);
-        supply.food += (p.production['乳製品'] || 0) + (p.production['果物'] || 0);
-
-        // 必需品
-        supply.necessities += (p.production['織物'] || 0);
-        supply.necessities += (p.production['武具・道具'] || 0);
-        supply.necessities += (p.production['建築'] || 0);
-        supply.necessities += (p.production['木材'] || 0) * 0.5;
-        supply.necessities += (p.production['薬草'] || 0) * 0.5;
-        supply.necessities += (p.production['革'] || 0);
-
-        // 嗜好品
-        supply.luxuries += (p.production['酒(穀物)'] || 0) + (p.production['酒(果実)'] || 0);
-        supply.luxuries += (p.production['果物'] || 0) * 0.5;
-        supply.luxuries += (p.production['魚介類'] || 0) * 0.2;
-        supply.luxuries += (p.production['乳製品'] || 0) * 0.3;
-
-        // 贅沢品
-        supply.high_luxuries += (p.production['ポーション・魔導具'] || 0);
-        supply.high_luxuries += (p.production['芸術・文化'] || 0);
-        supply.high_luxuries += (p.production['魔鉱石'] || 0) * 0.5;
-        supply.high_luxuries += (p.production['魔獣素材'] || 0) * 0.5;
-        supply.high_luxuries += (p.production['織物'] || 0) * 0.1;
-    }
-
-    // 需要量
-    const demandPerCapita = {
-        food: 0.3,
-        necessities: 0.05,
-        luxuries: 0.01,
-        high_luxuries: 0.001
-    };
-
-    let demandMultiplier = 1.0;
-    if (p.settlement === '首都') demandMultiplier = 1.5;
-    else if (p.settlement === '都市') demandMultiplier = 1.3;
-    else if (p.settlement === '領都') demandMultiplier = 1.2;
-
-    const demand = {
-        food: p.population * demandPerCapita.food * demandMultiplier,
-        necessities: p.population * demandPerCapita.necessities * demandMultiplier,
-        luxuries: p.population * demandPerCapita.luxuries * demandMultiplier,
-        high_luxuries: p.population * demandPerCapita.high_luxuries * demandMultiplier
-    };
-
-    const calculatePrice = (s, d) => {
-        if (d <= 0) return 1.0;
-        if (s <= 0) return 5.0;
-
-        const ratio = d / s;
-        let price = Math.pow(ratio, 0.6);
-        return Math.max(0.5, Math.min(10.0, price));
-    };
-
-    conditions.prices.food = calculatePrice(supply.food, demand.food);
-    conditions.prices.necessities = calculatePrice(supply.necessities, demand.necessities);
-    conditions.prices.luxuries = calculatePrice(supply.luxuries, demand.luxuries);
-    conditions.prices.high_luxuries = calculatePrice(supply.high_luxuries, demand.high_luxuries);
-
-    for (let key in conditions.prices) {
-        conditions.prices[key] = parseFloat(conditions.prices[key].toFixed(2));
-    }
-
-    // 6. Tax
-    let estimatedGdp = 0;
-    if (p.industry) {
-        for (let k in p.industry.primary) estimatedGdp += (p.industry.primary[k] || 0) * 10;
-        for (let k in p.industry.secondary) estimatedGdp += (p.industry.secondary[k] || 0) * 20;
-        for (let k in p.industry.tertiary) estimatedGdp += (p.industry.tertiary[k] || 0) * 30;
-        for (let k in p.industry.quaternary) estimatedGdp += (p.industry.quaternary[k] || 0) * 50;
-        for (let k in p.industry.quinary) estimatedGdp += (p.industry.quinary[k] || 0) * 100;
-    }
-
-    let taxRate = 0.1;
-    if (p.settlement === '首都') taxRate += 0.10;
-    else if (p.settlement === '都市') taxRate += 0.05;
-
-    conditions.tax = Math.floor(estimatedGdp * taxRate);
-
-    // 7. Happiness
-    let happinessScore = 50;
-
-    if (['首都', '都市', '領都'].includes(p.settlement)) {
-        happinessScore += conditions.luxury * 20;
-    } else {
-        happinessScore += conditions.luxury * 10;
-        happinessScore += 10;
-    }
-
-    happinessScore -= conditions.hunger * 40;
-    happinessScore -= conditions.poverty * 20;
-    happinessScore += (conditions.security - 50) * 0.5;
-
-    // 物価高による不幸
-    const avgPrice = (conditions.prices.food + conditions.prices.necessities) / 2;
-    if (avgPrice > 2.0) {
-        happinessScore -= (avgPrice - 2.0) * 10;
-    }
-
-    const taxBurden = conditions.tax / (p.population || 1);
-    if (taxBurden > 5) happinessScore -= 5;
-    if (taxBurden > 10) happinessScore -= 10;
-
-    // A. Connectivity
-    const connectivity = (p.roadLevel || 0) * 2;
-    happinessScore += connectivity;
-
-    // B. Distance to Ruler
-    if (p.parentHexId !== null && p.parentHexId !== undefined) {
-        const parent = allHexes[p.parentHexId];
-        if (parent) {
-            const dist = Math.abs(h.col - parent.col) + Math.abs(h.row - parent.row);
-            if (dist > 15) happinessScore -= 10;
-            else if (dist > 8) happinessScore -= 5;
-            else if (dist < 3) happinessScore += 5;
+        // 価格計算 (上限3.0)
+        let price = 1.0;
+        if (totalDemand > 0) {
+            const shortageRate = netShortage / totalDemand;
+            price = 1.0 + (shortageRate * 2.0); // 不足率100%で価格3.0
         }
-    } else {
-        if (p.settlement !== '首都') happinessScore -= 5;
-    }
+        price = Math.min(3.0, Math.max(0.5, price));
+        p.priceIndex = price;
 
-    // C. Crowding
-    if (p.population > 20000) happinessScore -= 10;
-    else if (p.population > 5000) happinessScore -= 5;
-    else if (p.population < 100) happinessScore -= 5;
+        // 幸福度計算
+        let happiness = 50; // 基準
+        if (netShortage > 0) {
+            happiness -= (netShortage / totalDemand) * 50;
+        }
+        if (price > 1.5) {
+            happiness -= (price - 1.5) * 10;
+        }
+        // 産業によるボーナス
+        if (p.industry.tertiary['医療・教会'] > 0) happiness += 5;
+        if (p.industry.quinary['芸術・文化'] > 0) happiness += 5;
 
-    conditions.happiness = Math.max(0, Math.min(100, Math.floor(happinessScore)));
+        happiness = Math.max(0, Math.min(100, happiness));
+        p.happiness = happiness;
 
-    return conditions;
+        // InfoWindow用のオブジェクト構造を作成
+        p.livingConditions = {
+            prices: {
+                food: price,
+                necessities: price,
+                luxuries: price * 1.2,
+                high_luxuries: price * 1.5
+            },
+            happiness: happiness,
+            security: 100 - (p.monsterRank ? (p.monsterRank === 'S' ? 50 : (p.monsterRank === 'A' ? 30 : (p.monsterRank === 'B' ? 20 : 10))) : 0),
+            poverty: (netShortage / totalDemand) || 0,
+            hunger: (netShortage / totalDemand) || 0,
+            luxury: 0.5,
+            tax: p.population * 10
+        };
+    });
 }
