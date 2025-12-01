@@ -8,7 +8,7 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { getIndex, formatProgressBar, formatLocation } from './utils.js';
+import { getIndex, formatProgressBar, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint } from './utils.js';
 import {
     initInfoWindow,
     setAllHexesData,
@@ -44,56 +44,6 @@ let minimapScaleY;
 // ================================================================
 // ■ ヘルパー関数 (モジュールスコープ)
 // ================================================================
-
-/**
- * 2つのヘックスが共有する2つの角の座標を返すヘルパー関数。
- * @param {object} hex1 - 1つ目のヘックスオブジェクト
- * @param {object} hex2 - 2つ目のヘックスオブジェクト
- * @returns {Array<Array<number>>|null} - 2つの角の座標 [[x1, y1], [x2, y2]] または null
- */
-function getSharedEdgePoints(hex1, hex2) {
-    if (!hex1 || !hex2) {
-        return null;
-    }
-    const commonPoints = [];
-    for (const p1 of hex1.points) {
-        for (const p2 of hex2.points) {
-            // 座標がほぼ一致するかをチェック
-            if (Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) < 1e-6) {
-                commonPoints.push(p1);
-            }
-        }
-    }
-    if (commonPoints.length === 2) {
-        return commonPoints;
-    }
-    return null;
-}
-
-/**
- * 2つのヘックスが共有する辺の中点を返すヘルパー関数。
- * 道路や河川がヘックスの中心ではなく、辺から辺へ滑らかに繋がるように見せるために使用します。
- * @param {object} hex1 - 1つ目のヘックスオブジェクト
- * @param {object} hex2 - 2つ目のヘックスオブジェクト
- * @returns {Array<number>|null} - 中点の座標 [x, y] または null
- */
-function getSharedEdgeMidpoint(hex1, hex2) {
-    if (!hex1 || !hex2) {
-        return null;
-    }
-    const commonPoints = [];
-    for (const p1 of hex1.points) {
-        for (const p2 of hex2.points) {
-            if (Math.hypot(p1[0] - p2[0], p1[1] - p2[1]) < 1e-6) {
-                commonPoints.push(p1);
-            }
-        }
-    }
-    if (commonPoints.length === 2) {
-        return [(commonPoints[0][0] + commonPoints[1][0]) / 2, (commonPoints[0][1] + commonPoints[1][1]) / 2];
-    }
-    return null;
-}
 
 // updateOverallInfo is imported from infoWindow.js
 

@@ -149,7 +149,7 @@ export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面
 export const SETTLEMENT_PARAMS = { // 労働力率, 消費量, インフラ係数, 頭数制限, ボーナス, ★狩人率
     '首都': {
         labor_rate: 0.20,
-        consumption_t_per_person: 0.32,
+        consumption_t_per_person: 0.40,
         infra_coeff: 1.20,
         head_cap_base: 0.30,
         head_cap_bonus: 0.15,
@@ -157,7 +157,7 @@ export const SETTLEMENT_PARAMS = { // 労働力率, 消費量, インフラ係�
     },
     '都市': {
         labor_rate: 0.30,
-        consumption_t_per_person: 0.28,
+        consumption_t_per_person: 0.35,
         infra_coeff: 1.10,
         head_cap_base: 0.25,
         head_cap_bonus: 0.10,
@@ -165,7 +165,7 @@ export const SETTLEMENT_PARAMS = { // 労働力率, 消費量, インフラ係�
     },
     '領都': {
         labor_rate: 0.45,
-        consumption_t_per_person: 0.24,
+        consumption_t_per_person: 0.30,
         infra_coeff: 1.05,
         head_cap_base: 0.30,
         head_cap_bonus: 0.05,
@@ -173,7 +173,7 @@ export const SETTLEMENT_PARAMS = { // 労働力率, 消費量, インフラ係�
     },
     '街': {
         labor_rate: 0.55,
-        consumption_t_per_person: 0.22,
+        consumption_t_per_person: 0.25,
         infra_coeff: 1.00,
         head_cap_base: 0.35,
         head_cap_bonus: 0.0,
@@ -181,7 +181,7 @@ export const SETTLEMENT_PARAMS = { // 労働力率, 消費量, インフラ係�
     },
     '町': {
         labor_rate: 0.70,
-        consumption_t_per_person: 0.21,
+        consumption_t_per_person: 0.22,
         infra_coeff: 0.95,
         head_cap_base: 0.40,
         head_cap_bonus: 0.0,

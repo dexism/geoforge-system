@@ -360,6 +360,9 @@ const KEY_MAP = {
     flow: 'fl',
     isAlluvial: 'ia',
     hasSnow: 'hs',
+    isCoastal: 'ic',
+    isLakeside: 'il',
+    beachNeighbors: 'bn',
 
     // マナ・資源・魔物
     manaValue: 'mv',
@@ -395,6 +398,8 @@ const KEY_MAP = {
     roadLevel: 'rl',
     roadUsage: 'ru',
     roadLoss: 'rlo',
+    landUsage: 'lu',
+    waterUsage: 'wu',
 
     // landUse (フラット化)
     'landUse.river': 'lu_r',

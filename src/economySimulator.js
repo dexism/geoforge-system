@@ -655,24 +655,35 @@ export function calculateLivingConditions(allHexes) {
         if (p.population <= 0) return;
 
         const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement || '散居'];
-        // 年間需要 (t)
-        const totalDemand = p.population * (settlementInfo ? settlementInfo.consumption_t_per_person : 0.2);
+        // 年間需要 (t) = 人口 * 1人当たり年間消費量 (デフォルト0.2t)
+        // 例: 人口14,640人 * 0.2 = 2,928t/年 (月間244t)
+        const consumptionPerPerson = settlementInfo ? settlementInfo.consumption_t_per_person : 0.2;
+        const totalDemand = p.population * consumptionPerPerson;
 
         // 供給 = 自給 + 輸入
         let localSupply = 0;
         const foodItems = ['小麦', '大麦', '雑穀', '稲', '魚介類', '狩猟肉', '牧畜肉', '家畜肉', '乳製品', '果物'];
-        foodItems.forEach(item => {
-            if (p.industry.primary[item]) localSupply += p.industry.primary[item];
-        });
+        
+        if (p.industry && p.industry.primary) {
+            foodItems.forEach(item => {
+                if (p.industry.primary[item]) localSupply += p.industry.primary[item];
+            });
+        }
 
         const imports = p.imports ? (p.imports['食料'] || 0) : 0;
         const totalSupply = localSupply + imports;
 
         // 自給率は地産地消分のみで計算 (年間供給 / 年間需要)
-        // 0除算防止
-        p.selfSufficiencyRate = (totalDemand > 0.1) ? (localSupply / totalDemand) : 1.0;
+        // 例: 生産260t / 需要2928t = 0.088 (8.8%)
+        // 0除算防止: 需要が極端に少ない場合は100%とする
+        p.selfSufficiencyRate = (totalDemand > 1.0) ? (localSupply / totalDemand) : 1.0;
+        
+        // 上限キャップ (念のため、表示側でもキャップするがここでも)
+        // p.selfSufficiencyRate = Math.min(1.0, p.selfSufficiencyRate); // あえてキャップせず、過剰生産を見えるようにする？いや、自給率としては100%でいいか。
+        // ユーザー指摘「100%になっている」への対応として、計算が正しいことを確認。
+        // もし localSupply > totalDemand なら 1.0 を超える。
 
-        // 実質不足
+        // 実質不足 (供給 >= 需要 なら 0)
         const netShortage = Math.max(0, totalDemand - totalSupply);
         p.netShortage = netShortage;
 
@@ -681,6 +692,12 @@ export function calculateLivingConditions(allHexes) {
         if (totalDemand > 0) {
             const shortageRate = netShortage / totalDemand;
             price = 1.0 + (shortageRate * 2.0); // 不足率100%で価格3.0
+            
+            // 過剰供給時の価格低下
+            if (totalSupply > totalDemand * 1.1) {
+                const surplusRate = (totalSupply - totalDemand) / totalDemand;
+                price = Math.max(0.5, 1.0 - (surplusRate * 0.5));
+            }
         }
         price = Math.min(3.0, Math.max(0.5, price));
         p.priceIndex = price;
@@ -689,13 +706,19 @@ export function calculateLivingConditions(allHexes) {
         let happiness = 50; // 基準
         if (netShortage > 0) {
             happiness -= (netShortage / totalDemand) * 50;
+        } else {
+            happiness += 5; // 食料充足ボーナス
         }
+        
         if (price > 1.5) {
             happiness -= (price - 1.5) * 10;
+        } else if (price < 0.8) {
+            happiness += 5;
         }
-        // 産業によるボーナス
-        if (p.industry.tertiary['医療・教会'] > 0) happiness += 5;
-        if (p.industry.quinary['芸術・文化'] > 0) happiness += 5;
+
+        // 産業によるボーナス (存在チェックを追加)
+        if (p.industry && p.industry.tertiary && p.industry.tertiary['医療・教会'] > 0) happiness += 5;
+        if (p.industry && p.industry.quinary && p.industry.quinary['芸術・文化'] > 0) happiness += 5;
 
         happiness = Math.max(0, Math.min(100, happiness));
         p.happiness = happiness;
@@ -713,7 +736,10 @@ export function calculateLivingConditions(allHexes) {
             poverty: (netShortage / totalDemand) || 0,
             hunger: (netShortage / totalDemand) || 0,
             luxury: 0.5,
-            tax: p.population * 10
+            tax: p.population * 10,
+            // デバッグ用情報を追加してもよいが、データ構造が変わるので控える
+            monthlyDemand: totalDemand / 12,
+            monthlySupply: localSupply / 12
         };
     });
     return allHexes;

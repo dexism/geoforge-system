@@ -498,21 +498,23 @@ export function getInfoText(d) {
                 }
             } else {
                 // 旧形式互換
-                logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${p.logistics.animalType || '役畜'}</span><span class="value">${p.logistics.animals}頭</span></div>`;
+                logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">役畜</span><span class="value">${p.logistics.animals}頭</span></div>`;
             }
 
-            // 船舶 (新規追加)
-            if (p.logistics.ships && Object.keys(p.logistics.ships).length > 0) {
+            // 船舶
+            if (p.logistics.ships && typeof p.logistics.ships === 'object') {
                 for (const [type, count] of Object.entries(p.logistics.ships)) {
                     logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${type}</span><span class="value">${count}隻</span></div>`;
                 }
             }
 
-            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">御者</span><span class="value">${p.logistics.drivers}人</span></div>`;
+            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">人員(御者/船頭)</span><span class="value">${p.logistics.drivers}人</span></div>`;
             logisticsHtml += `</div></div>`;
         }
 
-        logisticsCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">commute</span>物流・交通</div><div class="card-content">${logisticsHtml}</div></div>`;
+        if (logisticsHtml) {
+            logisticsCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">swap_horiz</span>物流・交通</div><div class="card-content">${logisticsHtml}</div></div>`;
+        }
     }
 
     // --- 4. 領地集計カード (拠点の場合) ---

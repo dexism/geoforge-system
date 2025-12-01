@@ -24,7 +24,7 @@ export function getDistance(h1, h2) {
     // 軸座標系への変換は不要な、簡略化された距離計算
     const dx = Math.abs(h1.col - h2.col);
     const dy = Math.abs(h1.row - h2.row);
-    
+
     // ヘックスグリッドの距離計算は、dx, dy, dzの差の最大値に等しい
     // このグリッド系ではこれで十分な近似となる
     return Math.max(dx, dy);
@@ -81,4 +81,47 @@ export function formatLocation(hexData, formatType) {
         default:
             return `${x}-${y}`;
     }
+}
+
+/**
+ * 2つの隣接するヘックスの共有辺の端点（2点）を計算する
+ * @param {object} h1 - 1つ目のヘックス
+ * @param {object} h2 - 2つ目のヘックス
+ * @returns {Array<Array<number>>|null} [[x1, y1], [x2, y2]] 形式の座標配列。隣接していない場合はnull
+ */
+export function getSharedEdgePoints(h1, h2) {
+    if (!h1 || !h2) return null;
+
+    // ヘックスの頂点を比較して、共有されている2点を見つける
+    // 座標の許容誤差
+    const epsilon = 0.1;
+    const sharedPoints = [];
+
+    for (const p1 of h1.points) {
+        for (const p2 of h2.points) {
+            if (Math.abs(p1[0] - p2[0]) < epsilon && Math.abs(p1[1] - p2[1]) < epsilon) {
+                sharedPoints.push(p1);
+                break; // h2のループを抜けて次のh1の点へ
+            }
+        }
+    }
+
+    if (sharedPoints.length === 2) {
+        return sharedPoints;
+    }
+    return null;
+}
+
+/**
+ * 2つの隣接するヘックスの共有辺の中点を計算する
+ * @param {object} h1 - 1つ目のヘックス
+ * @param {object} h2 - 2つ目のヘックス
+ * @returns {Array<number>|null} [x, y] 形式の座標。隣接していない場合はnull
+ */
+export function getSharedEdgeMidpoint(h1, h2) {
+    const points = getSharedEdgePoints(h1, h2);
+    if (points) {
+        return [(points[0][0] + points[1][0]) / 2, (points[0][1] + points[1][1]) / 2];
+    }
+    return null;
 }
