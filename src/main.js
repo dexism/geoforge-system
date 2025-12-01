@@ -566,7 +566,7 @@ function compressWorldData() {
             // デフォルト値の省略
             if (value === null || value === undefined) return;
             if (key === 'roadLevel' && value === 0) return;
-            if (key === 'nationId' && value === 0) return;
+            if (key === 'nationId' && (value === 0 || isNaN(value))) return;
             if (key === 'isWater' && value === false) return;
             if (key === 'flow' && value === 0) return;
             if (key === 'population' && value === 0) return;
@@ -888,7 +888,7 @@ async function processLoadedData(loadedData) {
             // デフォルト値の復元
             if (props.isWater === undefined) props.isWater = false;
             if (props.roadLevel === undefined) props.roadLevel = 0;
-            if (props.nationId === undefined) props.nationId = 0;
+            if (props.nationId === undefined || props.nationId === null || isNaN(props.nationId)) props.nationId = 0;
             if (props.flow === undefined) props.flow = 0;
             if (props.population === undefined) props.population = 0;
             if (props.settlement === undefined) props.settlement = null;

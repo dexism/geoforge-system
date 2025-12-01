@@ -276,11 +276,11 @@ function drawBorders() {
     // 2. 新しい国境データを計算して描画 (setupUIからロジックを移植)
     const borderSegments = [];
     hexes.forEach(h => {
-        const hNation = h.properties.nationId;
+        const hNation = h.properties.nationId || 0;
         if (hNation === 0) return;
         h.neighbors.map(i => hexes[i]).forEach(n => {
             if (h.index < n.index) {
-                const nNation = n.properties.nationId;
+                const nNation = n.properties.nationId || 0;
                 if (nNation > 0 && hNation !== nNation) {
                     const commonPoints = [];
                     h.points.forEach(p1 => n.points.forEach(p2 => {
@@ -542,7 +542,7 @@ function updateVisibleHexes(transform) {
         'livestock-overlay': { data: visibleHexes, fill: d => config.livestockColor(d.properties.livestockPotential), opacity: 0.7 },
         'monster-overlay': { data: visibleHexes.filter(d => d.properties.monsterRank), fill: d => config.MONSTER_COLORS[d.properties.monsterRank], opacity: 0.5 },
         'population-overlay': { data: visibleHexes.filter(d => d.properties.population > 0), fill: d => config.populationColor(d.properties.population), opacity: 0.9 },
-        'territory-overlay': { data: visibleHexes, fill: d => d.properties.nationId === 0 ? '#fff0' : nationColor(d.properties.nationId), opacity: 0.5 }
+        'territory-overlay': { data: visibleHexes, fill: d => (d.properties.nationId || 0) === 0 ? '#fff0' : nationColor(d.properties.nationId), opacity: 0.5 }
     };
 
     for (const [layerName, { data, fill, opacity }] of Object.entries(overlayDefinitions)) {
