@@ -357,7 +357,7 @@ export function calculateDemographics(allHexes) {
 
         // 第四次・第五次
         demographics['学者'] = Math.floor(totalPop * 0.02);
-        
+
         // 兵士の細分化
         const soldierTotal = Math.floor(totalPop * 0.03);
         if (soldierTotal > 0) {
@@ -469,7 +469,7 @@ export function calculateFacilities(allHexes) {
                 else if (typeKey === 'coastal_trader') count = Math.floor(p.population / 5000);
                 else if (typeKey === 'medium_merchant') count = Math.floor(p.population / 20000);
                 else if (typeKey === 'large_sailing_ship') count = Math.floor(p.population / 50000);
-                
+
                 if (count > 0) ships[shipData.name] = count;
             });
         }
@@ -523,8 +523,21 @@ export async function calculateRoadTraffic(allHexes, addLogMessage) {
     // Reset traffic
     allHexes.forEach(h => {
         h.properties.roadUsage = 0;
+        h.properties.landUsage = 0;
+        h.properties.waterUsage = 0;
         h.properties.roadLoss = 0;
     });
+
+    const addUsage = (hexIndex, volume) => {
+        if (!allHexes[hexIndex]) return;
+        const p = allHexes[hexIndex].properties;
+        p.roadUsage += volume;
+        if (p.isWater) {
+            p.waterUsage += volume;
+        } else {
+            p.landUsage += volume;
+        }
+    };
 
     // 1. Hierarchy Traffic (Tax/Tribute from child to parent)
     for (const h of allHexes) {
@@ -558,7 +571,7 @@ export async function calculateRoadTraffic(allHexes, addLogMessage) {
                     const volume = (p.population || 0) * 0.01;
                     path.path.forEach(node => {
                         const idx = getIndex(node.x, node.y);
-                        if (allHexes[idx]) allHexes[idx].properties.roadUsage += volume;
+                        addUsage(idx, volume);
                     });
                 }
             }
@@ -597,7 +610,7 @@ export async function calculateRoadTraffic(allHexes, addLogMessage) {
                     const volume = 100;
                     path.path.forEach(node => {
                         const idx = getIndex(node.x, node.y);
-                        if (allHexes[idx]) allHexes[idx].properties.roadUsage += volume;
+                        addUsage(idx, volume);
                     });
                 }
             }
@@ -612,6 +625,7 @@ export function calculateLivingConditions(allHexes) {
         if (p.population <= 0) return;
 
         const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement || '散居'];
+        // 年間需要 (t)
         const totalDemand = p.population * (settlementInfo ? settlementInfo.consumption_t_per_person : 0.2);
 
         // 供給 = 自給 + 輸入
@@ -624,8 +638,9 @@ export function calculateLivingConditions(allHexes) {
         const imports = p.imports ? (p.imports['食料'] || 0) : 0;
         const totalSupply = localSupply + imports;
 
-        // 自給率は地産地消分のみで計算
-        p.selfSufficiencyRate = (totalDemand > 0) ? (localSupply / totalDemand) : 1.0;
+        // 自給率は地産地消分のみで計算 (年間供給 / 年間需要)
+        // 0除算防止
+        p.selfSufficiencyRate = (totalDemand > 0.1) ? (localSupply / totalDemand) : 1.0;
 
         // 実質不足
         const netShortage = Math.max(0, totalDemand - totalSupply);

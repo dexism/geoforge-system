@@ -465,12 +465,20 @@ export function getInfoText(d) {
                 logisticsHtml += `<div class="info-row"><span class="label">輸送損失</span><span class="value" style="color:#ff6b6b;">${Math.round(p.roadLoss).toLocaleString()}t</span></div>`;
             }
 
-            if (p.isWater) {
-                const ships = Math.round(p.roadUsage);
-                logisticsHtml += `<div class="info-row"><span class="label">海運輸送量</span><span class="value">${ships.toLocaleString()}t</span></div>`;
+            // 陸運・海運の内訳表示
+            // calculateRoadTrafficで landUsage, waterUsage を計算している場合
+            if (p.landUsage !== undefined && p.waterUsage !== undefined) {
+                if (p.landUsage > 0) logisticsHtml += `<div class="info-row"><span class="label">陸運輸送量</span><span class="value">${Math.round(p.landUsage).toLocaleString()}t</span></div>`;
+                if (p.waterUsage > 0) logisticsHtml += `<div class="info-row"><span class="label">海運輸送量</span><span class="value">${Math.round(p.waterUsage).toLocaleString()}t</span></div>`;
             } else {
-                const wagons = Math.round(p.roadUsage);
-                logisticsHtml += `<div class="info-row"><span class="label">陸運輸送量</span><span class="value">${wagons.toLocaleString()}t</span></div>`;
+                // 旧ロジック互換 (念のため)
+                if (p.isWater) {
+                    const ships = Math.round(p.roadUsage);
+                    logisticsHtml += `<div class="info-row"><span class="label">海運輸送量</span><span class="value">${ships.toLocaleString()}t</span></div>`;
+                } else {
+                    const wagons = Math.round(p.roadUsage);
+                    logisticsHtml += `<div class="info-row"><span class="label">陸運輸送量</span><span class="value">${wagons.toLocaleString()}t</span></div>`;
+                }
             }
             logisticsHtml += `</div>`;
         }
