@@ -299,6 +299,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
     calculateTerritoryAggregates(allHexes);
     await calculateRoadTraffic(allHexes, addLogMessage);
     calculateLivingConditions(allHexes);
+    return allHexes;
 }
 
 export function generateCityCharacteristics(allHexes) {
@@ -329,6 +330,7 @@ export function generateCityCharacteristics(allHexes) {
         if (p.settlement === '首都') p.characteristics.push('象徴: 王都');
         if (p.population > 10000) p.characteristics.push('象徴: 大都市');
     });
+    return allHexes;
 }
 
 export function calculateDemographics(allHexes) {
@@ -361,6 +363,7 @@ export function calculateDemographics(allHexes) {
 
         p.demographics = demographics;
     });
+    return allHexes;
 }
 
 export function calculateFacilities(allHexes) {
@@ -400,12 +403,38 @@ export function calculateFacilities(allHexes) {
         const draftAnimals = Math.floor(wagonCount * 2.2);
         const drivers = Math.floor(wagonCount * 1.3);
 
+        // 役畜の種類を決定
+        let animalType = '馬';
+        const climate = p.climateZone || '';
+        const vegetation = p.vegetation || '';
+        const terrain = p.terrainType || '';
+
+        if (climate.includes('ツンドラ') || climate.includes('氷雪')) {
+            animalType = 'トナカイ';
+            if (p.population < 500) animalType = '犬'; // 小規模集落は犬ぞり
+        } else if (climate.includes('砂漠')) {
+            animalType = 'ラクダ';
+        } else if (climate.includes('熱帯')) {
+            if (p.isAlluvial || p.industry.primary['稲']) {
+                animalType = '水牛';
+            } else if (vegetation === '密林') {
+                animalType = '象';
+            }
+        } else if (terrain === '山岳' || terrain === '山地') {
+            animalType = 'ラバ';
+            if (p.population < 1000) animalType = 'ロバ';
+        } else if (p.industry.primary['小麦'] || p.industry.primary['大麦']) {
+            if ((h.col + h.row) % 2 === 0) animalType = '牛';
+        }
+
         p.logistics = {
             wagons: wagonCount,
             animals: draftAnimals,
+            animalType: animalType,
             drivers: drivers
         };
     });
+    return allHexes;
 }
 
 export function calculateTerritoryAggregates(allHexes) {
@@ -440,6 +469,7 @@ export function calculateTerritoryAggregates(allHexes) {
             }
         }
     });
+    return allHexes;
 }
 
 export async function calculateRoadTraffic(allHexes, addLogMessage) {
@@ -526,6 +556,7 @@ export async function calculateRoadTraffic(allHexes, addLogMessage) {
             }
         }
     }
+    return allHexes;
 }
 
 export function calculateLivingConditions(allHexes) {
@@ -592,4 +623,5 @@ export function calculateLivingConditions(allHexes) {
             tax: p.population * 10
         };
     });
+    return allHexes;
 }

@@ -224,6 +224,19 @@ export function getInfoText(d) {
     basicInfoHtml += createRow('agriculture', '農　地', Math.round(p.cultivatedArea || 0).toLocaleString(), ' ha');
     basicInfoHtml += createRow('home', '居住適性', (p.habitability || 0).toFixed(1));
 
+    if (p.characteristics && p.characteristics.length > 0) {
+        basicInfoHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">stars</span>特　徴</h6>`;
+        basicInfoHtml += `<div class="industry-group" style="display:flex; flex-wrap:wrap; gap:4px;">`;
+        p.characteristics.forEach(c => {
+            let label = c;
+            if (c.includes(':')) {
+                label = c.split(':')[1].trim();
+            }
+            basicInfoHtml += `<div class="industry-item" style="width:auto; background:#f5f5f5; padding:2px 6px; border-radius:4px;"><span class="value" style="font-weight:normal; font-size:12px; color:#333;">${label}</span></div>`;
+        });
+        basicInfoHtml += `</div></div>`;
+    }
+
 
 
     const basicCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">info</span>基本情報</div><div class="card-content">${basicInfoHtml}</div></div>`;
@@ -326,12 +339,7 @@ export function getInfoText(d) {
             industryHtml += formatSector('第四次産業', 'school', p.industry.quaternary, 'pt');
             industryHtml += formatSector('第五次産業', 'account_balance', p.industry.quinary, 'pt');
 
-            // 食料収支
-            if (p.surplus && p.surplus['食料']) {
-                industryHtml += `<div class="food-balance surplus"><span class="material-icons-round" style="font-size:14px; vertical-align:middle;">trending_up</span> 食料余剰: +${Math.round(p.surplus['食料']).toLocaleString()}t</div>`;
-            } else if (p.shortage && p.shortage['食料']) {
-                industryHtml += `<div class="food-balance shortage"><span class="material-icons-round" style="font-size:14px; vertical-align:middle;">trending_down</span> 食料不足: -${Math.round(p.shortage['食料']).toLocaleString()}t</div>`;
-            }
+
 
             industryCard = `<div class="info-card wide-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">precision_manufacturing</span>産業構造</div><div class="card-content">${industryHtml}</div></div>`;
         }
@@ -355,14 +363,12 @@ export function getInfoText(d) {
         }
 
         // 施設
-        if (p.facilities && Object.keys(p.facilities).length > 0) {
+        if (p.facilities && p.facilities.length > 0) {
             societyHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">storefront</span>施設</h6>`;
             societyHtml += `<div class="industry-group" style="display:flex; flex-wrap:wrap; gap:4px;">`;
-            for (const [facility, count] of Object.entries(p.facilities)) {
-                if (count > 0) {
-                    societyHtml += `<div class="industry-item" style="width:100%;"><span class="label">${facility}</span><span class="value">${count.toLocaleString()}軒</span></div>`;
-                }
-            }
+            p.facilities.forEach(facility => {
+                societyHtml += `<div class="industry-item" style="width:100%;"><span class="label">${facility}</span><span class="value">あり</span></div>`;
+            });
             societyHtml += `</div></div>`;
         }
 
@@ -393,6 +399,23 @@ export function getInfoText(d) {
 
         livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${getSecurityIcon(lc.security)}</span>治安</span><span class="value">${lc.security}/100</span></div>`;
         livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${getHappinessIcon(lc.happiness)}</span>幸福度</span><span class="value">${Math.round(lc.happiness)}/100</span></div>`;
+
+        // 食料事情
+        const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement || '散居'];
+        const annualDemand = p.population * (settlementInfo ? settlementInfo.consumption_t_per_person : 0.2);
+        const monthlyDemand = annualDemand / 12;
+
+        let selfSufficiency = p.selfSufficiencyRate !== undefined ? p.selfSufficiencyRate : (annualDemand > 0 ? (1 - (p.netShortage || 0) / annualDemand) : 1.0);
+        selfSufficiency = Math.min(1.0, selfSufficiency); // 100%を超えないようにキャップ
+
+        livingHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">restaurant</span>食料事情</h6>`;
+        livingHtml += `<div class="info-row"><span class="label">月間消費</span><span class="value">${Math.round(monthlyDemand).toLocaleString()}t</span></div>`;
+        livingHtml += `<div class="info-row"><span class="label">自給率</span><span class="value" style="${selfSufficiency < 1.0 ? 'color:#e74c3c;' : 'color:#2ecc71;'}">${(selfSufficiency * 100).toFixed(1)}%</span></div>`;
+        if (p.shortage && p.shortage['食料'] > 0) {
+            // 不足分も月間に換算して表示するか？とりあえず年間のままだと誤解を招くので月間に
+            livingHtml += `<div class="info-row"><span class="label">月間不足</span><span class="value" style="color:#e74c3c;">-${Math.round(p.shortage['食料'] / 12).toLocaleString()}t</span></div>`;
+        }
+        livingHtml += `</div>`;
 
         // 租税
         livingHtml += `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">account_balance_wallet</span>租税</span><span class="value">${(lc.tax || 0).toLocaleString()}G</span></div>`;
@@ -453,7 +476,7 @@ export function getInfoText(d) {
             logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">inventory</span>物流資産 (保有)</h6>`;
             logisticsHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
             logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">荷馬車</span><span class="value">${p.logistics.wagons}台</span></div>`;
-            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">役畜</span><span class="value">${p.logistics.animals}頭</span></div>`;
+            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${p.logistics.animalType || '役畜'}</span><span class="value">${p.logistics.animals}頭</span></div>`;
             logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">御者</span><span class="value">${p.logistics.drivers}人</span></div>`;
             logisticsHtml += `</div></div>`;
         }
