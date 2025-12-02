@@ -834,17 +834,24 @@ export function calculateLivingConditions(allHexes) {
         // 価格計算 (上限3.0)
         let price = 1.0;
 
+        // 自給率による輸入コスト加算 (v3.6)
+        const gap = 1.0 - p.selfSufficiencyRate;
+        if (gap > 0) {
+            price += gap * (0.6 + gap * 0.5);
+        }
+
         if (totalDemand > 0) {
             const shortageRate = netShortage / totalDemand;
-            price = 1.0 + (shortageRate * 2.0); // 不足率100%で価格3.0
+            price += (shortageRate * 2.0); // 不足ペナルティを加算
 
             // 過剰供給時の価格低下
             if (totalSupply > totalDemand * 1.1) {
                 const surplusRate = (totalSupply - totalDemand) / totalDemand;
-                price = Math.max(0.5, 1.0 - (surplusRate * 0.5));
+                // 余剰割引はベース価格から引くが、下限は0.8
+                price = Math.max(0.8, price - (surplusRate * 0.2));
             }
         }
-        price = Math.min(3.0, Math.max(0.5, price));
+        price = Math.min(3.0, Math.max(0.8, price));
         p.priceIndex = price;
 
         // 幸福度計算
@@ -921,10 +928,9 @@ export function calculateLivingConditions(allHexes) {
                 food: price,
                 necessities: price,
                 luxuries: price * 1.2,
-                luxuries: price * 1.2,
                 high_luxuries: price * 1.5,
                 field_gear: (() => {
-                    // 野戦具の価格計算 (v3.4 - 需給バランス・輸入コスト考慮版)
+                    // 野戦具の価格計算 (v3.5 - 需要増・価格変動幅調整)
 
                     // 1. 供給 (Supply)
                     // 武具・道具の生産量をベースにする
@@ -937,20 +943,20 @@ export function calculateLivingConditions(allHexes) {
                     const supply = baseSupply + blackMarketSupply;
 
                     // 2. 需要 (Demand)
-                    // 基本需要: 人口 * 0.01 (1人あたり10kg/年)
-                    const baseDemand = p.population * 0.01;
+                    // 基本需要: 人口 * 0.05 (1人あたり50kg/年 - 修正: 需要増)
+                    const baseDemand = p.population * 0.05;
 
-                    // 兵士需要: 兵士数 * 0.1 (兵士は一般人の10倍消費)
+                    // 兵士需要: 兵士数 * 0.2 (兵士は一般人の4倍消費 - 修正: 需要増)
                     let soldierCount = 0;
                     if (p.demographics) {
                         soldierCount += (p.demographics['騎士'] || 0);
                         soldierCount += (p.demographics['正規兵'] || 0);
                         soldierCount += (p.demographics['衛兵・自警団'] || 0);
                     }
-                    const soldierDemand = soldierCount * 0.1;
+                    const soldierDemand = soldierCount * 0.2;
 
-                    // 自衛需要: 治安が悪いほど一般人が武装する
-                    const selfDefenseDemand = (100 - securityScore) * p.population * 0.0005;
+                    // 自衛需要: 治安が悪いほど一般人が武装する (修正: 係数増)
+                    const selfDefenseDemand = (100 - securityScore) * p.population * 0.001;
 
                     const demand = baseDemand + soldierDemand + selfDefenseDemand;
 
@@ -971,12 +977,13 @@ export function calculateLivingConditions(allHexes) {
                             fgPrice = 1.0 + (ratio - 1.0) * 0.5;
                         } else {
                             // 供給過多 (余剰) -> 価格低下
-                            fgPrice = 1.0 - (1.0 - ratio) * 0.5;
+                            // 修正: 値下げ幅を抑制 (0.5 -> 0.3)
+                            fgPrice = 1.0 - (1.0 - ratio) * 0.3;
                         }
                     }
 
-                    // キャップ適用 (下限0.9, 上限3.0)
-                    return Math.max(0.9, Math.min(3.0, parseFloat(fgPrice.toFixed(2))));
+                    // キャップ適用 (下限0.8, 上限3.0)
+                    return Math.max(0.8, Math.min(3.0, parseFloat(fgPrice.toFixed(2))));
                 })()
             },
             happiness: happiness,
