@@ -446,6 +446,7 @@ export function getInfoText(d) {
         livingHtml += `<div class="industry-item"><span class="label">必需品</span><span class="value ${getPriceClass(lc.prices.necessities)}">${lc.prices.necessities.toFixed(2)}</span></div>`;
         livingHtml += `<div class="industry-item"><span class="label">嗜好品</span><span class="value ${getPriceClass(lc.prices.luxuries)}">${(lc.prices.luxuries || 1.0).toFixed(2)}</span></div>`;
         livingHtml += `<div class="industry-item"><span class="label">贅沢品</span><span class="value ${getPriceClass(lc.prices.high_luxuries)}">${(lc.prices.high_luxuries || 1.0).toFixed(2)}</span></div>`;
+        livingHtml += `<div class="industry-item"><span class="label">野戦具</span><span class="value ${getPriceClass(lc.prices.field_gear)}">${(lc.prices.field_gear || 1.0).toFixed(2)}</span></div>`;
         livingHtml += `</div>`;
 
         // 詳細指標 (バー表示)

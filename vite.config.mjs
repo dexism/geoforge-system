@@ -10,8 +10,9 @@ export default {
     rollupOptions: {
       input: {
         // ここにビルドしたいHTMLページを定義します
-        rulebook: resolve(process.cwd(), 'src/rulebook.html'),        
+        rulebook: resolve(process.cwd(), 'src/rulebook.html'),
         main: resolve(process.cwd(), 'src/index.html'),
+        entrysheet: resolve(process.cwd(), 'src/entrysheet.html'),
       }
     }
   }

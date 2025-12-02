@@ -921,7 +921,63 @@ export function calculateLivingConditions(allHexes) {
                 food: price,
                 necessities: price,
                 luxuries: price * 1.2,
-                high_luxuries: price * 1.5
+                luxuries: price * 1.2,
+                high_luxuries: price * 1.5,
+                field_gear: (() => {
+                    // 野戦具の価格計算 (v3.4 - 需給バランス・輸入コスト考慮版)
+
+                    // 1. 供給 (Supply)
+                    // 武具・道具の生産量をベースにする
+                    let baseSupply = (p.industry.secondary['武具・道具'] || 0) * 1.0;
+
+                    // 闇ルート供給 (治安が悪いほど増える)
+                    const securityScore = 100 - (p.monsterRank ? (p.monsterRank === 'S' ? 50 : (p.monsterRank === 'A' ? 30 : (p.monsterRank === 'B' ? 20 : 10))) : 0);
+                    const blackMarketSupply = (100 - securityScore) * (p.population * 0.0001);
+
+                    const supply = baseSupply + blackMarketSupply;
+
+                    // 2. 需要 (Demand)
+                    // 基本需要: 人口 * 0.01 (1人あたり10kg/年)
+                    const baseDemand = p.population * 0.01;
+
+                    // 兵士需要: 兵士数 * 0.1 (兵士は一般人の10倍消費)
+                    let soldierCount = 0;
+                    if (p.demographics) {
+                        soldierCount += (p.demographics['騎士'] || 0);
+                        soldierCount += (p.demographics['正規兵'] || 0);
+                        soldierCount += (p.demographics['衛兵・自警団'] || 0);
+                    }
+                    const soldierDemand = soldierCount * 0.1;
+
+                    // 自衛需要: 治安が悪いほど一般人が武装する
+                    const selfDefenseDemand = (100 - securityScore) * p.population * 0.0005;
+
+                    const demand = baseDemand + soldierDemand + selfDefenseDemand;
+
+                    // 3. 価格計算
+                    let fgPrice = 1.0;
+
+                    if (demand <= 0) {
+                        fgPrice = 1.0; // 需要なし
+                    } else if (supply <= 0) {
+                        // 供給なし -> 輸入に頼るため高騰 (最大3.0)
+                        fgPrice = 3.0;
+                    } else {
+                        // 需給比率
+                        const ratio = demand / supply;
+
+                        if (ratio > 1.0) {
+                            // 需要過多 (不足) -> 価格上昇
+                            fgPrice = 1.0 + (ratio - 1.0) * 0.5;
+                        } else {
+                            // 供給過多 (余剰) -> 価格低下
+                            fgPrice = 1.0 - (1.0 - ratio) * 0.5;
+                        }
+                    }
+
+                    // キャップ適用 (下限0.9, 上限3.0)
+                    return Math.max(0.9, Math.min(3.0, parseFloat(fgPrice.toFixed(2))));
+                })()
             },
             happiness: happiness,
             security: 100 - (p.monsterRank ? (p.monsterRank === 'S' ? 50 : (p.monsterRank === 'A' ? 30 : (p.monsterRank === 'B' ? 20 : 10))) : 0),
