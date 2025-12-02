@@ -6,3 +6,4 @@ dist/
 .DS_Store
 Thumbs.db
 src_backup*/
+geoforge-system.code-workspace
