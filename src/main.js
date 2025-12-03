@@ -4,7 +4,7 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags } from './continentGenerator.js';
+import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
 import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
@@ -421,7 +421,8 @@ const KEY_MAP = {
     demographics: 'dem',
     facilities: 'fac',
     livingConditions: 'lc',
-    logistics: 'log'
+    logistics: 'log',
+    vegetationAreas: 'va'
 };
 
 // 逆マッピング（解凍用）
@@ -468,7 +469,11 @@ const INDUSTRY_ITEM_MAP = {
     '小舟': 's_bt', '商船': 'm_bt', '大型帆船': 'l_bt',
     // 生活水準
     'hunger': 'hun', 'poverty': 'pov', 'luxury': 'lux', 'security': 'sec', 'prices': 'prc',
-    'tax': 'tax', 'happiness': 'hap', 'food': 'fd', 'necessities': 'nec'
+    'tax': 'tax', 'happiness': 'hap', 'food': 'fd', 'necessities': 'nec',
+    // 植生エリア (v3.4)
+    'desert': 'des', 'wasteland': 'was', 'grassland': 'gra', 'wetland': 'wet',
+    'temperateForest': 't_for', 'subarcticForest': 's_for', 'tropicalRainforest': 'tr_for',
+    'alpine': 'alp', 'tundra': 'tun', 'savanna': 'sav', 'steppe': 'ste', 'coastal': 'coa', 'water': 'wat'
 };
 const REVERSE_INDUSTRY_ITEM_MAP = Object.fromEntries(Object.entries(INDUSTRY_ITEM_MAP).map(([k, v]) => [v, k]));
 
@@ -595,6 +600,13 @@ function compressWorldData() {
                 return;
             }
 
+            // vegetationAreasの特別処理 (ネスト圧縮)
+            if (key === 'vegetationAreas' && value) {
+                const cVa = compressNestedObject(value);
+                if (cVa) cHex[KEY_MAP['vegetationAreas']] = cVa;
+                return;
+            }
+
             const shortKey = KEY_MAP[key];
             if (!shortKey) return;
 
@@ -607,7 +619,7 @@ function compressWorldData() {
             if (key === 'population' && value === 0) return;
 
             // 容量削減: ロード時に再計算可能なデータは保存しない
-            if (key === 'livingConditions' || key === 'demographics' || key === 'facilities' || key === 'logistics') return;
+            if (key === 'livingConditions' || key === 'demographics' || key === 'facilities' || key === 'logistics' || key === 'vegetationAreas') return;
 
             // 空のオブジェクトは保存しない
             if (typeof value === 'object' && Object.keys(value).length === 0) return;
@@ -906,6 +918,12 @@ async function processLoadedData(loadedData) {
                     return;
                 }
 
+                // vegetationAreas (ネスト解凍)
+                if (originalKey === 'vegetationAreas') {
+                    props.vegetationAreas = decompressNestedObject(v);
+                    return;
+                }
+
                 // 辞書参照
                 if (DICTIONARY_KEYS.includes(k)) {
                     props[originalKey] = getDictValue(k, v);
@@ -1068,6 +1086,15 @@ async function processLoadedData(loadedData) {
 
     // 地理的フラグ（沿岸・湖岸）の再計算
     recalculateGeographicFlags(worldData.allHexes);
+
+    // 植生エリアデータが欠落している場合の再計算 (v3.4互換性)
+    const missingVegAreas = worldData.allHexes.filter(h => !h.properties.vegetationAreas && !h.properties.isWater).length;
+    if (missingVegAreas > 0) {
+        await addLogMessage(`植生詳細データ(${missingVegAreas}件)を再計算しています...`);
+        // ノイズ関数を初期化してから計算を実行
+        initializeNoiseFunctions();
+        calculateFinalProperties(worldData.allHexes);
+    }
 
     // 距離の再計算
     await recalculateDistances(worldData);

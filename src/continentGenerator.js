@@ -455,7 +455,7 @@ function calculateFinalProperties(allHexes) {
             } else { // 標高が0より大きい水域は湖
                 properties.vegetation = '湖沼';
             }
-            
+
             // 安全策: elevationがNaNなどで判定漏れした場合
             if (!properties.vegetation) {
                 properties.vegetation = '海洋';
@@ -886,7 +886,8 @@ export {
     applyGeographicPrecipitationEffects,
     generateWaterSystems,
     generateRidgeLines,
-    calculateFinalProperties
+    calculateFinalProperties,
+    initializeNoiseFunctions
 };
 /**
  * ロード時に地理的フラグ（沿岸・湖岸）を再計算する
