@@ -6,7 +6,9 @@ import * as d3 from 'd3';
 import * as config from './config.js';
 import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
-import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics } from './economySimulator.js';
+import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership } from './economySimulator.js';
+
+
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex } from './utils.js';
@@ -751,6 +753,7 @@ async function recalculateEconomyMetrics(worldData) {
     if (!allHexes) return;
 
     // 一括計算関数を呼び出し (順序重要)
+    calculateShipOwnership(allHexes); // 船舶保有数の再計算 (v2.7.4)
     generateCityCharacteristics(allHexes);
     calculateDemographics(allHexes);
     calculateFacilities(allHexes);

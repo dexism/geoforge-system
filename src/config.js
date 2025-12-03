@@ -540,7 +540,10 @@ export const SHIP_TYPES = {
         range_km: 20,             // 航続距離 (km)
         max_offshore_km: 10,      // 離岸可能距離 (km)
         min_settlement_level: '村', // 保有可能な最低集落レベル
-        avg_speed_kmh: 4          // 平均速度 (km/h)
+        avg_speed_kmh: 4,          // 平均速度 (km/h)
+        fishing_capacity: 2,
+        fishing_coefficient: 1,
+        crew_requirements: { skipper: 0, crew: 0, fisher: 2 }
     },
     'small_trader': {
         name: '商船・大型漁船',
@@ -548,7 +551,10 @@ export const SHIP_TYPES = {
         range_km: 100,
         max_offshore_km: 20,
         min_settlement_level: '町',
-        avg_speed_kmh: 5
+        avg_speed_kmh: 5,
+        fishing_capacity: 10,
+        fishing_coefficient: 4,
+        crew_requirements: { skipper: 1, crew: 5, fisher: 10 }
     },
     'coastal_trader': {
         name: '沿岸交易船',
@@ -556,7 +562,10 @@ export const SHIP_TYPES = {
         range_km: 200,
         max_offshore_km: 20, // 沿岸航行に特化
         min_settlement_level: '街',
-        avg_speed_kmh: 6
+        avg_speed_kmh: 6,
+        fishing_capacity: 10,
+        fishing_coefficient: 5,
+        crew_requirements: { skipper: 1, crew: 10, fisher: 0 }
     },
     'medium_merchant': {
         name: '中型商船',
@@ -564,7 +573,10 @@ export const SHIP_TYPES = {
         range_km: 1000,
         max_offshore_km: Infinity, // 外洋航行可能
         min_settlement_level: '領都',
-        avg_speed_kmh: 8
+        avg_speed_kmh: 8,
+        fishing_capacity: 20,
+        fishing_coefficient: 8,
+        crew_requirements: { skipper: 1, crew: 20, fisher: 0 }
     },
     'large_sailing_ship': {
         name: '大型帆船',
@@ -572,19 +584,72 @@ export const SHIP_TYPES = {
         range_km: 3000,
         max_offshore_km: Infinity, // 外洋航行可能
         min_settlement_level: '首都',
-        avg_speed_kmh: 10
+        avg_speed_kmh: 10,
+        fishing_capacity: 50,
+        fishing_coefficient: 10,
+        crew_requirements: { skipper: 1, crew: 50, fisher: 0 }
+    },
+    'lake_boat': {
+        name: '湖沼用小舟',
+        cargo_capacity_t: 0.5,       // 積載量 (トン)
+        range_km: 15,                // 航続距離 (km)
+        max_offshore_km: 5,          // 湖岸からの距離
+        min_settlement_level: '村',  // 村でも保有可能
+        avg_speed_kmh: 4,            // 平均速度 (km/h)
+        fishing_capacity: 2,
+        fishing_coefficient: 1,
+        crew_requirements: { skipper: 0, crew: 0, fisher: 2 }
+    },
+    'lake_trader': {
+        name: '湖沼交易船',
+        cargo_capacity_t: 5,
+        range_km: 50,
+        max_offshore_km: 10,
+        min_settlement_level: '町',
+        avg_speed_kmh: 5,
+        fishing_capacity: 4,
+        fishing_coefficient: 2,
+        crew_requirements: { skipper: 1, crew: 2, fisher: 4 }
+    },
+    'river_canoe': {
+        name: '河川用カヌー',
+        cargo_capacity_t: 0.2,
+        range_km: 10,
+        max_offshore_km: 0,          // 河川なので離岸距離は不要
+        min_settlement_level: '村',
+        avg_speed_kmh: 3,            // 流れに応じて速度変動
+        fishing_capacity: 2,
+        fishing_coefficient: 1,
+        crew_requirements: { skipper: 0, crew: 0, fisher: 2 }
+    },
+    'river_barge': {
+        name: '河川用平底船',
+        cargo_capacity_t: 20,
+        range_km: 100,
+        max_offshore_km: 0,
+        min_settlement_level: '町',
+        avg_speed_kmh: 5,
+        fishing_capacity: 4,
+        fishing_coefficient: 3,
+        crew_requirements: { skipper: 1, crew: 3, fisher: 4 }
     }
+};
+
+export const WATER_BODY_COEFFICIENTS = {
+    RIVER: 0.5,
+    LAKE: 1.0,
+    OCEAN: 2.0
 };
 
 // 各集落レベルがどの船まで保有できるかを定義するマップ
 // (海路生成ロジックで使いやすいように逆引きテーブルも用意)
 export const SHIP_AVAILABILITY = {
-    '村': ['dinghy'],
-    '町': ['dinghy', 'small_trader'],
-    '街': ['dinghy', 'small_trader', 'coastal_trader'],
-    '領都': ['dinghy', 'small_trader', 'coastal_trader', 'medium_merchant'],
-    '都市': ['dinghy', 'small_trader', 'coastal_trader', 'medium_merchant'], // 都市は領都と同等とする
-    '首都': ['dinghy', 'small_trader', 'coastal_trader', 'medium_merchant', 'large_sailing_ship']
+    '村': ['dinghy', 'lake_boat', 'river_canoe'],
+    '町': ['dinghy', 'small_trader', 'lake_boat', 'lake_trader', 'river_canoe', 'river_barge'],
+    '街': ['dinghy', 'small_trader', 'coastal_trader', 'lake_boat', 'lake_trader', 'river_canoe', 'river_barge'],
+    '領都': ['dinghy', 'small_trader', 'coastal_trader', 'medium_merchant', 'lake_boat', 'lake_trader', 'river_canoe', 'river_barge'],
+    '都市': ['dinghy', 'small_trader', 'coastal_trader', 'medium_merchant', 'lake_boat', 'lake_trader', 'river_canoe', 'river_barge'], // 都市は領都と同等とする
+    '首都': ['dinghy', 'small_trader', 'coastal_trader', 'medium_merchant', 'large_sailing_ship', 'lake_boat', 'lake_trader', 'river_canoe', 'river_barge']
 };
 
 // config.js
@@ -611,6 +676,10 @@ export const PORT_PARAMS = {
         'small_trader': 2,
         'coastal_trader': 4,
         'medium_merchant': 8,
-        'large_sailing_ship': 12
+        'large_sailing_ship': 12,
+        'lake_boat': 1,
+        'lake_trader': 2,
+        'river_canoe': 0.5,
+        'river_barge': 1.5
     }
 };
