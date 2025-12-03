@@ -665,7 +665,8 @@ export function calculateDemographics(allHexes) {
 
         // 海軍人員の計上 (v2.7.6)
         // 常備海軍比率に基づく補正 (船に乗っていない陸上勤務・予備人員も含める)
-        if (config.NAVAL_SETTINGS) {
+        // 沿岸部のみ海軍を保有する (湖沼・河川は対象外)
+        if (p.isCoastal && config.NAVAL_SETTINGS) {
             const settlementLevel = p.settlement || '散居';
             const ratio = config.NAVAL_SETTINGS.STANDING_NAVY_RATIO[settlementLevel] || 0;
             if (ratio > 0) {

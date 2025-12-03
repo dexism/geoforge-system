@@ -590,7 +590,7 @@ export const SHIP_TYPES = {
         crew_requirements: { skipper: 1, crew: 50, fisher: 0 }
     },
     'lake_boat': {
-        name: '湖沼用小舟',
+        name: '湖沼用ボート',
         cargo_capacity_t: 0.5,       // 積載量 (トン)
         range_km: 15,                // 航続距離 (km)
         max_offshore_km: 5,          // 湖岸からの距離

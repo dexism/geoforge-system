@@ -404,7 +404,7 @@ export function getInfoText(d) {
 
     // 15. 農地面積
     if (p.cultivatedArea > 1) {
-        envInfoHtml += createRow('agriculture', '農地面積', Math.round(p.cultivatedArea).toLocaleString(), ' ha');
+        envInfoHtml += createRow('agriculture', '農地等', Math.round(p.cultivatedArea).toLocaleString(), ' ha');
     }
 
     // 16. 集落面積
@@ -413,7 +413,7 @@ export function getInfoText(d) {
         settlementArea = 0.02 * Math.pow(p.population, 0.85);
     }
     if (settlementArea > 1) {
-        envInfoHtml += createRow('location_city', '集落面積', Math.round(settlementArea).toLocaleString(), ' ha');
+        envInfoHtml += createRow('location_city', '集落等', Math.round(settlementArea).toLocaleString(), ' ha');
     }
 
     // 17. 道路面積
@@ -422,16 +422,16 @@ export function getInfoText(d) {
         roadArea = p.roadEdges.reduce((a, b) => a + b, 0);
     }
     if (roadArea > 0) {
-        envInfoHtml += createRow('add_road', '道路面積', Math.round(roadArea).toLocaleString(), ' ha');
+        envInfoHtml += createRow('add_road', '道路等', Math.round(roadArea).toLocaleString(), ' ha');
     }
 
     // 18. 詳細植生面積 (v3.4)
     if (p.vegetationAreas) {
         const vegLabelMap = {
-            desert: { label: '砂漠面積', icon: 'landscape' },
-            wasteland: { label: '荒地面積', icon: 'terrain' },
-            grassland: { label: '草原面積', icon: 'grass' },
-            wetland: { label: '湿地面積', icon: 'water_drop' },
+            desert: { label: '砂漠帯', icon: 'landscape' },
+            wasteland: { label: '荒地帯', icon: 'terrain' },
+            grassland: { label: '草原帯', icon: 'grass' },
+            wetland: { label: '湿地帯', icon: 'water_drop' },
             temperateForest: { label: '温帯林', icon: 'forest' },
             subarcticForest: { label: '亜寒帯林', icon: 'forest' },
             tropicalRainforest: { label: '熱帯雨林', icon: 'forest' },
@@ -588,12 +588,12 @@ export function getInfoText(d) {
                 jobs.forEach(job => {
                     if (p.demographics[job] > 0) {
                         catTotal += p.demographics[job];
-                        catHtml += `<div class="industry-item" style="width:100%; padding-left:8px;"><span class="label">${job}</span><span class="value">${p.demographics[job].toLocaleString()}人</span></div>`;
+                        catHtml += `<div class="industry-item" style="width:100%; padding:0 8px; box-sizing: border-box;"><span class="label">${job}</span><span class="value">${p.demographics[job].toLocaleString()}人</span></div>`;
                     }
                 });
 
                 if (catTotal > 0) {
-                    societyHtml += `<div class="industry-item" style="width:100%; font-weight:bold; background:rgba(0,0,0,0.03);"><span class="label">${catName}</span><span class="value">${catTotal.toLocaleString()}人</span></div>`;
+                    societyHtml += `<div class="industry-item" style="width:100%; font-weight:bold; background:#fff2; box-sizing: border-box;"><span class="label">${catName}</span><span class="value">${catTotal.toLocaleString()}人</span></div>`;
                     societyHtml += catHtml;
                 }
             }
@@ -755,7 +755,7 @@ export function getInfoText(d) {
 
             // ソート順定義
             const sortOrder = [
-                '小舟・漁船', '河川用カヌー', '湖沼用ボート', '河川用平底船', '湖沼交易船', '商船・大型漁船', '小型交易船', '沿岸交易船', '中型商船', '大型帆船',
+                '河川用カヌー', '湖沼用ボート', '小舟・漁船', '湖沼交易船', '商船・大型漁船', '河川用平底船', '沿岸交易船', '中型商船', '大型帆船',
                 '警備艇', '護衛艦', 'ガレー船', '戦列艦', '旗艦'
             ];
 
