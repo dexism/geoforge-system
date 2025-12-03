@@ -1021,50 +1021,104 @@ function allocateVegetation({
     };
 
     // --- 植生適性スコア計算 ---
+    // ベーススコア（どこにでも少しは混ざる可能性）
+    s.wasteland += 0.05;
+    s.grassland += 0.05;
+
+    // 地形による補正
+    // 山岳・山地は荒れ地やアルパインが増えやすい
+    if (flatness < 0.5) {
+        s.wasteland += 0.2 * (1.0 - flatness);
+        if (H > 1500) s.alpine += 0.1;
+    }
+
     // 砂漠: 乾燥指数 <0.5
-    if (D < 0.5) s.desert = (0.5 - D) * (T >= 18 ? 1.0 : 0.7);
+    if (D < 0.5) {
+        s.desert += (0.5 - D) * (T >= 18 ? 2.0 : 1.5); // スコア加重を強化
+        s.wasteland += 0.2; // 砂漠の周りは荒れ地になりやすい
+    }
 
     // 荒れ地: 土壌肥沃度が低い & 降水不足
-    if (soilFert < 0.3 && P < 400) s.wasteland = 0.6;
+    if (soilFert < 0.4 || P < 500) {
+        s.wasteland += 0.4 * (1.0 - soilFert);
+        // 低肥沃度でも少しは草原が生える余地を残す
+        if (P >= 300) s.grassland += 0.2 * (1.0 - soilFert);
+    }
 
     // 草原: 中程度の降水 & 平坦度高
-    if (D >= 1 && P >= 400 && P < 1200) s.grassland = 0.7 * flatness;
+    if (D >= 0.8 && P >= 300) { // 条件を緩和
+        let score = 0.6 * flatness;
+        if (P < 800) score *= 1.2; // 少雨地域は草原が優勢
+        s.grassland += score;
+    }
 
-    // 湿地: 平坦度高 & 排水不良（ここでは降水多＋海洋性高）
-    if (flatness > 0.7 && (P > 1200 || oceanicity > 0.6)) s.wetland = 0.8;
+    // 湿地: 平坦度高 & 排水不良
+    if (flatness > 0.8 && (P > 1200 || oceanicity > 0.6 || waterHa > 50)) {
+        s.wetland += 0.8 * flatness;
+    }
 
-    // 温帯林: T 5–18℃ & P充分
-    if (T >= 5 && T < 18 && P >= 800) s.temperateForest = 0.8 * soilFert;
+    // 森林（温帯・亜寒帯・熱帯）: 降水量が十分なら、どこでも少しは生える
+    if (P >= 500) {
+        // 気温による分岐
+        if (T >= 24) {
+            if (P >= 1500) s.tropicalRainforest += 1.0 * (P / 2000);
+            else s.savanna += 0.5; // 雨が少ない熱帯はサバンナ
+        } else if (T >= 5) {
+            s.temperateForest += 0.8 * soilFert * (P / 1000);
+        } else if (T >= -5) {
+            s.subarcticForest += 0.7 * (P / 800);
+        }
+    }
 
-    // 亜寒帯林: T -3〜5℃ & P充分
-    if (T >= -3 && T < 5 && P >= 600) s.subarcticForest = 0.7;
+    // アルパイン: 標高依存
+    if (H >= 2500) {
+        s.alpine += (H - 2500) / 1000;
+        s.wasteland += 0.2; // 高山は荒れ地も多い
+    }
 
-    // 熱帯雨林: T ≥24℃ & P ≥2000
-    if (T >= 24 && P >= 2000) s.tropicalRainforest = 0.9;
+    // ツンドラ: 低温
+    if (T < 2) {
+        s.tundra += (2 - T) * 0.2;
+    }
 
-    // アルパイン: 標高 ≥3000m
-    if (H >= 3000) s.alpine = 1.0;
+    // サバンナ・ステップ（乾燥・高温/中温）
+    if (D >= 0.4 && D < 1.0) {
+        if (T >= 18) s.savanna += 0.5;
+        else s.steppe += 0.5;
+    }
 
-    // ツンドラ: T <2℃ または 標高 ≥2400m
-    if (T < 2 || H >= 2400) s.tundra = 0.7;
+    // 沿岸植生
+    if (coastalDist < 20) {
+        s.coastal += Math.max(0, (20 - coastalDist) / 20) * 0.8; // 距離減衰 + 係数調整
+        s.grassland += 0.2; // 海岸は草原も多い
+    }
+    if (oceanicity > 0.7) {
+        s.coastal += 0.3;
+    }
 
-    // サバンナ: T ≥18℃ & D 0.5–1
-    if (T >= 18 && D >= 0.5 && D < 1) s.savanna = 0.6;
-
-    // ステップ: D 0.5–1 & P <800
-    if (D >= 0.5 && D < 1 && P < 800) s.steppe = 0.6;
-
-    // 沿岸植生: 海岸近接（距岸距離 <20km）または海洋性高
-    if (coastalDist < 20 || oceanicity > 0.7) s.coastal = 0.7;
+    // ノイズによるゆらぎ（ランダム性）を少し加える
+    Object.keys(s).forEach(k => {
+        if (s[k] > 0) {
+            s[k] *= (0.8 + Math.random() * 0.4); // +/- 20% のゆらぎ
+        }
+    });
 
     // --- 正規化して面積配分 ---
     const sum = Object.values(s).reduce((a, b) => a + b, 0);
     const areas = {};
     if (sum === 0) {
-        areas.grassland = landHa; // フォールバック
+        areas.wasteland = landHa; // フォールバック
     } else {
+        let total = 0;
         for (const [k, v] of Object.entries(s)) {
-            areas[k] = Math.round((v / sum) * landHa);
+            areas[k] = Math.floor((v / sum) * landHa); // ha単位で丸め
+            total += areas[k];
+        }
+        // 誤差調整: 残りを最大カテゴリに加算
+        const diff = landHa - total;
+        if (diff > 0) {
+            const maxKey = Object.keys(areas).reduce((a, b) => areas[a] > areas[b] ? a : b);
+            areas[maxKey] += diff;
         }
     }
     areas.water = waterHa;

@@ -442,9 +442,29 @@ export function getInfoText(d) {
             coastal: { label: '沿岸植生', icon: 'waves' }
         };
 
+        // 人為的な土地利用面積の合計を計算
+        const humanUseArea = (settlementArea || 0) + (roadArea || 0) + (p.cultivatedArea || 0);
+
+        // 水域以外の陸地面積
+        const landArea = config.HEX_AREA_HA - (oceanArea + lakeArea + riverArea);
+
+        // 残りの自然植生面積
+        const remainingNatureArea = Math.max(0, landArea - humanUseArea);
+
+        // 元の植生面積の合計（水域除く）
+        let totalVegArea = 0;
+        Object.entries(p.vegetationAreas).forEach(([k, v]) => {
+            if (k !== 'water') totalVegArea += v;
+        });
+
+        // 縮小率の計算（人為的利用が増えた分、自然植生を圧縮する）
+        const scaleFactor = totalVegArea > 0 ? remainingNatureArea / totalVegArea : 0;
+
         // 面積の大きい順にソートして表示
         Object.entries(p.vegetationAreas)
-            .filter(([key, area]) => key !== 'water' && area > 1) // 水域は別表示、1ha以下は非表示
+            .filter(([key, area]) => key !== 'water')
+            .map(([key, area]) => [key, area * scaleFactor]) // 縮小率を適用
+            .filter(([, area]) => area > 1) // 1ha以下は非表示
             .sort(([, a], [, b]) => b - a)
             .forEach(([key, area]) => {
                 const info = vegLabelMap[key];
