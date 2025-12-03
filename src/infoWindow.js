@@ -425,8 +425,38 @@ export function getInfoText(d) {
         envInfoHtml += createRow('add_road', '道路面積', Math.round(roadArea).toLocaleString(), ' ha');
     }
 
-    // 18. 森林面積
-    if (p.landUse && p.landUse.forest > 0) {
+    // 18. 詳細植生面積 (v3.4)
+    if (p.vegetationAreas) {
+        const vegLabelMap = {
+            desert: { label: '砂漠面積', icon: 'landscape' },
+            wasteland: { label: '荒地面積', icon: 'terrain' },
+            grassland: { label: '草原面積', icon: 'grass' },
+            wetland: { label: '湿地面積', icon: 'water_drop' },
+            temperateForest: { label: '温帯林', icon: 'forest' },
+            subarcticForest: { label: '亜寒帯林', icon: 'forest' },
+            tropicalRainforest: { label: '熱帯雨林', icon: 'forest' },
+            alpine: { label: 'アルパイン', icon: 'terrain' },
+            tundra: { label: 'ツンドラ', icon: 'ac_unit' },
+            savanna: { label: 'サバンナ', icon: 'grass' },
+            steppe: { label: 'ステップ', icon: 'grass' },
+            coastal: { label: '沿岸植生', icon: 'waves' }
+        };
+
+        // 面積の大きい順にソートして表示
+        Object.entries(p.vegetationAreas)
+            .filter(([key, area]) => key !== 'water' && area > 1) // 水域は別表示、1ha以下は非表示
+            .sort(([, a], [, b]) => b - a)
+            .forEach(([key, area]) => {
+                const info = vegLabelMap[key];
+                if (info) {
+                    envInfoHtml += createRow(info.icon, info.label, Math.round(area).toLocaleString(), ' ha');
+                } else {
+                    // 未定義のキーがあればそのまま表示
+                    envInfoHtml += createRow('help_outline', key, Math.round(area).toLocaleString(), ' ha');
+                }
+            });
+    } else if (p.landUse && p.landUse.forest > 0) {
+        // 旧データ互換
         const forestArea = p.landUse.forest * config.HEX_AREA_HA;
         if (forestArea > 1) {
             envInfoHtml += createRow('forest', '森林面積', Math.round(forestArea).toLocaleString(), ' ha');

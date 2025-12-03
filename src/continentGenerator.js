@@ -145,39 +145,13 @@ function generateBaseProperties(col, row) {
     // 古い0-1スケールの降水量は廃止。互換性のため最大3000mmで正規化した値を残す。
     properties.precipitation = Math.min(1.0, properties.precipitation_mm / 3000);
 
-    // ケッペンの乾燥限界に基づいた新しい気候帯判定
-    // (山脈補正は、全ヘックス生成後の第2パスで行うため、ここでは仮計算)
+    // ケッペンの乾燥限界に基づいた新しい気候帯判定 (ユーザー指定仕様)
+    const H_m = properties.elevation || 0;
+    const T_mean = properties.temperature || 15;
+    const P_annual = properties.precipitation_mm || 1000;
 
-    // a. 季節性係数 'x' をノイズで決定
-    const seasonNoise = (seasonalityNoise(nx * 0.5, ny * 0.5) + 1) / 2;
-    let seasonalityFactor;
-    if (seasonNoise < 0.33) seasonalityFactor = config.PRECIPITATION_PARAMS.SEASONALITY_WINTER_RAIN; // 冬雨
-    else if (seasonNoise > 0.66) seasonalityFactor = config.PRECIPITATION_PARAMS.SEASONALITY_SUMMER_RAIN; // 夏雨
-    else seasonalityFactor = config.PRECIPITATION_PARAMS.SEASONALITY_UNIFORM; // 通年
-
-    // b. 乾燥限界 r = 20(t+x) を計算
-    const drynessLimit = 20 * (properties.temperature + seasonalityFactor);
-
-    // c. 新しい基準で気候帯を判定
-    if (properties.precipitation_mm < drynessLimit * 0.5) {
-        properties.climateZone = properties.temperature < 18 ? "砂漠気候(寒)" : "砂漠気候(熱)";
-    } else if (properties.precipitation_mm < drynessLimit) {
-        properties.climateZone = "ステップ気候";
-    } else { // 湿潤気候の場合、従来の気温ベースの判定を行う
-        if (properties.temperature < config.TEMP_ZONES.COLD) {
-            properties.climateZone = "亜寒帯湿潤気候";
-        } else if (properties.temperature < config.TEMP_ZONES.TEMPERATE) {
-            properties.climateZone = "温暖湿潤気候";
-        } else {
-            // 熱帯の区分け: 降水量に基づいてサバナと雨林を分ける
-            // config.VEGETATION_PARAMS.TROPICAL_FOREST_MIN_PRECIP_MM (1500mm) を基準とする
-            if (properties.precipitation_mm < config.VEGETATION_PARAMS.TROPICAL_FOREST_MIN_PRECIP_MM) {
-                properties.climateZone = "熱帯草原気候";
-            } else {
-                properties.climateZone = "熱帯雨林気候";
-            }
-        }
-    }
+    const climateZone = classifyClimate(T_mean, P_annual, H_m);
+    properties.climateZone = climateZone || "温暖湿潤気候";
 
     // --- 4. その他のプロパティ ---
     properties.hasSnow = false;
@@ -473,185 +447,136 @@ function calculateFinalProperties(allHexes) {
 
         if (isWater) {
             // 水域の植生タイプを標高ベースで判定する
-            if (properties.elevation <= 0) { // 標高0以下は海
-                if (config.elevationScale.invert(elevation) < -0.4) {
-                    properties.vegetation = '深海';
-                } else {
-                    properties.vegetation = '海洋';
-                }
+            // config.SHELF_PARAMS.MAX_DEPTH (-200m) より深ければ深海とする
+            if (properties.elevation < config.SHELF_PARAMS.MAX_DEPTH) {
+                properties.vegetation = '深海';
+            } else if (properties.elevation <= 0) {
+                properties.vegetation = '海洋';
             } else { // 標高が0より大きい水域は湖
                 properties.vegetation = '湖沼';
             }
+            
+            // 安全策: elevationがNaNなどで判定漏れした場合
+            if (!properties.vegetation) {
+                properties.vegetation = '海洋';
+            }
+
+            // 水域用ダミーデータ
+            properties.vegetationAreas = { water: config.HEX_AREA_HA };
+            properties.landUse = { river: 0, desert: 0, barren: 0, grassland: 0, forest: 0 };
         } else {
-            // --- ステップ1: 特別な植生（湿地・密林）を優先的に判定 ---
+            // --- 陸地ヘックスの植生判定 (新ロジック) ---
 
-            // 湿地生成ロジック
-            let isWetland = false;
-            const wp = config.PRECIPITATION_PARAMS.WETLAND_PARAMS;
+            // 1. パラメータの準備
+            const T = properties.temperature;
+            const P = properties.precipitation_mm;
+            const H = properties.elevation;
 
-            // --- a. 湿地の判定 ---
-            if (elevation < wp.MAX_ELEVATION) {
-                // 条件1: 地形の平坦度を評価
+            // 水域面積 (簡易計算: 川の流れから推定)
+            let waterHa = 0;
+            if (properties.flow > 0) {
+                // flow=1 で約10ha, flow=100で約1000ha程度になるような簡易式
+                waterHa = Math.min(config.HEX_AREA_HA * 0.5, properties.flow * 10);
+            }
+
+            // 平坦度 (flatness): 周囲との標高差から計算
+            let elevationRange = 0;
+            if (h.neighbors.length > 0) {
                 const neighborElevations = h.neighbors.map(nIndex => allHexes[nIndex].properties.elevation);
                 const maxNeighborElev = Math.max(...neighborElevations);
                 const minNeighborElev = Math.min(...neighborElevations);
-                const elevationRange = maxNeighborElev - minNeighborElev;
-                // 平坦であるほどスコアが高くなる (0.0 to 1.0)
-                const flatnessScore = Math.max(0, 1.0 - (elevationRange / wp.FLATNESS_THRESHOLD));
+                elevationRange = maxNeighborElev - minNeighborElev;
+            }
+            // 標高差0m -> 1.0, 標高差1000m -> 0.0
+            const flatness = Math.max(0, 1.0 - (elevationRange / 1000));
 
-                // 条件2: 水源の豊富さを評価
-                let waterScore = 0;
-                // 河川からのボーナス
-                waterScore += Math.min(1.0, properties.flow * 0.5);
-                // 降水量からのボーナス
-                if (properties.precipitation_mm > wp.PRECIP_THRESHOLD_MM) {
-                    waterScore += Math.min(1.0, (properties.precipitation_mm - wp.PRECIP_THRESHOLD_MM) / 1000);
-                }
-                // 沿岸・湖畔からのボーナス
-                if (h.neighbors.some(nIndex => allHexes[nIndex].properties.isWater)) {
-                    waterScore += wp.COASTAL_WATER_BONUS;
-                }
+            // 土壌肥沃度 (soilFert): ノイズから生成 (0.0 - 1.0)
+            // 既存の forestPotentialNoise などを流用して、少しランダム性を持たせる
+            const soilNoiseVal = (forestPotentialNoise(nx * 5, ny * 5) + 1) / 2;
+            const soilFert = Math.max(0, Math.min(1, soilNoiseVal + (properties.isAlluvial ? 0.3 : 0)));
 
-                // 最終判定: (平坦度スコア + 水源スコア) が閾値を超えたか？
-                if (flatnessScore > 0 && (flatnessScore + waterScore) > wp.SCORE_THRESHOLD) {
-                    isWetland = true;
+            // 乾燥指数 D
+            const C = 140;
+            const D = P / (20 * T + C);
+
+            // 距岸距離 (coastalDist) & 海洋性係数 (oceanicity)
+            // 簡易的に、isCoastalなら距離0、そうでなければ距離50とする
+            // 本来はBFSで計算すべきだが、パフォーマンスのため簡易化
+            let coastalDist = 100;
+            let oceanicity = 0.2;
+
+            // 周囲に海があるかチェック
+            let hasSeaNeighbor = false;
+            h.neighbors.forEach(nIdx => {
+                const nHex = allHexes[nIdx];
+                if (nHex.properties.isWater && nHex.properties.elevation <= 0) {
+                    hasSeaNeighbor = true;
+                }
+            });
+
+            if (hasSeaNeighbor) {
+                coastalDist = 5;
+                oceanicity = 0.9;
+            } else if (properties.isCoastal) { // 既存フラグの活用
+                coastalDist = 10;
+                oceanicity = 0.8;
+            }
+
+            // 2. 植生配分計算 (allocateVegetation)
+            const vegAreas = allocateVegetation({
+                T, P, H, waterHa,
+                flatness, soilFert, D,
+                coastalDist, oceanicity
+            });
+
+            properties.vegetationAreas = vegAreas;
+
+            // 3. 最も面積の広い植生を dominantVegetation とする
+            let maxArea = -1;
+            let dominantVeg = '荒れ地';
+
+            // 除外するキー（waterなど）
+            const excludeKeys = ['water'];
+
+            for (const [key, area] of Object.entries(vegAreas)) {
+                if (excludeKeys.includes(key)) continue;
+                if (area > maxArea) {
+                    maxArea = area;
+                    dominantVeg = key;
                 }
             }
 
-            if (isWetland) {
-                properties.vegetation = '湿地';
-            }
+            // キー名を日本語表記に変換
+            const vegNameMap = {
+                desert: '砂漠',
+                wasteland: '荒れ地',
+                grassland: '草原',
+                wetland: '湿地',
+                temperateForest: '温帯林',
+                subarcticForest: '亜寒帯林',
+                tropicalRainforest: '熱帯雨林',
+                alpine: 'アルパイン', // または高山
+                tundra: 'ツンドラ',
+                savanna: 'サバンナ',
+                steppe: 'ステップ',
+                coastal: '沿岸植生'
+            };
 
-            // b. 密林の判定 (湿地でない場合のみ)
-            // 条件: 気温が高く、かつ降水量が非常に多い
-            else if (
-                temperature >= config.PRECIPITATION_PARAMS.JUNGLE_MIN_TEMP &&
-                properties.precipitation_mm >= config.PRECIPITATION_PARAMS.JUNGLE_MIN_PRECIP_MM
-            ) {
-                properties.vegetation = '熱帯雨林';
-                if (debugHex) console.log(`DEBUG: Hex[${h.index}] set to '熱帯雨林' (Jungle condition)`);
-            }
-            // --- ステップ2: 上記以外の場合、従来のポテンシャルベースの判定を行う ---
-            else {
-                if (debugHex) console.log(`DEBUG: Hex[${h.index}] entering Step 2 (Potential base)`);
-                // 2. 陸地ヘックスの場合、各土地利用タイプの「ポテンシャル」を計算
-                const potentials = {
-                    river: 0,
-                    desert: 0,
-                    barren: 0,
-                    grassland: 0,
-                    forest: 0,
-                };
+            properties.vegetation = vegNameMap[dominantVeg] || dominantVeg;
+            // if (dominantVeg === 'alpine') properties.vegetation = '高山'; // 削除: アルパインで統一
 
-                // 1. 川による森林へのボーナスを計算
-                // 川の流れ(flow)が強いほどボーナスが大きくなるが、効果が過剰にならないよう上限を設ける
-                // const riverBonusToForest = 1.0 + Math.min(2.0, Math.sqrt(properties.flow) * 0.5);
-                // ボーナスを乗算ではなく加算で使うように変更 (0.0 ～ 0.4程度) 
-                const riverBonusToForest = Math.min(0.4, Math.sqrt(properties.flow) * 0.1);
+            // 4. 既存の landUse プロパティへのマッピング (互換性維持)
+            // { river, desert, barren, grassland, forest } (割合 0.0-1.0)
+            const totalLandArea = config.HEX_AREA_HA - waterHa;
+            const safeTotal = totalLandArea > 0 ? totalLandArea : 1;
 
-                // 2. 各ポテンシャルを計算。森林ポテンシャルに川のボーナスを乗算する
-                // 川の面積が過大（幅5km等）にならないよう、係数を2.0から0.1に引き下げ (v3.3)
-                // flow=1の場合、0.1 / 2.0 = 5% (約400m幅) となる想定
-                potentials.river = Math.sqrt(properties.flow) * 0.1;
-                potentials.desert = Math.pow(Math.max(0, 1 - properties.precipitation / 0.1), 2) * 10;
-                const alpineFactor = Math.pow(Math.max(0, elevation - 3500) / 3500, 2);
-                const tundraFactor = Math.pow(Math.max(0, -5 - temperature) / 20, 2);
-                potentials.barren = (alpineFactor + tundraFactor) * 10;
-
-                const forestNoise = (1 + forestPotentialNoise(nx, ny)) / 2;
-                const precipFactor = Math.max(0, properties.precipitation - 0.05);
-
-                // 1. 広葉樹林 (温帯) - 15℃中心
-                const broadleafTempFactor = Math.max(0, 1 - Math.abs(temperature - 15) / 15);
-                const potBroadleaf = forestNoise * broadleafTempFactor * precipFactor * 2.0;
-
-                // 2. 針葉樹林 (寒冷) - 0℃中心
-                const coniferousTempFactor = Math.max(0, 1 - Math.abs(temperature - 0) / 15);
-                const potConiferous = forestNoise * coniferousTempFactor * precipFactor * 2.0;
-
-                // 3. 密林 (熱帯) - 30℃中心
-                const jungleTempFactor = Math.max(0, 1 - Math.abs(temperature - 30) / 15);
-                // 密林はより多くの雨が必要
-                const junglePrecipFactor = Math.max(0, properties.precipitation - 0.15);
-                const potJungle = forestNoise * jungleTempFactor * junglePrecipFactor * 2.0;
-
-                // 合計ポテンシャル (各温度帯での最大値を採用する形に近いが、遷移帯では和となる)
-                let baseForestPotential = potBroadleaf + potConiferous + potJungle;
-                potentials.forest = baseForestPotential + riverBonusToForest;
-
-                const grasslandTempFactor = Math.max(0, 1 - Math.abs(temperature - 18) / 25);
-                const grasslandPrecipFactor = 1 - Math.abs(properties.precipitation - 0.3) * 2;
-                potentials.grassland = ((1 + grasslandPotentialNoise(nx, ny)) / 2) * grasslandTempFactor * grasslandPrecipFactor * 3;
-
-                // 3. 全ポテンシャルの合計値を計算
-                const totalPotential = Object.values(potentials).reduce((sum, val) => sum + val, 0);
-
-                // 4. 合計値を使って各ポテンシャルを正規化し、割合（%）を算出
-                if (totalPotential > 0) {
-                    properties.landUse = {
-                        river: potentials.river / totalPotential,
-                        desert: potentials.desert / totalPotential,
-                        barren: potentials.barren / totalPotential,
-                        grassland: potentials.grassland / totalPotential,
-                        forest: potentials.forest / totalPotential
-                    };
-                } else {
-                    properties.landUse = { river: 0, desert: 0, barren: 1.0, grassland: 0, forest: 0 };
-                }
-
-                // 5. 従来の vegetation プロパティ（最も優勢な地目）を決定
-                // 気候帯ラベルへの直接依存を廃止し、気温・降水量・標高の組み合わせで植生を決定する
-                let dominantVeg = '荒れ地'; // デフォルトは荒れ地
-                const precip_mm = properties.precipitation_mm;
-
-                // --- STEP 0: 標高や特殊条件による優先判定 ---
-                if (elevation >= 3500) {
-                    dominantVeg = '高山'; // 標高3500m以上は問答無用で高山植生
-                }
-
-                // --- STEP 1: 気温帯ごとの植生判定（ホイッタカーのバイオーム図を簡易的に模倣） ---
-                else {
-                    // 【a. 寒冷地 (Cold Zone)】
-                    if (temperature < config.TEMP_ZONES.COLD) {
-                        // config.js の値を参照
-                        if (precip_mm < config.VEGETATION_PARAMS.BOREAL_FOREST_MIN_PRECIP_MM) {
-                            dominantVeg = '荒れ地'; // 寒冷な荒れ地（ツンドラに近い）
-                        } else {
-                            dominantVeg = '亜寒帯林'; // タイガ
-                        }
-                    }
-                    // 【b. 温帯 (Temperate Zone)】
-                    else if (temperature < config.TEMP_ZONES.TEMPERATE) {
-                        if (precip_mm < 200) {
-                            dominantVeg = '砂漠';
-                        } else if (precip_mm < 350) {
-                            // 砂漠の周辺に荒れ地を生成
-                            dominantVeg = '荒れ地';
-                        } else if (precip_mm < config.VEGETATION_PARAMS.TEMPERATE_FOREST_MIN_PRECIP_MM) { // config.js の値を参照
-                            dominantVeg = '草原'; // ステップ気候に相当
-                        } else {
-                            dominantVeg = '温帯林'; // 温暖湿潤気候の森林
-                        }
-                    }
-                    // 【c. 熱帯・亜熱帯 (Hot Zone)】
-                    else {
-                        if (precip_mm < 250) {
-                            dominantVeg = '砂漠';
-                        } else if (precip_mm < 500) {
-                            dominantVeg = '荒れ地';
-                        } else if (precip_mm < config.VEGETATION_PARAMS.TROPICAL_RAINFOREST_MIN_PRECIP_MM) { // config.js の値を参照
-                            // 熱帯の草原（サバンナ）
-                            dominantVeg = '草原';
-                        } else {
-                            // 既に '熱帯雨林' 判定済みだが、ここに来る場合は通常の熱帯林とする
-                            dominantVeg = '熱帯雨林';
-                        }
-                    }
-                }
-
-                properties.vegetation = dominantVeg || '荒れ地'; // 安全策: 未定義なら荒れ地
-                if (debugHex) console.log(`DEBUG: Hex[${h.index}] set to '${properties.vegetation}' (DominantVeg: ${dominantVeg})`);
-            }
+            properties.landUse = {
+                river: waterHa / config.HEX_AREA_HA, // 全体に対する割合
+                desert: (vegAreas.desert || 0) / safeTotal,
+                barren: ((vegAreas.wasteland || 0) + (vegAreas.alpine || 0) + (vegAreas.tundra || 0)) / safeTotal,
+                grassland: ((vegAreas.grassland || 0) + (vegAreas.savanna || 0) + (vegAreas.steppe || 0) + (vegAreas.wetland || 0) + (vegAreas.coastal || 0)) / safeTotal,
+                forest: ((vegAreas.temperateForest || 0) + (vegAreas.subarcticForest || 0) + (vegAreas.tropicalRainforest || 0)) / safeTotal
+            };
         }
 
         // 産業ポテンシャル
@@ -994,4 +919,154 @@ export function recalculateGeographicFlags(allHexes) {
         p.isCoastal = isCoastal;
         p.isLakeside = isLakeside;
     });
+}
+
+/**
+ * GeoForge System: 12気候区分判定
+ */
+function classifyClimate(T_mean, P_annual, H_m) {
+    // ------------- 調整可能な閾値（世界観チューニング用） -------------
+    const H_ice = 3600;     // 氷雪域の標高（m）: 高山・寒冷地での氷雪気候
+    const H_alpine = 3000;  // 森林限界の代表値（m）: これ以上は樹木生育が困難（ツンドラ相当）
+
+    // 乾燥限界（ケッペン準拠の簡易形）
+    const C = 140;
+    const Rb = 20 * T_mean + C; // 乾燥限界（mm）
+
+    const P_rainforest = 2000;   // 熱帯雨林の代表閾（mm）
+    const P_humid = 800;         // 温帯湿潤/亜熱帯湿潤の下限（mm）
+    const P_mediterranean_upper = 700; // 地中海性の年降水量上限（mm）目安
+
+    // ------------- 1) 標高優先の寒冷域判定 -------------
+    if (H_m >= H_ice || T_mean < -5) {
+        return "氷雪気候";
+    }
+    if (H_m >= H_alpine || T_mean < 0.5) {
+        // 森林限界以上 or 非常に低温 → ツンドラ
+        return "ツンドラ気候";
+    }
+
+    // ------------- 2) 乾燥帯（砂漠/ステップ）判定 -------------
+    // 乾燥帯の入口は年降水量と乾燥限界の比較で決定
+    if (P_annual < 0.5 * Rb) {
+        // 砂漠（熱/寒）は年平均気温で分岐
+        return T_mean >= 18 ? "砂漠気候(熱)" : "砂漠気候(寒)";
+    }
+    if (P_annual < Rb) {
+        return "ステップ気候";
+    }
+
+    // ------------- 3) 帯域（熱帯/亜熱帯/温帯/亜寒帯）と湿潤タイプ -------------
+    // 亜寒帯（冷帯）: 寒冷な温帯の上位
+    if (T_mean < -3) {
+        // すでにツンドラ/氷雪でない寒冷湿潤域
+        // 年降水量が乾燥限界以上なら湿潤、それ未満寄りなら乾燥
+        return P_annual >= Rb ? "亜寒帯湿潤気候" : "亜寒帯乾燥気候";
+    }
+
+    // 温帯域（基準）
+    if (T_mean >= -3 && T_mean < 18) {
+        // 地中海性候補：温帯で比較的少雨（乾燥帯には入らない）
+        if (P_annual <= P_mediterranean_upper && P_annual >= 0.5 * Rb) {
+            return "地中海性気候";
+        }
+        // 十分湿潤なら温暖湿潤
+        if (P_annual >= P_humid) {
+            return "温暖湿潤気候";
+        }
+        // 湿潤下限に満たないが乾燥帯ではない場合は、温帯の中庸を温暖湿潤に吸収
+        return "温暖湿潤気候";
+    }
+
+    // 亜熱帯・熱帯域（高温側）
+    if (T_mean >= 18 && T_mean < 24) {
+        // 乾燥帯に該当しない前提で、湿潤なら亜熱帯湿潤、比較的少雨なら熱帯草原に近い
+        if (P_annual >= P_humid) {
+            return "亜熱帯湿潤気候";
+        }
+        // 湿潤下限に満たないが乾燥帯ではない → 熱帯草原寄り
+        return "熱帯草原気候";
+    }
+
+    // 熱帯（高温・多雨）
+    if (T_mean >= 24) {
+        // 多雨なら熱帯雨林、そうでなければ熱帯草原
+        if (P_annual >= P_rainforest) {
+            return "熱帯雨林気候";
+        }
+        return "熱帯草原気候";
+    }
+
+    // 万一のフォールバック（理論上到達しない）
+    return "温暖湿潤気候";
+}
+
+/**
+ * 植生分布計算
+ */
+function allocateVegetation({
+    T, P, H, waterHa,
+    flatness, soilFert, D,
+    coastalDist, oceanicity
+}) {
+    const hexAreaHa = config.HEX_AREA_HA || 8660;
+    const landHa = Math.max(0, hexAreaHa - waterHa);
+
+    // 適性スコア初期化
+    const s = {
+        desert: 0, wasteland: 0, grassland: 0, wetland: 0,
+        temperateForest: 0, subarcticForest: 0, tropicalRainforest: 0,
+        alpine: 0, tundra: 0, savanna: 0, steppe: 0, coastal: 0
+    };
+
+    // --- 植生適性スコア計算 ---
+    // 砂漠: 乾燥指数 <0.5
+    if (D < 0.5) s.desert = (0.5 - D) * (T >= 18 ? 1.0 : 0.7);
+
+    // 荒れ地: 土壌肥沃度が低い & 降水不足
+    if (soilFert < 0.3 && P < 400) s.wasteland = 0.6;
+
+    // 草原: 中程度の降水 & 平坦度高
+    if (D >= 1 && P >= 400 && P < 1200) s.grassland = 0.7 * flatness;
+
+    // 湿地: 平坦度高 & 排水不良（ここでは降水多＋海洋性高）
+    if (flatness > 0.7 && (P > 1200 || oceanicity > 0.6)) s.wetland = 0.8;
+
+    // 温帯林: T 5–18℃ & P充分
+    if (T >= 5 && T < 18 && P >= 800) s.temperateForest = 0.8 * soilFert;
+
+    // 亜寒帯林: T -3〜5℃ & P充分
+    if (T >= -3 && T < 5 && P >= 600) s.subarcticForest = 0.7;
+
+    // 熱帯雨林: T ≥24℃ & P ≥2000
+    if (T >= 24 && P >= 2000) s.tropicalRainforest = 0.9;
+
+    // アルパイン: 標高 ≥3000m
+    if (H >= 3000) s.alpine = 1.0;
+
+    // ツンドラ: T <2℃ または 標高 ≥2400m
+    if (T < 2 || H >= 2400) s.tundra = 0.7;
+
+    // サバンナ: T ≥18℃ & D 0.5–1
+    if (T >= 18 && D >= 0.5 && D < 1) s.savanna = 0.6;
+
+    // ステップ: D 0.5–1 & P <800
+    if (D >= 0.5 && D < 1 && P < 800) s.steppe = 0.6;
+
+    // 沿岸植生: 海岸近接（距岸距離 <20km）または海洋性高
+    if (coastalDist < 20 || oceanicity > 0.7) s.coastal = 0.7;
+
+    // --- 正規化して面積配分 ---
+    const sum = Object.values(s).reduce((a, b) => a + b, 0);
+    const areas = {};
+    if (sum === 0) {
+        areas.grassland = landHa; // フォールバック
+    } else {
+        for (const [k, v] of Object.entries(s)) {
+            areas[k] = Math.round((v / sum) * landHa);
+        }
+    }
+    areas.water = waterHa;
+
+    return areas;
 }

@@ -250,14 +250,14 @@ export const WAGON_PARAMS = {
         0: 0.3
     },
     TERRAIN_SPEED_MULTIPLIERS: {
-    '山岳': 0.6,
-    '山地': 0.7,
-    '温帯林': 0.75,
-    '熱帯雨林': 0.5, // 密林より速度低下
-    '亜寒帯林': 0.75,
-    '丘陵': 0.8,
-    '平地': 1.0
-},
+        '山岳': 0.6,
+        '山地': 0.7,
+        '温帯林': 0.75,
+        '熱帯雨林': 0.5, // 密林より速度低下
+        '亜寒帯林': 0.75,
+        '丘陵': 0.8,
+        '平地': 1.0
+    },
     SNOW_SPEED_MULTIPLIER: 0.7
 };
 export const HUNTING_PARAMS = {
@@ -322,7 +322,13 @@ export const TERRAIN_COLORS = {
     湿地: '#676',
     草原: '#bda',
     荒れ地: '#ccb',
-    高山: '#aaa'
+    アルパイン: '#aaa',
+    サバンナ: '#dcb',
+    ステップ: '#cda',
+    ツンドラ: '#bcd',
+    沿岸植生: '#8db',
+    海洋: '#48d',
+    深海: '#147'
 };
 // 稜線・水系図の配色
 export const RIDGE_WATER_SYSTEM_COLORS = {
@@ -330,12 +336,15 @@ export const RIDGE_WATER_SYSTEM_COLORS = {
     RIDGE: '#b00'  // 稜線の色
 };
 export const CLIMATE_ZONE_COLORS = {
-    "砂漠気候(寒)": '#d2b48c',
+    "氷雪気候": '#ffffff',
     "ツンドラ気候": '#5dade2',
     "亜寒帯湿潤気候": '#2874a6',
+    "亜寒帯乾燥気候": '#5d6d7e',
     "ステップ気候": '#e67e22',
+    "砂漠気候(寒)": '#d2b48c',
     "地中海性気候": '#58d68d',
     "温暖湿潤気候": '#239b56',
+    "亜熱帯湿潤気候": '#2ecc71',
     "砂漠気候(熱)": '#f4d03f',
     "熱帯草原気候": '#f5b041',
     "熱帯雨林気候": '#145a32'
