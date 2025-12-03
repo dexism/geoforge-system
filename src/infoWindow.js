@@ -250,6 +250,9 @@ export function getInfoText(d) {
     envInfoHtml += createRow('landscape', '地　形', landUseText);
 
     // 2. 植生
+    if (!p.vegetation) {
+        console.warn(`[WARN] Vegetation is missing for Hex[${d.index}] (x:${d.x}, y:${d.y}). Properties:`, p);
+    }
     envInfoHtml += createRow('forest', '植　生', p.vegetation || 'なし');
 
     // 3. 特性

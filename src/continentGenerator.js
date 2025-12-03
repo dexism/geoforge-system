@@ -437,12 +437,20 @@ function generateRidgeLines(allHexes) {
  * @param {Array<object>} allHexes - 全ヘックスのデータ
  */
 function calculateFinalProperties(allHexes) {
+    console.log("DEBUG: calculateFinalProperties started.");
+    let setVegetationCount = 0;
+    let missingVegetationCount = 0;
+
     allHexes.forEach(h => {
         const { properties, col, row } = h;
         const { isWater, elevation, temperature } = properties; // precipitation は直接使わないので削除
         // 座標の正規化手法をgenerateBasePropertiesと統一する
         const nx = col / config.COLS;
         const ny = row / config.ROWS;
+
+        // [DEBUG] 特定ヘックスの追跡
+        const debugHex = (col === 52 && row === 37);
+        if (debugHex) console.log(`DEBUG: Hex[${h.index}] (52,37) processing start. isWater: ${isWater}, elevation: ${elevation}`);
 
         // 標高から地形タイプを決定
         if (isWater) {
@@ -520,10 +528,12 @@ function calculateFinalProperties(allHexes) {
                 temperature >= config.PRECIPITATION_PARAMS.JUNGLE_MIN_TEMP &&
                 properties.precipitation_mm >= config.PRECIPITATION_PARAMS.JUNGLE_MIN_PRECIP_MM
             ) {
-                properties.vegetation = '密林';
+                properties.vegetation = '熱帯雨林';
+                if (debugHex) console.log(`DEBUG: Hex[${h.index}] set to '熱帯雨林' (Jungle condition)`);
             }
             // --- ステップ2: 上記以外の場合、従来のポテンシャルベースの判定を行う ---
             else {
+                if (debugHex) console.log(`DEBUG: Hex[${h.index}] entering Step 2 (Potential base)`);
                 // 2. 陸地ヘックスの場合、各土地利用タイプの「ポテンシャル」を計算
                 const potentials = {
                     river: 0,
@@ -604,7 +614,7 @@ function calculateFinalProperties(allHexes) {
                     // 【a. 寒冷地 (Cold Zone)】
                     if (temperature < config.TEMP_ZONES.COLD) {
                         // config.js の値を参照
-                        if (precip_mm < config.VEGETATION_PARAMS.CONIFEROUS_FOREST_MIN_PRECIP_MM) {
+                        if (precip_mm < config.VEGETATION_PARAMS.BOREAL_FOREST_MIN_PRECIP_MM) {
                             dominantVeg = '荒れ地'; // 寒冷な荒れ地（ツンドラに近い）
                         } else {
                             dominantVeg = '亜寒帯林'; // タイガ
@@ -629,7 +639,7 @@ function calculateFinalProperties(allHexes) {
                             dominantVeg = '砂漠';
                         } else if (precip_mm < 500) {
                             dominantVeg = '荒れ地';
-                        } else if (precip_mm < config.VEGETATION_PARAMS.TROPICAL_FOREST_MIN_PRECIP_MM) { // config.js の値を参照
+                        } else if (precip_mm < config.VEGETATION_PARAMS.TROPICAL_RAINFOREST_MIN_PRECIP_MM) { // config.js の値を参照
                             // 熱帯の草原（サバンナ）
                             dominantVeg = '草原';
                         } else {
@@ -639,7 +649,8 @@ function calculateFinalProperties(allHexes) {
                     }
                 }
 
-                properties.vegetation = dominantVeg;
+                properties.vegetation = dominantVeg || '荒れ地'; // 安全策: 未定義なら荒れ地
+                if (debugHex) console.log(`DEBUG: Hex[${h.index}] set to '${properties.vegetation}' (DominantVeg: ${dominantVeg})`);
             }
         }
 

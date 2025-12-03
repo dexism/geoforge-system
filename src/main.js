@@ -129,6 +129,15 @@ async function runStep2_Climate() {
     await addLogMessage("気候と植生を再描画しています...");
     await redrawClimate(worldData.allHexes);
 
+    // [DEBUG] 植生データの検証
+    const missingVeg = worldData.allHexes.filter(h => !h.properties.vegetation).length;
+    if (missingVeg > 0) {
+        console.error(`[ERROR] Step 2 finished but ${missingVeg} hexes have no vegetation!`);
+        await addLogMessage(`[警告] ${missingVeg} 個のヘックスで植生が設定されていません。`);
+    } else {
+        console.log("[INFO] Step 2 finished. All hexes have vegetation.");
+    }
+
     updateButtonStates(2);
     loadingOverlay.style.display = 'none';
 }
@@ -474,6 +483,12 @@ const REVERSE_INDUSTRY_LEVEL_MAP = Object.fromEntries(Object.entries(INDUSTRY_LE
  */
 function compressWorldData() {
     if (!worldData || !worldData.allHexes) return null;
+
+    // [DEBUG] 保存前のデータ検証
+    const missingVeg = worldData.allHexes.filter(h => !h.properties.vegetation).length;
+    if (missingVeg > 0) {
+        console.warn(`[WARN] Compressing data but ${missingVeg} hexes are missing vegetation.`);
+    }
 
     // 1. 辞書の作成
     const dictionaries = {};
