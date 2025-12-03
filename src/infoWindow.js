@@ -426,20 +426,31 @@ export function getInfoText(d) {
     }
 
     // 18. 詳細植生面積 (v3.4)
+    // バーグラフ用のデータ収集配列
+    const landUseSegments = [];
+
+    // 水域・人為的利用の追加
+    if (oceanArea > 1) landUseSegments.push({ label: '海洋', area: oceanArea, color: '#1f77b4' }); // 濃い青
+    if (lakeArea > 1) landUseSegments.push({ label: '湖沼', area: lakeArea, color: '#aec7e8' }); // 薄い青
+    if (riverArea > 1) landUseSegments.push({ label: '河川', area: riverArea, color: '#6baed6' }); // 中間の青
+    if (p.cultivatedArea > 1) landUseSegments.push({ label: '農地', area: p.cultivatedArea, color: '#ffbb78' }); // 薄いオレンジ
+    if (settlementArea > 1) landUseSegments.push({ label: '集落', area: settlementArea, color: '#d62728' }); // 赤
+    if (roadArea > 0) landUseSegments.push({ label: '道路', area: roadArea, color: '#7f7f7f' }); // グレー
+
     if (p.vegetationAreas) {
         const vegLabelMap = {
-            desert: { label: '砂漠帯', icon: 'landscape' },
-            wasteland: { label: '荒地帯', icon: 'terrain' },
-            grassland: { label: '草原帯', icon: 'grass' },
-            wetland: { label: '湿地帯', icon: 'water_drop' },
-            temperateForest: { label: '温帯林', icon: 'forest' },
-            subarcticForest: { label: '亜寒帯林', icon: 'forest' },
-            tropicalRainforest: { label: '熱帯雨林', icon: 'forest' },
-            alpine: { label: 'アルパイン', icon: 'terrain' },
-            tundra: { label: 'ツンドラ', icon: 'ac_unit' },
-            savanna: { label: 'サバンナ', icon: 'grass' },
-            steppe: { label: 'ステップ', icon: 'grass' },
-            coastal: { label: '沿岸植生', icon: 'waves' }
+            desert: { label: '砂漠帯', icon: 'landscape', color: '#e6c288' }, // 砂色
+            wasteland: { label: '荒地帯', icon: 'terrain', color: '#a69b8f' }, // 灰色っぽい茶色
+            grassland: { label: '草原帯', icon: 'grass', color: '#7cfc00' }, // 明るい緑
+            wetland: { label: '湿地帯', icon: 'water_drop', color: '#20b2aa' }, // ライトシーグリーン
+            temperateForest: { label: '温帯林', icon: 'forest', color: '#228b22' }, // フォレストグリーン
+            subarcticForest: { label: '亜寒帯林', icon: 'forest', color: '#006400' }, // ダークグリーン
+            tropicalRainforest: { label: '熱帯雨林', icon: 'forest', color: '#004d00' }, // 非常に濃い緑
+            alpine: { label: 'アルパイン', icon: 'terrain', color: '#dcdcdc' }, // ゲインズボロ (薄いグレー)
+            tundra: { label: 'ツンドラ', icon: 'ac_unit', color: '#e0ffff' }, // ライトシアン
+            savanna: { label: 'サバンナ', icon: 'grass', color: '#f0e68c' }, // カーキ
+            steppe: { label: 'ステップ', icon: 'grass', color: '#bdb76b' }, // ダークカーキ
+            coastal: { label: '沿岸植生', icon: 'waves', color: '#40e0d0' } // ターコイズ
         };
 
         // 人為的な土地利用面積の合計を計算
@@ -470,9 +481,11 @@ export function getInfoText(d) {
                 const info = vegLabelMap[key];
                 if (info) {
                     envInfoHtml += createRow(info.icon, info.label, Math.round(area).toLocaleString(), ' ha');
+                    landUseSegments.push({ label: info.label, area: area, color: info.color });
                 } else {
                     // 未定義のキーがあればそのまま表示
                     envInfoHtml += createRow('help_outline', key, Math.round(area).toLocaleString(), ' ha');
+                    landUseSegments.push({ label: key, area: area, color: '#ccc' });
                 }
             });
     } else if (p.landUse && p.landUse.forest > 0) {
@@ -480,6 +493,40 @@ export function getInfoText(d) {
         const forestArea = p.landUse.forest * config.HEX_AREA_HA;
         if (forestArea > 1) {
             envInfoHtml += createRow('forest', '森林面積', Math.round(forestArea).toLocaleString(), ' ha');
+            landUseSegments.push({ label: '森林', area: forestArea, color: '#228b22' });
+        }
+    }
+
+    // --- カラーバーグラフの生成 ---
+    if (landUseSegments.length > 0) {
+        const totalArea = landUseSegments.reduce((sum, seg) => sum + seg.area, 0);
+        let barHtml = '<div class="land-use-bar">';
+
+        landUseSegments.forEach(seg => {
+            const ratio = (seg.area / totalArea) * 100;
+            if (ratio > 0) {
+                barHtml += `<div class="land-use-segment" style="width:${ratio}%; background-color:${seg.color};" title="${seg.label}: ${Math.round(seg.area).toLocaleString()}ha (${ratio.toFixed(1)}%)"></div>`;
+            }
+        });
+        barHtml += '</div>';
+
+        // 「土地利用面積」ヘッダーの直後に挿入したいが、envInfoHtmlは文字列連結で構築されているため、
+        // 既存の createRow 呼び出しの後に挿入する形になる。
+        // ここでは、envInfoHtmlの最後にdivを追加するのではなく、
+        // 「土地利用面積」セクションの直下に追加するために、少し工夫が必要。
+        // しかし、現状のコード構造ではセクションの途中に挿入するのは難しい。
+        // そこで、セクションの最後にバーを追加する形にするか、
+        // あるいは `createRow` でリストアップされた項目の上に表示するか。
+        // ユーザーの要望は「『土地利用面積』のすぐ下」なので、
+        // envInfoHtml の構築順序を少し変えるか、文字列置換を行う必要がある。
+
+        // 文字列置換で挿入する
+        const headerStr = '<h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">square_foot</span>土地利用面積</h6>';
+        if (envInfoHtml.includes(headerStr)) {
+            envInfoHtml = envInfoHtml.replace(headerStr, headerStr + barHtml);
+        } else {
+            // ヘッダーが見つからない場合は末尾に追加（フォールバック）
+            envInfoHtml += barHtml;
         }
     }
 
