@@ -297,7 +297,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
     calculateDemographics(allHexes);
     calculateFacilities(allHexes);
     calculateTerritoryAggregates(allHexes);
-    await calculateRoadTraffic(allHexes, addLogMessage);
+    // calculateRoadTraffic is called separately in main.js with roadPaths
     calculateLivingConditions(allHexes);
     return allHexes;
 }
@@ -688,14 +688,48 @@ export function calculateTerritoryAggregates(allHexes) {
     return allHexes;
 }
 
-export async function calculateRoadTraffic(allHexes, addLogMessage) {
-    // Reset traffic
+export async function calculateRoadTraffic(allHexes, roadPaths, addLogMessage) {
+    // Reset traffic and road edges
     allHexes.forEach(h => {
         h.properties.roadUsage = 0;
         h.properties.landUsage = 0;
         h.properties.waterUsage = 0;
         h.properties.roadLoss = 0;
+        h.properties.roadEdges = [0, 0, 0, 0, 0, 0]; // Initialize road edges (v3.3)
     });
+
+    // Calculate Road Edges from roadPaths (v3.3)
+    if (roadPaths) {
+        roadPaths.forEach(road => {
+            if (!road.path || road.path.length < 2) return;
+            const level = road.level;
+
+            for (let i = 0; i < road.path.length - 1; i++) {
+                const p1 = road.path[i];
+                const p2 = road.path[i + 1];
+                const idx1 = getIndex(p1.x, p1.y);
+                const idx2 = getIndex(p2.x, p2.y);
+                const h1 = allHexes[idx1];
+                const h2 = allHexes[idx2];
+
+                if (h1 && h2) {
+                    // Find direction from h1 to h2
+                    const dir1 = h1.neighbors.indexOf(idx2);
+                    if (dir1 !== -1) {
+                        if (!h1.properties.roadEdges) h1.properties.roadEdges = [0, 0, 0, 0, 0, 0];
+                        h1.properties.roadEdges[dir1] = Math.max(h1.properties.roadEdges[dir1], level);
+                    }
+
+                    // Find direction from h2 to h1
+                    const dir2 = h2.neighbors.indexOf(idx1);
+                    if (dir2 !== -1) {
+                        if (!h2.properties.roadEdges) h2.properties.roadEdges = [0, 0, 0, 0, 0, 0];
+                        h2.properties.roadEdges[dir2] = Math.max(h2.properties.roadEdges[dir2], level);
+                    }
+                }
+            }
+        });
+    }
 
     const addUsage = (hexIndex, volume) => {
         if (!allHexes[hexIndex]) return;

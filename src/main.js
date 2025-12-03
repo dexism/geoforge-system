@@ -728,6 +728,7 @@ async function recalculateEconomyMetrics(worldData) {
     calculateDemographics(allHexes);
     calculateFacilities(allHexes);
     calculateTerritoryAggregates(allHexes);
+    await calculateRoadTraffic(allHexes, worldData.roadPaths, addLogMessage);
     calculateLivingConditions(allHexes);
 }
 

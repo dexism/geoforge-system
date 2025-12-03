@@ -540,18 +540,33 @@ function calculateFinalProperties(allHexes) {
                 const riverBonusToForest = Math.min(0.4, Math.sqrt(properties.flow) * 0.1);
 
                 // 2. 各ポテンシャルを計算。森林ポテンシャルに川のボーナスを乗算する
-                potentials.river = Math.sqrt(properties.flow) * 2;
+                // 川の面積が過大（幅5km等）にならないよう、係数を2.0から0.1に引き下げ (v3.3)
+                // flow=1の場合、0.1 / 2.0 = 5% (約400m幅) となる想定
+                potentials.river = Math.sqrt(properties.flow) * 0.1;
                 potentials.desert = Math.pow(Math.max(0, 1 - properties.precipitation / 0.1), 2) * 10;
                 const alpineFactor = Math.pow(Math.max(0, elevation - 3500) / 3500, 2);
                 const tundraFactor = Math.pow(Math.max(0, -5 - temperature) / 20, 2);
                 potentials.barren = (alpineFactor + tundraFactor) * 10;
 
-                const forestTempFactor = Math.max(0, 1 - Math.abs(temperature - 15) / 20);
-                const forestPrecipFactor = Math.max(0, properties.precipitation - 0.05);
-                // 元の森林ポテンシャル計算式に、川からのボーナスを掛け合わせる
-                // potentials.forest = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 5 * riverBonusToForest;
-                // 基本倍率を引き下げ、川のボーナスは最後に加算する
-                let baseForestPotential = ((1 + forestPotentialNoise(nx, ny)) / 2) * forestTempFactor * forestPrecipFactor * 2.0;
+                const forestNoise = (1 + forestPotentialNoise(nx, ny)) / 2;
+                const precipFactor = Math.max(0, properties.precipitation - 0.05);
+
+                // 1. 広葉樹林 (温帯) - 15℃中心
+                const broadleafTempFactor = Math.max(0, 1 - Math.abs(temperature - 15) / 15);
+                const potBroadleaf = forestNoise * broadleafTempFactor * precipFactor * 2.0;
+
+                // 2. 針葉樹林 (寒冷) - 0℃中心
+                const coniferousTempFactor = Math.max(0, 1 - Math.abs(temperature - 0) / 15);
+                const potConiferous = forestNoise * coniferousTempFactor * precipFactor * 2.0;
+
+                // 3. 密林 (熱帯) - 30℃中心
+                const jungleTempFactor = Math.max(0, 1 - Math.abs(temperature - 30) / 15);
+                // 密林はより多くの雨が必要
+                const junglePrecipFactor = Math.max(0, properties.precipitation - 0.15);
+                const potJungle = forestNoise * jungleTempFactor * junglePrecipFactor * 2.0;
+
+                // 合計ポテンシャル (各温度帯での最大値を採用する形に近いが、遷移帯では和となる)
+                let baseForestPotential = potBroadleaf + potConiferous + potJungle;
                 potentials.forest = baseForestPotential + riverBonusToForest;
 
                 const grasslandTempFactor = Math.max(0, 1 - Math.abs(temperature - 18) / 25);
@@ -717,7 +732,9 @@ function calculateFinalProperties(allHexes) {
                 }
             });
             fishingPotential += waterBonus;
-            fishingPotential += properties.landUse.river * 0.5;
+            // 面積依存ではなく、水量(flow)依存に変更 (v3.3)
+            // flow=1で0.1, flow=25で0.5程度
+            fishingPotential += Math.min(0.8, Math.sqrt(properties.flow) * 0.1);
         }
         properties.fishingPotential = Math.min(1.0, fishingPotential);
 

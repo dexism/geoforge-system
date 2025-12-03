@@ -221,7 +221,7 @@ export function getInfoText(d) {
 
     // 人口・農地
     basicInfoHtml += createRow('people', '人　口', (p.population || 0).toLocaleString(), '人');
-    basicInfoHtml += createRow('agriculture', '農　地', Math.round(p.cultivatedArea || 0).toLocaleString(), ' ha');
+    // basicInfoHtml += createRow('agriculture', '農　地', Math.round(p.cultivatedArea || 0).toLocaleString(), ' ha'); // Moved to Environment
     basicInfoHtml += createRow('home', '居住適性', (p.habitability || 0).toFixed(1));
 
     if (p.characteristics && p.characteristics.length > 0) {
@@ -246,12 +246,13 @@ export function getInfoText(d) {
 
     // 土地利用
     let landUseText = p.isWater ? p.vegetation : (p.terrainType || p.vegetation);
-    if (!p.isWater && p.isAlluvial) landUseText += ' (河川)';
+    // if (!p.isWater && p.isAlluvial) landUseText += ' (河川)';
     envInfoHtml += createRow('landscape', '地　形', landUseText);
 
-    // 植生・特性
+    // 2. 植生
     envInfoHtml += createRow('forest', '植　生', p.vegetation || 'なし');
 
+    // 3. 特性
     const features = [];
     if (p.isAlluvial) features.push('河川');
     if (p.hasSnow) features.push('積雪');
@@ -260,15 +261,176 @@ export function getInfoText(d) {
     if (p.beachNeighbors && p.beachNeighbors.length > 0) features.push('砂浜');
     envInfoHtml += createRow('star', '特　性', features.length > 0 ? features.join('・') : 'なし');
 
-    envInfoHtml += createRow('public', '気候帯', p.climateZone);
+    // 4. 標高
     envInfoHtml += createRow('terrain', p.elevation < 0 ? '水　深' : '標　高', Math.abs(Math.round(p.elevation)), 'm');
-    envInfoHtml += createRow('thermostat', '気　温', p.temperature.toFixed(1), '℃');
-    envInfoHtml += createRow('water_drop', '降水量', p.precipitation_mm.toFixed(0), 'mm');
-    envInfoHtml += createRow('auto_awesome', '魔　力', p.manaRank);
-    envInfoHtml += createRow('diamond', '資　源', p.resourceRank);
-    envInfoHtml += createRow('warning', '魔　物', p.monsterRank ? p.monsterRank + 'ランク' : 'なし');
 
-    const envCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">nature</span>環　境</div><div class="card-content">${envInfoHtml}</div></div>`;
+    // 5. 気候帯
+    envInfoHtml += createRow('public', '気候帯', p.climateZone);
+
+    // 6. 気温
+    envInfoHtml += createRow('thermostat', '気　温', p.temperature.toFixed(1), '℃');
+
+    // 7. 降水量
+    envInfoHtml += createRow('water_drop', '降水量', p.precipitation_mm.toFixed(0), 'mm');
+
+    // 8. 魔力ランク
+    envInfoHtml += createRow('auto_awesome', '魔力ランク', p.manaRank);
+
+    // 9. 資源
+    envInfoHtml += createRow('diamond', '資　源', p.resourceRank);
+
+    // 10. 魔物ランク
+    envInfoHtml += createRow('warning', '魔　物', p.monsterRank ? p.monsterRank + 'ランク' : '見かけない');
+
+    // 水域面積 (v3.3 - 詳細ロジック & カテゴリ分け)
+    let riverArea = 0;
+    let lakeArea = 0;
+    let oceanArea = 0;
+
+    if (p.isWater) {
+        // 水域ヘックスの場合、そのヘックス全体を該当する水域とする
+        if (p.vegetation === '湖沼') {
+            lakeArea = config.HEX_AREA_HA;
+        } else {
+            oceanArea = config.HEX_AREA_HA;
+        }
+    } else {
+        // 陸域ヘックスの場合、隣接や河川情報から水域を算出
+
+        // 1. 湖岸・海岸の面積 (隣接数 x 100ha)
+        let lakeNeighbors = 0;
+        let oceanNeighbors = 0;
+        if (d.neighbors) {
+            d.neighbors.forEach(nIdx => {
+                const nHex = allHexesData[nIdx];
+                if (nHex && nHex.properties.isWater) {
+                    if (nHex.properties.vegetation === '湖沼') lakeNeighbors++;
+                    else if (nHex.properties.vegetation === '海洋' || nHex.properties.vegetation === '深海') oceanNeighbors++;
+                }
+            });
+        }
+        lakeArea += lakeNeighbors * 100;
+        oceanArea += oceanNeighbors * 100;
+
+        // 2. 河川の面積 (流量^2 x 1ha x 河川長)
+        if (p.flow > 0) {
+            // 下流（流出先）を特定: 最も標高が低い隣接ヘックス
+            let outflow = null;
+            let minElev = p.elevation;
+            let outflowIdx = -1;
+
+            // 上流（流入元）を特定: 標高が高く、flowを持つ隣接ヘックスのうち、最大のflowを持つもの（本流）
+            let mainUpstream = null;
+            let maxUpstreamFlow = -1;
+            let upstreamIdx = -1;
+
+            if (d.neighbors) {
+                d.neighbors.forEach((nIdx, i) => {
+                    const nHex = allHexesData[nIdx];
+                    if (!nHex) return;
+
+                    // Outflow check
+                    if (nHex.properties.elevation < minElev) {
+                        minElev = nHex.properties.elevation;
+                        outflow = nHex;
+                        outflowIdx = i;
+                    }
+
+                    // Upstream check
+                    if (nHex.properties.elevation > p.elevation && nHex.properties.flow > 0) {
+                        if (nHex.properties.flow > maxUpstreamFlow) {
+                            maxUpstreamFlow = nHex.properties.flow;
+                            mainUpstream = nHex;
+                            upstreamIdx = i;
+                        }
+                    }
+                });
+            }
+
+            // 基本河川長の決定
+            let baseLength = 6; // デフォルト（水源のみ。河口は下流があるため計算される）
+            if (outflow && mainUpstream) {
+                // 流入と流出がある場合（中間地点および河口）、角度（インデックス差）で長さを判定
+                let diff = Math.abs(outflowIdx - upstreamIdx);
+                if (diff > 3) diff = 6 - diff; // Normalize to 0-3
+
+                if (diff === 3) baseLength = 12; // 対辺 (直進)
+                else if (diff === 2) baseLength = 10; // 2つ隣 (緩カーブ)
+                else if (diff === 1) baseLength = 6; // 隣 (急カーブ)
+            }
+
+            // 平坦度係数の計算 (0.9 ~ 1.5)
+            let elevDiff = 0;
+            if (outflow) {
+                elevDiff = p.elevation - outflow.properties.elevation;
+            }
+            // 標高差が大きいほど係数は小さくなる (急流は短い)
+            let flatness = 1.5 - (elevDiff * 0.0012);
+
+            // 稜線レベルによる補正
+            if (p.ridgeFlow > 0) {
+                flatness -= p.ridgeFlow * 0.05;
+            }
+
+            flatness = Math.max(0.9, Math.min(1.5, flatness));
+
+            // 河川長 (km)
+            const riverLengthKm = baseLength * flatness;
+
+            // 面積計算: 流量^2 * 1ha * 長さ
+            let calculatedArea = Math.pow(p.flow, 2) * 1 * riverLengthKm;
+
+            // 湿地帯係数 (v3.3): 湿地の場合は水域が広いとみなして2倍
+            if (p.vegetation === '湿地') {
+                calculatedArea *= 2.0;
+            }
+
+            riverArea += calculatedArea;
+        }
+    }
+
+    // 11. 土地利用面積 (カテゴリ)
+    envInfoHtml += `<div class="sector-block" style="margin-top:8px; padding-top: 4px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">square_foot</span>土地利用面積</h6>`;
+
+    // 12. 海洋水域
+    if (oceanArea > 1) envInfoHtml += createRow('water', '海洋水域', Math.round(oceanArea).toLocaleString(), ' ha');
+    // 13. 湖沼水域
+    if (lakeArea > 1) envInfoHtml += createRow('water', '湖沼水域', Math.round(lakeArea).toLocaleString(), ' ha');
+    // 14. 河川水域
+    if (riverArea > 1) envInfoHtml += createRow('water', '河川水域', Math.round(riverArea).toLocaleString(), ' ha');
+
+    // 15. 農地面積
+    if (p.cultivatedArea > 1) {
+        envInfoHtml += createRow('agriculture', '農地面積', Math.round(p.cultivatedArea).toLocaleString(), ' ha');
+    }
+
+    // 16. 集落面積
+    let settlementArea = 0;
+    if (p.population > 0) {
+        settlementArea = 0.02 * Math.pow(p.population, 0.85);
+    }
+    if (settlementArea > 1) {
+        envInfoHtml += createRow('location_city', '集落面積', Math.round(settlementArea).toLocaleString(), ' ha');
+    }
+
+    // 17. 道路面積
+    let roadArea = 0;
+    if (p.roadEdges) {
+        roadArea = p.roadEdges.reduce((a, b) => a + b, 0);
+    }
+    if (roadArea > 0) {
+        envInfoHtml += createRow('add_road', '道路面積', Math.round(roadArea).toLocaleString(), ' ha');
+    }
+
+    // 18. 森林面積
+    if (p.landUse && p.landUse.forest > 0) {
+        const forestArea = p.landUse.forest * config.HEX_AREA_HA;
+        if (forestArea > 1) {
+            envInfoHtml += createRow('forest', '森林面積', Math.round(forestArea).toLocaleString(), ' ha');
+        }
+    }
+
+    const envCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">nature</span>環　境</div><div class="card-content">${envInfoHtml}</div></div></div>`;
 
     // --- 3. 資源カード ---
     let resourceInfoHtml = '';
