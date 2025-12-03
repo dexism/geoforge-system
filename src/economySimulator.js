@@ -156,13 +156,13 @@ export async function simulateEconomy(allHexes, addLogMessage) {
                 Object.entries(p.ships).forEach(([shipName, count]) => {
                     const typeKey = Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key].name === shipName);
                     if (!typeKey) return;
-                    
+
                     const shipData = config.SHIP_TYPES[typeKey];
                     if (shipData && shipData.fishing_capacity > 0) {
                         // この船種に割り当て可能な最大漁師数
                         const maxFishersForType = count * shipData.fishing_capacity;
                         const assignedFishers = Math.min(remainingFishers, maxFishersForType);
-                        
+
                         if (assignedFishers > 0) {
                             // 水域係数の決定
                             let waterCoeff = 1.0;
@@ -173,7 +173,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
 
                             // 漁獲量 = 漁師数 * 船種係数 * 水域係数
                             totalYield += assignedFishers * shipData.fishing_coefficient * waterCoeff;
-                            
+
                             remainingFishers -= assignedFishers;
                         }
                     }
@@ -183,7 +183,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
             // 2. 船に乗れない漁師 (岸からの釣りなど)
             if (remainingFishers > 0) {
                 // 効率は低い (小舟の半分程度と仮定)
-                totalYield += remainingFishers * 0.5; 
+                totalYield += remainingFishers * 0.5;
             }
 
             // 最終的な補正 (fishingPotentialなど)
@@ -364,7 +364,7 @@ export function calculateShipOwnership(allHexes) {
         // 1. 基準艦数 (H0) の決定
         let minShips = 0;
         let maxShips = 0;
-        
+
         // 基準テーブル (集落規模ベース)
         if (settlementLevel === '村') { minShips = 8; maxShips = 20; }
         else if (settlementLevel === '町') { minShips = 25; maxShips = 60; }
@@ -398,11 +398,11 @@ export function calculateShipOwnership(allHexes) {
         const totalShips = Math.floor(baseShips + popFactor + (10 * tradeFactor) + (8 * waterFactor));
 
         // 3. タイプ別配分 (Mix) - 水域に応じて動的に決定
-        let ratios = {}; 
+        let ratios = {};
 
         // 配分ロジック: 利用可能な水域に応じて比率を変える
         // 優先度: 海 > 湖 > 川 (ただし併用もあり)
-        
+
         if (isCoastal) {
             // 海岸集落
             if (settlementLevel === '村') {
@@ -454,7 +454,7 @@ export function calculateShipOwnership(allHexes) {
         // 外洋対応最低保証 (沿岸のみ)
         if (isCoastal) {
             let minOcean = 0;
-            if (settlementLevel === '街') minOcean = Math.floor(Math.random() * 5); 
+            if (settlementLevel === '街') minOcean = Math.floor(Math.random() * 5);
             else if (['領都', '都市'].includes(settlementLevel)) minOcean = 2 + Math.floor(Math.random() * 11);
             else if (settlementLevel === '首都') minOcean = 8 + Math.floor(Math.random() * 18);
 
@@ -567,6 +567,30 @@ export function calculateDemographics(allHexes) {
             else if (p.monsterRank === 'B') orphanRate += 0.01;
         }
         demographics['孤児'] = Math.floor(totalPop * orphanRate);
+
+        // 水夫の推計 (v2.7.5)
+        // 船舶保有数に基づき、必要な船員数を計算
+        let totalSailors = 0;
+        if (p.ships) {
+            Object.entries(p.ships).forEach(([shipName, count]) => {
+                const typeKey = Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key].name === shipName);
+                if (typeKey) {
+                    const req = config.SHIP_TYPES[typeKey].crew_requirements;
+                    if (req) {
+                        // 船頭 + 船員 (漁師は別途計算されているため除外、ただし兼任の場合は考慮が必要だがここでは単純加算)
+                        // 漁師は demographics['漁師'] として既に計算されている。
+                        // ここでは「輸送・貿易」に従事する船員を計上したい。
+                        // しかし、SHIP_TYPESのcrew_requirementsは全乗組員定義。
+                        // 漁船の場合、fisherが含まれる。
+                        // 水夫 = skipper + crew とする。
+                        totalSailors += count * ((req.skipper || 0) + (req.crew || 0));
+                    }
+                }
+            });
+        }
+        if (totalSailors > 0) {
+            demographics['水夫'] = totalSailors;
+        }
 
         p.demographics = demographics;
     });
@@ -711,11 +735,32 @@ export function calculateFacilities(allHexes) {
 
         const totalCapacity = waterCapacity + landCapacity;
 
+        // 人員計算 (v2.7.5: 詳細化)
+        // 陸上: 御者
+        // 水上: 船頭、船員
+        let skippers = 0;
+        let crew = 0;
+
+        Object.entries(ships).forEach(([shipName, count]) => {
+            const typeKey = Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key].name === shipName);
+            if (typeKey) {
+                const req = config.SHIP_TYPES[typeKey].crew_requirements;
+                if (req) {
+                    skippers += count * (req.skipper || 0);
+                    crew += count * (req.crew || 0);
+                }
+            }
+        });
+
         p.logistics = {
             wagons: wagonCount,
             animals: animals,
             ships: ships,
-            drivers: drivers,
+            personnel: {
+                drivers: drivers,
+                skippers: skippers,
+                crew: crew
+            },
             transportCapacity: {
                 water: waterCapacity,
                 land: landCapacity,

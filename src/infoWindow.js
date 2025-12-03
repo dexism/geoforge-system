@@ -699,8 +699,8 @@ export function getInfoText(d) {
             logisticsHtml += `</div>`;
         }
 
-        // 物流資産 (ストック)
-        logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">inventory</span>物流資産 (保有)</h6>`;
+        // 物流資産 (陸上)
+        logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">inventory</span>物流資産 (陸上)</h6>`;
         logisticsHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
         logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">荷馬車</span><span class="value">${p.logistics.wagons}台</span></div>`;
 
@@ -713,15 +713,35 @@ export function getInfoText(d) {
             // 旧形式互換
             logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">役畜</span><span class="value">${p.logistics.animals}頭</span></div>`;
         }
+        logisticsHtml += `</div></div>`;
 
-        // 船舶
-        if (p.logistics.ships && typeof p.logistics.ships === 'object') {
+        // 物流資産 (水上)
+        if (p.logistics.ships && Object.keys(p.logistics.ships).length > 0) {
+            logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">sailing</span>物流資産 (水上)</h6>`;
+            logisticsHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
             for (const [type, count] of Object.entries(p.logistics.ships)) {
                 logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${type}</span><span class="value">${count}隻</span></div>`;
             }
+            logisticsHtml += `</div></div>`;
         }
 
-        logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">人員(御者/船頭)</span><span class="value">${p.logistics.drivers}人</span></div>`;
+        // 人員
+        logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">badge</span>人員</h6>`;
+        logisticsHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
+
+        if (p.logistics.personnel) {
+            // v2.7.5: 詳細区分
+            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">御者</span><span class="value">${p.logistics.personnel.drivers}人</span></div>`;
+            if (p.logistics.personnel.skippers > 0) {
+                logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">船頭</span><span class="value">${p.logistics.personnel.skippers}人</span></div>`;
+            }
+            if (p.logistics.personnel.crew > 0) {
+                logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">船員</span><span class="value">${p.logistics.personnel.crew}人</span></div>`;
+            }
+        } else {
+            // 旧形式互換
+            logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">御者/船頭</span><span class="value">${p.logistics.drivers}人</span></div>`;
+        }
         logisticsHtml += `</div></div>`;
 
         if (logisticsHtml) {
