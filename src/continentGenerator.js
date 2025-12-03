@@ -607,7 +607,7 @@ function calculateFinalProperties(allHexes) {
                         if (precip_mm < config.VEGETATION_PARAMS.CONIFEROUS_FOREST_MIN_PRECIP_MM) {
                             dominantVeg = '荒れ地'; // 寒冷な荒れ地（ツンドラに近い）
                         } else {
-                            dominantVeg = '針葉樹林'; // タイガ
+                            dominantVeg = '亜寒帯林'; // タイガ
                         }
                     }
                     // 【b. 温帯 (Temperate Zone)】
@@ -620,7 +620,7 @@ function calculateFinalProperties(allHexes) {
                         } else if (precip_mm < config.VEGETATION_PARAMS.TEMPERATE_FOREST_MIN_PRECIP_MM) { // config.js の値を参照
                             dominantVeg = '草原'; // ステップ気候に相当
                         } else {
-                            dominantVeg = '森林'; // 温暖湿潤気候の森林
+                            dominantVeg = '温帯林'; // 温暖湿潤気候の森林
                         }
                     }
                     // 【c. 熱帯・亜熱帯 (Hot Zone)】
@@ -633,8 +633,8 @@ function calculateFinalProperties(allHexes) {
                             // 熱帯の草原（サバンナ）
                             dominantVeg = '草原';
                         } else {
-                            // 既に '密林' 判定済みだが、ここに来る場合は通常の熱帯林とする
-                            dominantVeg = '森林';
+                            // 既に '熱帯雨林' 判定済みだが、ここに来る場合は通常の熱帯林とする
+                            dominantVeg = '熱帯雨林';
                         }
                     }
                 }
@@ -744,9 +744,9 @@ function calculateFinalProperties(allHexes) {
             // [基準1] 基本スコア
             let baseScore = 0;
             switch (properties.vegetation) {
-                case '森林':
-                case '密林':
-                case '針葉樹林':
+                case '温帯林':
+                case '熱帯雨林':
+                case '亜寒帯林':
                     baseScore = 0.6;
                     break;
                 case '草原':

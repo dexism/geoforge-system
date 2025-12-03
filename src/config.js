@@ -107,16 +107,16 @@ export const PRECIPITATION_PARAMS = {
 
 // 植生生成の閾値パラメータ
 export const VEGETATION_PARAMS = {
-    // 温帯林が生成される最低年間降水量 (mm)
+    // 温帯林（旧:森林）が生成される最低年間降水量 (mm)
     // これ未満だと草原や荒れ地になる
     TEMPERATE_FOREST_MIN_PRECIP_MM: 600,
 
-    // 熱帯林（サバンナとの境界）が生成される最低年間降水量 (mm)
-    TROPICAL_FOREST_MIN_PRECIP_MM: 1500,
+    // 熱帯雨林（旧:密林）が生成される最低年間降水量 (mm)
+    TROPICAL_RAINFOREST_MIN_PRECIP_MM: 1500,
 
-    // 針葉樹林が生成される最低年間降水量 (mm)
+    // 亜寒帯林（旧:針葉樹林）が生成される最低年間降水量 (mm)
     // 寒冷地でこれ未満だと荒れ地（ツンドラ）になる
-    CONIFEROUS_FOREST_MIN_PRECIP_MM: 200,
+    BOREAL_FOREST_MIN_PRECIP_MM: 200,
 };
 
 export const TERRAIN_ELEVATION = { MOUNTAIN_PEAK: 3000, MOUNTAIN: 2000, HILLS: 1000 };
@@ -221,8 +221,9 @@ export const MAX_TRAVEL_DAYS = {
 export const RIDGE_CROSSING_COST_MULTIPLIER = 8.0;
 export const TERRAIN_MULTIPLIERS = {
     '平地': 1.4,
-    '森林': 1.6,
-    '密林': 1.8,
+    '温帯林': 1.6,
+    '熱帯雨林': 2.5, // 密林より移動コスト増
+    '亜寒帯林': 1.6, // 針葉樹林
     '丘陵': 1.8,
     '山地': 2.0,
     '山岳': 2.5,
@@ -249,13 +250,14 @@ export const WAGON_PARAMS = {
         0: 0.3
     },
     TERRAIN_SPEED_MULTIPLIERS: {
-        '山岳': 0.6,
-        '山地': 0.7,
-        '森林': 0.75,
-        '密林': 0.8,
-        '丘陵': 0.8,
-        '平地': 1.0
-    },
+    '山岳': 0.6,
+    '山地': 0.7,
+    '温帯林': 0.75,
+    '熱帯雨林': 0.5, // 密林より速度低下
+    '亜寒帯林': 0.75,
+    '丘陵': 0.8,
+    '平地': 1.0
+},
     SNOW_SPEED_MULTIPLIER: 0.7
 };
 export const HUNTING_PARAMS = {
@@ -314,9 +316,9 @@ export const TERRAIN_COLORS = {
     河川: '#37b',
     砂浜: '#eeb',
     砂漠: '#eca',
-    森林: '#7a5',
-    針葉樹林: '#475',
-    密林: '#262',
+    温帯林: '#7a5',
+    亜寒帯林: '#475',
+    熱帯雨林: '#262',
     湿地: '#676',
     草原: '#bda',
     荒れ地: '#ccb',

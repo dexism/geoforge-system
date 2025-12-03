@@ -503,7 +503,7 @@ export function calculateFacilities(allHexes) {
             horseRatio = 0.2; oxRatio = 0.1; otherType = 'ラクダ'; otherRatio = 0.7;
         } else if (climate.includes('熱帯')) {
             horseRatio = 0.1; oxRatio = 0.2; otherType = '水牛'; otherRatio = 0.7;
-            if (p.vegetation === '密林') { otherType = '象'; otherRatio = 0.2; oxRatio = 0.7; horseRatio = 0.1; }
+            if (p.vegetation === '熱帯雨林') { otherType = '象'; otherRatio = 0.2; oxRatio = 0.7; horseRatio = 0.1; }
         } else if (terrain === '山岳' || terrain === '山地') {
             horseRatio = 0.1; oxRatio = 0.1; otherType = 'ラバ'; otherRatio = 0.8;
         }

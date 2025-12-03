@@ -29,8 +29,8 @@ const createCostFunction = (allHexes, ownerNationId) => (nodeA, nodeB) => {
     // 河川コスト
     cost += pB.flow > 2 ? pB.flow * 3 : 0;
     // 植生コスト
-    if (pB.vegetation === '森林' || pB.vegetation === '疎林') cost += 2;
-    if (pB.vegetation === '密林' || pB.vegetation === '針葉樹林') cost += 4;
+    if (pB.vegetation === '温帯林' || pB.vegetation === '疎林') cost += 2;
+    if (pB.vegetation === '熱帯雨林' || pB.vegetation === '亜寒帯林') cost += 4;
     // 標高コスト
     if (pB.elevation > 1000) cost += Math.pow(pB.elevation / 700, 2.8);
 
@@ -251,8 +251,8 @@ function calculateRoadDistance(path, roadLevel, allHexes) {
             case '山地': multiplier = config.TERRAIN_MULTIPLIERS.山地; break;
             case '丘陵': multiplier = config.TERRAIN_MULTIPLIERS.丘陵; break;
             case '平地':
-                if (p.vegetation === '密林') multiplier = config.TERRAIN_MULTIPLIERS.密林;
-                else if (p.vegetation === '森林' || p.vegetation === '針葉樹林') multiplier = config.TERRAIN_MULTIPLIERS.森林;
+                if (p.vegetation === '熱帯雨林') multiplier = config.TERRAIN_MULTIPLIERS.熱帯雨林;
+                else if (p.vegetation === '温帯林' || p.vegetation === '亜寒帯林') multiplier = config.TERRAIN_MULTIPLIERS.温帯林;
                 else multiplier = config.TERRAIN_MULTIPLIERS.平地;
                 break;
         }
@@ -292,8 +292,8 @@ function calculateTravelDays(path, roadLevel, allHexes) {
         let terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS[p.terrainType] || 1.0;
         // 平地の場合、植生による係数をさらに考慮
         if (p.terrainType === '平地') {
-            if (p.vegetation === '密林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.密林;
-            else if (p.vegetation === '森林' || p.vegetation === '針葉樹林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.森林;
+            if (p.vegetation === '熱帯雨林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.熱帯雨林;
+            else if (p.vegetation === '温帯林' || p.vegetation === '亜寒帯林') terrainSpeedMultiplier = config.WAGON_PARAMS.TERRAIN_SPEED_MULTIPLIERS.温帯林;
         }
 
         if (p.hasSnow) {

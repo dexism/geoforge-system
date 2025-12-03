@@ -339,13 +339,13 @@ export async function determineTerritories(allHexes, addLogMessage) {
         while (hub.properties.parentHexId !== null && !visitedInLoop.has(getIndex(hub.col, hub.row))) {
             visitedInLoop.add(getIndex(hub.col, hub.row));
             const parent = allHexes[hub.properties.parentHexId];
-            if (!parent) break;
-            hub = parent;
-        }
-        h.properties.territoryId = getIndex(hub.col, hub.row);
-    });
+        if (!parent) break;
+        hub = parent;
+    }
+    h.properties.territoryId = getIndex(hub.col, hub.row);
+});
 
-    // --- STEP 2: どの勢力にも属さない空白地を、最も近い勢力に併合させる ---
+// --- STEP 2: どの勢力にも属さない空白地を、最も近い勢力に併合させる ---
     const queue = allHexes.filter(h => h.properties.territoryId !== null);
     const visited = new Set(queue.map(h => getIndex(h.col, h.row)));
     let head = 0;
@@ -397,7 +397,7 @@ export function generateMonsterDistribution(allHexes) {
     // --- STEP 2: 陸上のSランク決定 (変更なし) ---
     const sRankLandCandidates = landCandidates.filter(h => {
         const p = h.properties;
-        return p.vegetation === '密林' || p.elevation > 3000;
+        return p.vegetation === '熱帯雨林' || p.elevation > 3000;
     });
     sRankLandCandidates.sort((a, b) => b.properties.manaValue - a.properties.manaValue);
     const sRankLandHexes = sRankLandCandidates.slice(0, 4);
@@ -488,8 +488,8 @@ export function generateMonsterDistribution(allHexes) {
         landCandidates = landCandidates.filter(h => !assignedIndexes.has(getIndex(h.col, h.row)));
     };
 
-    assignLandRank('A', h => (h.properties.vegetation === '密林' || h.properties.elevation > 3000) && h.properties.manaValue > 0.7, (a, b) => b.properties.manaValue - a.properties.manaValue, 0.10);
-    assignLandRank('B', h => ['密林', '針葉樹林'].includes(h.properties.vegetation) || h.properties.elevation > 2000, (a, b) => b.properties.elevation - a.properties.elevation, 0.10);
+    assignLandRank('A', h => (h.properties.vegetation === '熱帯雨林' || h.properties.elevation > 3000) && h.properties.manaValue > 0.7, (a, b) => b.properties.manaValue - a.properties.manaValue, 0.10);
+    assignLandRank('B', h => ['熱帯雨林', '亜寒帯林'].includes(h.properties.vegetation) || h.properties.elevation > 2000, (a, b) => b.properties.elevation - a.properties.elevation, 0.10);
     assignLandRank('C', h => !civilizedHexIndexes.has(getIndex(h.col, h.row)), () => Math.random() - 0.5, 0.30);
     landCandidates.forEach(h => { if (h.properties.population < 500) { h.properties.monsterRank = 'D'; } });
 
@@ -510,7 +510,7 @@ export function generateHuntingPotential(allHexes) {
             // [基準1] 基本スコア
             let baseScore = 0;
             switch (p.vegetation) {
-                case '森林': case '密林': case '針葉樹林':
+                case '温帯林': case '熱帯雨林': case '亜寒帯林':
                     baseScore = 0.6; break;
                 case '草原':
                     baseScore = 0.3; break;
@@ -573,7 +573,7 @@ export function generateLivestockPotential(allHexes) {
             }
             // マイナス要素
             pastoralScore -= p.huntingPotential * 1.2; // 狩猟適正が高いと大幅マイナス
-            if (['森林', '密林', '針葉樹林', '湿地', '砂漠', '高山'].includes(p.vegetation)) pastoralScore -= 1.0;
+            if (['温帯林', '熱帯雨林', '亜寒帯林', '湿地', '砂漠', '高山'].includes(p.vegetation)) pastoralScore -= 1.0;
             pastoralScore -= p.agriPotential * 0.3; // 農地とも競合
             if (p.population > 100) pastoralScore -= 0.2;
 
