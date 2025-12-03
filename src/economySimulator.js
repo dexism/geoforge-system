@@ -444,6 +444,17 @@ export function calculateShipOwnership(allHexes) {
         Object.entries(ratios).forEach(([typeKey, ratio]) => {
             if (availTypes.includes(typeKey)) {
                 let count = Math.floor(totalShips * ratio);
+
+                // ユーザー指定の調整係数 (v2.7.6)
+                // 商船・大型漁船(small_trader): 50%
+                // 沿岸交易船(coastal_trader): 50%
+                // 中型商船(medium_merchant): 30%
+                // 大型帆船(large_sailing_ship): 20%
+                if (typeKey === 'small_trader' || typeKey === 'lake_trader') count = Math.floor(count * 0.5);
+                else if (typeKey === 'coastal_trader') count = Math.floor(count * 0.5);
+                else if (typeKey === 'medium_merchant') count = Math.floor(count * 0.3);
+                else if (typeKey === 'large_sailing_ship') count = Math.floor(count * 0.2);
+
                 if (count > 0) {
                     const shipName = config.SHIP_TYPES[typeKey].name;
                     p.ships[shipName] = count;
@@ -468,6 +479,57 @@ export function calculateShipOwnership(allHexes) {
                         p.ships[mediumName] = (p.ships[mediumName] || 0) + (minOcean - currentOcean);
                     }
                 }
+            }
+        }
+
+        // --- 軍艦の保有 (v2.7.6) ---
+        // 沿岸部の集落のみ軍艦を保有する可能性がある (河川・湖沼の警備艇は一旦除外または簡易扱い)
+        if (isCoastal && config.NAVAL_SETTINGS) {
+            const navalRatio = config.NAVAL_SETTINGS.STANDING_NAVY_RATIO[settlementLevel] || 0;
+            if (navalRatio > 0) {
+                // 常備海軍人数
+                const navalPersonnel = Math.floor(p.population * navalRatio);
+
+                // 艦隊構成の決定
+                // 予算(人員)の配分: 旗艦 > 戦列艦 > ガレー > 護衛艦 > 警備艇
+                // 簡易的に、上位の船から順に人員を割り当てていく
+
+                let remainingPersonnel = navalPersonnel * 0.6; // 船員枠として6割を充てる (残りは海兵・陸上支援)
+
+                const warshipTypes = config.WARSHIP_TYPES;
+                const availableWarships = [];
+
+                // 保有可能な軍艦レベル
+                if (settlementLevel === '首都') availableWarships.push('flagship', 'ship_of_the_line', 'galley', 'escort_ship', 'patrol_boat');
+                else if (['領都', '都市'].includes(settlementLevel)) availableWarships.push('ship_of_the_line', 'galley', 'escort_ship', 'patrol_boat');
+                else if (settlementLevel === '街') availableWarships.push('galley', 'escort_ship', 'patrol_boat');
+                else if (settlementLevel === '町') availableWarships.push('patrol_boat');
+
+                availableWarships.forEach(typeKey => {
+                    const shipData = warshipTypes[typeKey];
+                    if (!shipData) return;
+
+                    // この船種に必要な船員数 (skipper + crew)
+                    const crewPerShip = (shipData.crew_requirements.skipper || 0) + (shipData.crew_requirements.crew || 0);
+                    if (crewPerShip <= 0) return;
+
+                    // 配分比率 (上位ほど少なく、下位ほど多く)
+                    // 簡易ロジック: 残り人員の一定割合をこの船種に割り当てる
+                    let allocRatio = 0.2;
+                    if (typeKey === 'patrol_boat') allocRatio = 1.0; // 残り全て
+                    else if (typeKey === 'escort_ship') allocRatio = 0.5;
+
+                    const allocPersonnel = remainingPersonnel * allocRatio;
+                    let count = Math.floor(allocPersonnel / crewPerShip);
+
+                    // 最低1隻保証 (首都の旗艦など)
+                    if (typeKey === 'flagship' && settlementLevel === '首都' && count === 0) count = 1;
+
+                    if (count > 0) {
+                        p.ships[shipData.name] = (p.ships[shipData.name] || 0) + count;
+                        remainingPersonnel -= count * crewPerShip;
+                    }
+                });
             }
         }
     });
@@ -571,25 +633,56 @@ export function calculateDemographics(allHexes) {
         // 水夫の推計 (v2.7.5)
         // 船舶保有数に基づき、必要な船員数を計算
         let totalSailors = 0;
+        let totalNavalSailors = 0; // 軍属船員
+        let totalMarines = 0;      // 海兵
+        let totalNavalOfficers = 0; // 海軍士官
+
         if (p.ships) {
             Object.entries(p.ships).forEach(([shipName, count]) => {
-                const typeKey = Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key].name === shipName);
-                if (typeKey) {
-                    const req = config.SHIP_TYPES[typeKey].crew_requirements;
+                // 商船・漁船のチェック
+                const civTypeKey = Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key].name === shipName);
+                if (civTypeKey) {
+                    const req = config.SHIP_TYPES[civTypeKey].crew_requirements;
                     if (req) {
-                        // 船頭 + 船員 (漁師は別途計算されているため除外、ただし兼任の場合は考慮が必要だがここでは単純加算)
-                        // 漁師は demographics['漁師'] として既に計算されている。
-                        // ここでは「輸送・貿易」に従事する船員を計上したい。
-                        // しかし、SHIP_TYPESのcrew_requirementsは全乗組員定義。
-                        // 漁船の場合、fisherが含まれる。
-                        // 水夫 = skipper + crew とする。
                         totalSailors += count * ((req.skipper || 0) + (req.crew || 0));
+                    }
+                }
+
+                // 軍艦のチェック (v2.7.6)
+                const warTypeKey = config.WARSHIP_TYPES ? Object.keys(config.WARSHIP_TYPES).find(key => config.WARSHIP_TYPES[key].name === shipName) : null;
+                if (warTypeKey) {
+                    const req = config.WARSHIP_TYPES[warTypeKey].crew_requirements;
+                    if (req) {
+                        totalNavalOfficers += count * (req.skipper || 0); // 艦長クラス
+                        totalNavalSailors += count * (req.crew || 0);
+                        totalMarines += count * (req.marine || 0);
                     }
                 }
             });
         }
-        if (totalSailors > 0) {
-            demographics['水夫'] = totalSailors;
+
+        if (totalSailors > 0) demographics['水夫'] = totalSailors;
+
+        // 海軍人員の計上 (v2.7.6)
+        // 常備海軍比率に基づく補正 (船に乗っていない陸上勤務・予備人員も含める)
+        if (config.NAVAL_SETTINGS) {
+            const settlementLevel = p.settlement || '散居';
+            const ratio = config.NAVAL_SETTINGS.STANDING_NAVY_RATIO[settlementLevel] || 0;
+            if (ratio > 0) {
+                const totalNavy = Math.floor(totalPop * ratio);
+
+                // 艦艇乗組員との整合性チェック (最低でも艦艇を動かせる人数は必要)
+                const minNavy = totalNavalOfficers + totalNavalSailors + totalMarines;
+                const actualNavy = Math.max(totalNavy, minNavy);
+
+                // 内訳比率
+                const comp = config.NAVAL_SETTINGS.PERSONNEL_COMPOSITION[settlementLevel] || { sailor: 0.5, marine: 0.3, support: 0.2 };
+
+                demographics['海軍船員'] = Math.max(totalNavalSailors, Math.floor(actualNavy * comp.sailor));
+                demographics['海兵'] = Math.max(totalMarines, Math.floor(actualNavy * comp.marine));
+                demographics['海軍士官'] = Math.max(totalNavalOfficers, Math.floor(actualNavy * comp.support * 0.3)); // 支援の3割を士官と仮定
+                demographics['海軍工廠・支援'] = Math.floor(actualNavy * comp.support * 0.7); // 残りを陸上支援
+            }
         }
 
         p.demographics = demographics;
@@ -628,8 +721,12 @@ export function calculateFacilities(allHexes) {
             if (['首都', '都市', '領都'].includes(settlementLevel)) {
                 addFacility('大型港湾', 1, 3);
                 addFacility('造船所', 1, 2);
+                // 軍港 (v2.7.6)
+                if (settlementLevel === '首都') addFacility('海軍総司令部', 1, 5);
+                else addFacility('海軍基地', 1, 3);
             } else if (['街', '町'].includes(settlementLevel) || p.population > 500) {
                 addFacility('港', 1, 2);
+                if (settlementLevel === '街') addFacility('沿岸警備隊詰所', 1, 1);
             } else {
                 addFacility('船着き場', 1, 1);
             }

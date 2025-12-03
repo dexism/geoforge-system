@@ -567,13 +567,34 @@ export function getInfoText(d) {
     if (p.demographics || p.facilities) {
         let societyHtml = '';
 
-        // 人口構成
-        if (p.demographics && Object.keys(p.demographics).length > 0) {
-            societyHtml += `<div class="sector-block"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">groups</span>人口構成</h6>`;
-            societyHtml += `<div class="industry-group" style="display:flex; flex-wrap:wrap; gap:4px;">`;
-            for (const [role, count] of Object.entries(p.demographics)) {
-                if (count > 0) {
-                    societyHtml += `<div class="industry-item" style="width:100%;"><span class="label">${role}</span><span class="value">${count.toLocaleString()}人</span></div>`;
+        // 人口構成 (v2.7.6: 海軍人員のグループ化)
+        if (p.demographics) {
+            societyHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">people_alt</span>人口構成</h6>`;
+            societyHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
+
+            // カテゴリ分け
+            const categories = {
+                '第一次産業': ['農民', '漁師', '鉱夫', '木こり', '畜夫'],
+                '第二次産業': ['職人'],
+                '第三次産業': ['商人', '宿屋・酒場', '運送', '水夫'],
+                '知識・統治': ['学者', '官僚', '聖職者'],
+                '軍事・警察': ['騎士', '正規兵', '衛兵・自警団', '海軍士官', '海軍船員', '海兵', '海軍工廠・支援'],
+                'その他': ['スラム', '孤児']
+            };
+
+            for (const [catName, jobs] of Object.entries(categories)) {
+                let catTotal = 0;
+                let catHtml = '';
+                jobs.forEach(job => {
+                    if (p.demographics[job] > 0) {
+                        catTotal += p.demographics[job];
+                        catHtml += `<div class="industry-item" style="width:100%; padding-left:8px;"><span class="label">${job}</span><span class="value">${p.demographics[job].toLocaleString()}人</span></div>`;
+                    }
+                });
+
+                if (catTotal > 0) {
+                    societyHtml += `<div class="industry-item" style="width:100%; font-weight:bold; background:rgba(0,0,0,0.03);"><span class="label">${catName}</span><span class="value">${catTotal.toLocaleString()}人</span></div>`;
+                    societyHtml += catHtml;
                 }
             }
             societyHtml += `</div></div>`;
@@ -714,14 +735,55 @@ export function getInfoText(d) {
             logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">役畜</span><span class="value">${p.logistics.animals}頭</span></div>`;
         }
         logisticsHtml += `</div></div>`;
-
         // 物流資産 (水上)
         if (p.logistics.ships && Object.keys(p.logistics.ships).length > 0) {
             logisticsHtml += `<div class="sector-block" style="margin-top:8px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">sailing</span>物流資産 (水上)</h6>`;
             logisticsHtml += `<div class="industry-group" style="display:flex; flex-direction:column; gap:4px;">`;
+
+            // 商船と軍艦を分ける
+            const merchantShips = [];
+            const warShips = [];
+
             for (const [type, count] of Object.entries(p.logistics.ships)) {
-                logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${type}</span><span class="value">${count}隻</span></div>`;
+                const isWarship = config.WARSHIP_TYPES && Object.values(config.WARSHIP_TYPES).some(t => t.name === type);
+                if (isWarship) {
+                    warShips.push({ type, count });
+                } else {
+                    merchantShips.push({ type, count });
+                }
             }
+
+            // ソート順定義
+            const sortOrder = [
+                '小舟・漁船', '河川用カヌー', '湖沼用ボート', '河川用平底船', '湖沼交易船', '商船・大型漁船', '小型交易船', '沿岸交易船', '中型商船', '大型帆船',
+                '警備艇', '護衛艦', 'ガレー船', '戦列艦', '旗艦'
+            ];
+
+            const sorter = (a, b) => {
+                const idxA = sortOrder.indexOf(a.type);
+                const idxB = sortOrder.indexOf(b.type);
+                if (idxA === -1) return 1;
+                if (idxB === -1) return -1;
+                return idxA - idxB;
+            };
+
+            merchantShips.sort(sorter);
+            warShips.sort(sorter);
+
+            if (merchantShips.length > 0) {
+                logisticsHtml += `<div class="industry-item" style="width:100%; font-weight:bold; font-size:11px; color:#666;">商船・漁船</div>`;
+                merchantShips.forEach(s => {
+                    logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label">${s.type}</span><span class="value">${s.count}隻</span></div>`;
+                });
+            }
+
+            if (warShips.length > 0) {
+                logisticsHtml += `<div class="industry-item" style="width:100%; font-weight:bold; font-size:11px; color:#c0392b; margin-top:4px;">軍艦・警備艇</div>`;
+                warShips.forEach(s => {
+                    logisticsHtml += `<div class="industry-item" style="width:100%;"><span class="label" style="color:#c0392b;">${s.type}</span><span class="value" style="font-weight:bold;">${s.count}隻</span></div>`;
+                });
+            }
+
             logisticsHtml += `</div></div>`;
         }
 

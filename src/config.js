@@ -635,6 +635,65 @@ export const SHIP_TYPES = {
     }
 };
 
+export const WARSHIP_TYPES = {
+    'patrol_boat': {
+        name: '警備艇',
+        combat_power: 10,
+        crew_requirements: { skipper: 1, crew: 5, marine: 5 },
+        min_settlement_level: '町',
+        type: 'small'
+    },
+    'escort_ship': {
+        name: '護衛艦',
+        combat_power: 30,
+        crew_requirements: { skipper: 1, crew: 15, marine: 10 },
+        min_settlement_level: '街',
+        type: 'medium'
+    },
+    'galley': {
+        name: 'ガレー船',
+        combat_power: 50,
+        crew_requirements: { skipper: 1, crew: 50, marine: 30 }, // 漕ぎ手含む
+        min_settlement_level: '街',
+        type: 'medium'
+    },
+    'ship_of_the_line': {
+        name: '戦列艦',
+        combat_power: 100,
+        crew_requirements: { skipper: 1, crew: 80, marine: 40 },
+        min_settlement_level: '領都',
+        type: 'large'
+    },
+    'flagship': {
+        name: '旗艦',
+        combat_power: 200,
+        crew_requirements: { skipper: 1, crew: 150, marine: 60 },
+        min_settlement_level: '首都',
+        type: 'huge'
+    }
+};
+
+export const NAVAL_SETTINGS = {
+    // 常備海軍比率 (人口に対する割合)
+    STANDING_NAVY_RATIO: {
+        '村': 0.005, // 0.5%
+        '町': 0.015, // 1.5%
+        '街': 0.025, // 2.5%
+        '領都': 0.035, // 3.5%
+        '都市': 0.035,
+        '首都': 0.05  // 5.0%
+    },
+    // 常備海軍の内訳比率 (船員, 海兵, 指揮/支援)
+    PERSONNEL_COMPOSITION: {
+        '村': { sailor: 0.4, marine: 0.4, support: 0.2 },
+        '町': { sailor: 0.45, marine: 0.35, support: 0.2 },
+        '街': { sailor: 0.5, marine: 0.3, support: 0.2 },
+        '領都': { sailor: 0.55, marine: 0.25, support: 0.2 },
+        '都市': { sailor: 0.55, marine: 0.25, support: 0.2 },
+        '首都': { sailor: 0.6, marine: 0.2, support: 0.2 }
+    }
+};
+
 export const WATER_BODY_COEFFICIENTS = {
     RIVER: 0.5,
     LAKE: 1.0,
