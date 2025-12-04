@@ -446,14 +446,18 @@ function drawRoads(roadPaths) {
 
 /**
  * 国境線レイヤーを再描画する関数
+ * @param {Array<object>} visibleHexes - 現在表示されているヘックスの配列 (カリング用)
  */
-function drawBorders() {
+function drawBorders(visibleHexes) {
     // 1. 古い国境をクリア
     layers.border.group.selectAll('*').remove();
 
-    // 2. 新しい国境データを計算して描画 (setupUIからロジックを移植)
+    // visibleHexesが指定されていない場合は全ヘックスを使用
+    const targetHexes = visibleHexes || hexes;
+
+    // 2. 新しい国境データを計算して描画
     const borderSegments = [];
-    hexes.forEach(h => {
+    targetHexes.forEach(h => {
         const hNation = h.properties.nationId || 0;
         if (hNation === 0) return;
         h.neighbors.map(i => hexes[i]).forEach(n => {
@@ -480,11 +484,14 @@ function drawBorders() {
 }
 
 // 砂浜描画関数
-async function drawBeaches(hexes) {
+async function drawBeaches(visibleHexes) {
     layers.beach.group.selectAll('*').remove();
     const beachSegments = [];
 
-    hexes.forEach(h => {
+    // visibleHexesが指定されていない場合は全ヘックスを使用
+    const targetHexes = visibleHexes || hexes;
+
+    targetHexes.forEach(h => {
         if (h.properties.beachNeighbors && h.properties.beachNeighbors.length > 0) {
             h.properties.beachNeighbors.forEach(neighborIndex => {
                 const neighborHex = hexes[neighborIndex];
@@ -508,6 +515,118 @@ async function drawBeaches(hexes) {
         .attr('stroke-width', 6)   // 幅6px
         .attr('stroke-linecap', 'round') // 線の端を丸くする
         .style('pointer-events', 'none');
+}
+
+/**
+ * 河川レイヤーを再描画する関数
+ * @param {Array<object>} visibleHexes - 現在表示されているヘックスの配列
+ */
+function drawRivers(visibleHexes) {
+    layers.river.group.selectAll('*').remove();
+    const targetHexes = visibleHexes || hexes;
+    const riverPathData = [];
+
+    targetHexes.forEach(d => {
+        if (d.properties.flow > 0 && !d.properties.isWater) {
+            const downstreamHex = d.downstreamIndex !== -1 ? hexes[d.downstreamIndex] : null;
+            if (!downstreamHex) return;
+
+            const endPoint = getSharedEdgeMidpoint(d, downstreamHex);
+            if (!endPoint) return;
+
+            // 制御点をヘックスの中心に設定
+            const controlPoint = [d.cx, d.cy];
+
+            const upstreamNeighbors = hexes.filter(h => h.downstreamIndex === d.index);
+            if (upstreamNeighbors.length === 0) { // 水源の場合
+                const startPoint = [d.cx, d.cy];
+                const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                riverPathData.push({ path: path, flow: d.properties.flow });
+            } else { // 中流の場合
+                upstreamNeighbors.forEach(upstreamHex => {
+                    const startPoint = getSharedEdgeMidpoint(d, upstreamHex);
+                    if (startPoint) {
+                        const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                        riverPathData.push({ path: path, flow: upstreamHex.properties.flow });
+                    }
+                });
+            }
+        }
+    });
+
+    layers.river.group.selectAll('.river-segment')
+        .data(riverPathData)
+        .enter()
+        .append('path')
+        .attr('class', 'river-segment')
+        .attr('d', d => d.path)
+        .attr('stroke', config.TERRAIN_COLORS.河川)
+        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
+        .attr('stroke-linecap', 'round')
+        .style('pointer-events', 'none');
+}
+
+/**
+ * 稜線・水系図レイヤーを再描画する関数
+ * @param {Array<object>} visibleHexes - 現在表示されているヘックスの配列
+ */
+function drawRidges(visibleHexes) {
+    layers['ridge-water-system'].group.selectAll('*').remove();
+    const targetHexes = visibleHexes || hexes;
+    const ridgePathData = [];
+    const hexOverlapScale = 1.01;
+
+    // 水系図（水域ヘックス）
+    layers['ridge-water-system'].group.selectAll('.rws-water-hex')
+        .data(targetHexes.filter(d => d.properties.isWater))
+        .enter()
+        .append('polygon')
+        .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+        .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
+        .attr('fill', config.RIDGE_WATER_SYSTEM_COLORS.RIVER);
+
+    // 稜線データ生成
+    targetHexes.forEach(sourceHex => {
+        if (sourceHex.properties.ridgeFlow > 0 && !sourceHex.properties.isWater) {
+            const upstreamHex = sourceHex.ridgeUpstreamIndex !== -1 ? hexes[sourceHex.ridgeUpstreamIndex] : null;
+
+            let endPoint;
+            if (upstreamHex) {
+                endPoint = getSharedEdgeMidpoint(sourceHex, upstreamHex);
+            } else {
+                endPoint = [sourceHex.cx, sourceHex.cy];
+            }
+
+            if (!endPoint) return;
+
+            const controlPoint = [sourceHex.cx, sourceHex.cy];
+            const downstreamRidgeNeighbors = hexes.filter(h => h.ridgeUpstreamIndex === sourceHex.index);
+
+            if (downstreamRidgeNeighbors.length === 0) {
+                const startPoint = [sourceHex.cx, sourceHex.cy];
+                const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                ridgePathData.push({ path: path, flow: sourceHex.properties.ridgeFlow });
+            } else {
+                downstreamRidgeNeighbors.forEach(downstreamHex => {
+                    const startPoint = getSharedEdgeMidpoint(sourceHex, downstreamHex);
+                    if (startPoint) {
+                        const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                        ridgePathData.push({ path: path, flow: downstreamHex.properties.ridgeFlow });
+                    }
+                });
+            }
+        }
+    });
+
+    layers['ridge-water-system'].group.selectAll('.rws-ridge-segment')
+        .data(ridgePathData)
+        .enter()
+        .append('path')
+        .attr('d', d => d.path)
+        .attr('stroke', config.RIDGE_WATER_SYSTEM_COLORS.RIDGE)
+        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 1.5, config.r * 0.8))
+        .attr('stroke-linecap', 'round')
+        .style('fill', 'none');
 }
 
 /**
@@ -750,7 +869,27 @@ function updateVisibleHexes(transform) {
         .attr('x', d => d.cx + config.r * 0.75).attr('y', d => d.cy)
         .attr('text-anchor', 'middle')
         .attr('dominant-baseline', 'middle')
-        .text(d => d.properties.resourceRank);
+        .text(d => {
+            const potentials = [];
+            if (d.properties.agriPotential >= 3) potentials.push('農');
+            if (d.properties.forestPotential >= 3) potentials.push('林');
+            if (d.properties.miningPotential >= 3) potentials.push('鉱');
+            if (d.properties.fishingPotential >= 3) potentials.push('漁');
+            if (d.properties.huntingPotential >= 3) potentials.push('狩');
+            if (d.properties.pastoralPotential >= 3) potentials.push('牧');
+            if (d.properties.livestockPotential >= 3) potentials.push('畜');
+            return potentials.join('');
+        });
+
+    // 5. 線画レイヤーの更新 (ビューポートカリング適用)
+    // これらは軽量化のため、表示範囲内のみ描画する
+    if (layers.border.visible) drawBorders(visibleHexes);
+    if (layers.road.visible) drawRoads(roadPathsData, visibleHexes);
+    if (layers.beach.visible) drawBeaches(visibleHexes);
+    if (layers.river.visible) drawRivers(visibleHexes);
+    if (layers['ridge-water-system'].visible) drawRidges(visibleHexes);
+    // 等高線は計算コストが高いため、ここでは再描画せず、toggleLayerVisibilityでのみ制御するか、
+    // または非常に軽量な実装に置き換える必要がある。現状は維持。
 
     const effectiveRadius = config.r * transform.k;
     layers.labels.group.selectAll('.hex-label, .property-label')
@@ -1327,116 +1466,9 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
     // 4h. 河川と稜線
 
-    // --- 河川の曲線パスデータを生成 ---
-    const riverPathData = [];
-    hexes.forEach(d => {
-        if (d.properties.flow > 0 && !d.properties.isWater) {
-            const downstreamHex = d.downstreamIndex !== -1 ? hexes[d.downstreamIndex] : null;
-            if (!downstreamHex) return;
-
-            const endPoint = getSharedEdgeMidpoint(d, downstreamHex);
-            if (!endPoint) return;
-
-            // 制御点をヘックスの中心に設定
-            const controlPoint = [d.cx, d.cy];
-
-            const upstreamNeighbors = hexes.filter(h => h.downstreamIndex === d.index);
-            if (upstreamNeighbors.length === 0) { // 水源の場合
-                const startPoint = [d.cx, d.cy];
-                const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                riverPathData.push({ path: path, flow: d.properties.flow });
-            } else { // 中流の場合
-                upstreamNeighbors.forEach(upstreamHex => {
-                    const startPoint = getSharedEdgeMidpoint(d, upstreamHex);
-                    if (startPoint) {
-                        const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                        riverPathData.push({ path: path, flow: upstreamHex.properties.flow });
-                    }
-                });
-            }
-        }
-    });
-
-    // --- 稜線の曲線パスデータを生成 ---
-    const ridgePathData = [];
-    hexes.forEach(sourceHex => {
-        if (sourceHex.properties.ridgeFlow > 0 && !sourceHex.properties.isWater) {
-            const upstreamHex = sourceHex.ridgeUpstreamIndex !== -1 ? hexes[sourceHex.ridgeUpstreamIndex] : null;
-
-            // 山頂かどうかで終点を変更する
-            let endPoint;
-            if (upstreamHex) {
-                // 通常の稜線：終点は、より標高が高い上流ヘックスとの境界の中点
-                endPoint = getSharedEdgeMidpoint(sourceHex, upstreamHex);
-            } else {
-                // 山頂の処理：上流ヘックスがない場合、ここが山頂。終点はヘックスの中心。
-                endPoint = [sourceHex.cx, sourceHex.cy];
-            }
-
-            if (!endPoint) return; // 終点が計算できなければスキップ
-
-            // 制御点をヘックスの中心に設定
-            const controlPoint = [sourceHex.cx, sourceHex.cy];
-
-            const downstreamRidgeNeighbors = hexes.filter(h => h.ridgeUpstreamIndex === sourceHex.index);
-            if (downstreamRidgeNeighbors.length === 0) { // 稜線の末端の場合
-                const startPoint = [sourceHex.cx, sourceHex.cy];
-                const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                ridgePathData.push({ path: path, flow: sourceHex.properties.ridgeFlow });
-            } else { // 稜線の途中
-                downstreamRidgeNeighbors.forEach(downstreamHex => {
-                    const startPoint = getSharedEdgeMidpoint(sourceHex, downstreamHex);
-                    if (startPoint) {
-                        const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                        ridgePathData.push({ path: path, flow: downstreamHex.properties.ridgeFlow });
-                    }
-                });
-            }
-        }
-    });
-
-    // --- 各レイヤーへの描画 ---
-
-    // 河川レイヤーに描画
-    riverLayer.selectAll('.river-segment')
-        .data(riverPathData)
-        .enter()
-        .append('path')
-        .attr('class', 'river-segment')
-        .attr('d', d => d.path)
-        .attr('stroke', config.TERRAIN_COLORS.河川)
-        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
-        .attr('stroke-linecap', 'round')
-        .style('pointer-events', 'none');
-
-    // 稜線・水系図レイヤーに描画
-    ridgeWaterSystemLayer.selectAll('.rws-water-hex')
-        .data(hexes.filter(d => d.properties.isWater))
-        .enter()
-        .append('polygon')
-        .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-        .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-        .attr('fill', config.RIDGE_WATER_SYSTEM_COLORS.RIVER);
-
-    ridgeWaterSystemLayer.selectAll('.rws-river-segment')
-        .data(riverPathData)
-        .enter()
-        .append('path')
-        .attr('d', d => d.path)
-        .attr('stroke', config.RIDGE_WATER_SYSTEM_COLORS.RIVER)
-        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
-        .attr('stroke-linecap', 'round')
-        .style('fill', 'none');
-
-    ridgeWaterSystemLayer.selectAll('.rws-ridge-segment')
-        .data(ridgePathData) // 稜線の曲線データを使用
-        .enter()
-        .append('path') // pathで描画
-        .attr('d', d => d.path)
-        .attr('stroke', config.RIDGE_WATER_SYSTEM_COLORS.RIDGE)
-        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 1.5, config.r * 0.8))
-        .attr('stroke-linecap', 'round')
-        .style('fill', 'none'); // fillを無効化
+    // 4h. 河川と稜線 (初回描画)
+    drawRivers(hexes); // 初回は全ヘックスで描画（または空で呼んでupdateVisibleHexesに任せる）
+    drawRidges(hexes);
 
     // 4i. 道路網 (初回描画)
     drawRoads(roadPaths);
