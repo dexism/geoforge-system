@@ -122,7 +122,49 @@ function toggleLayerVisibility(layerName, buttonElement) {
         }
     }
 
-    buttonElement.classList.toggle('active', layer.visible);
+    // 連動レイヤーの処理
+    if (layerName === 'vegetation-overlay') {
+        // 植生と砂浜は連動
+        const beachLayer = layers['beach'];
+        if (beachLayer) {
+            beachLayer.visible = layer.visible;
+            beachLayer.group.style('display', layer.visible ? 'inline' : 'none');
+        }
+    } else if (layerName === 'road') {
+        // 道路と航路は連動
+        const seaRouteLayer = layers['sea-route'];
+        if (seaRouteLayer) {
+            seaRouteLayer.visible = layer.visible;
+            seaRouteLayer.group.style('display', layer.visible ? 'inline' : 'none');
+        }
+    }
+
+    // ボタンの状態を同期 (サイドバーとショートカット)
+    // buttonElementが渡された場合はそれをトグル
+    if (buttonElement) {
+        buttonElement.classList.toggle('active', layer.visible);
+    }
+
+    // 対応するもう一方のボタンも探してトグル
+    // マッピング定義
+    const buttonMapping = {
+        'vegetation-overlay': { sidebar: '#toggleVegetationLayer', shortcut: '#shortcut-vegetation' },
+        'shading': { sidebar: '#toggleReliefLayer', shortcut: '#shortcut-relief' },
+        'contour': { sidebar: '#toggleContourLayer', shortcut: '#shortcut-contour' },
+        'settlement': { sidebar: '#toggleSettlementLayer', shortcut: '#shortcut-settlement' },
+        'road': { sidebar: '#toggleRoadLayer', shortcut: '#shortcut-road' },
+        'territory-overlay': { sidebar: '#toggleTerritoryLayer', shortcut: '#shortcut-territory' },
+        'hex-border': { sidebar: '#toggleHexBorderLayer', shortcut: '#shortcut-hex-border' }
+    };
+
+    const mapping = buttonMapping[layerName];
+    if (mapping) {
+        const sidebarBtn = document.querySelector(mapping.sidebar);
+        const shortcutBtn = document.querySelector(mapping.shortcut);
+
+        if (sidebarBtn) sidebarBtn.classList.toggle('active', layer.visible);
+        if (shortcutBtn) shortcutBtn.classList.toggle('active', layer.visible);
+    }
 }
 
 // Legend functions are imported from infoWindow.js
@@ -975,7 +1017,7 @@ function updateVisibleBlocks(transform) {
         // レイヤーごとの表示切り替え
         const partitionedLayers = [
             'terrain', 'settlement', 'hex-border', 'labels',
-            'road', 'sea-route', 'river', 'beach', 'ridge-water-system', 'contour', 'interaction',
+            'road', 'sea-route', 'river', 'beach', 'ridge-water-system', 'contour', 'interaction', 'border',
             'white-map-overlay', 'vegetation-overlay', 'snow', 'shading', 'territory-overlay',
             'climate-zone-overlay', 'temp-overlay', 'precip-overlay', 'mana-overlay',
             'agri-overlay', 'forest-overlay', 'mining-overlay', 'fishing-overlay',
@@ -1268,6 +1310,7 @@ function drawBlockInteraction(block) {
 
                 // ツールチップイベント
                 newHexes.on('mousemove', (event) => {
+                    if (window.innerWidth <= 600) return; // スマホでは表示しない
                     if (tooltipContainer.style('visibility') === 'visible') {
                         tooltipContainer
                             .style('top', (event.pageY - 10) + 'px')
@@ -1275,6 +1318,7 @@ function drawBlockInteraction(block) {
                     }
                 })
                     .on('mouseover', (event, d) => {
+                        if (window.innerWidth <= 600) return; // スマホでは表示しない
                         if (d) {
                             tooltipContainer.text(getTooltipText(d));
                             tooltipContainer.style('visibility', 'visible');
@@ -1550,8 +1594,70 @@ function drawBlockRoads(block) {
                 (nextHex && blockHexIds.has(nextHex.index));
             if (!isRelevant) continue;
 
-            const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
-            const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
+            // 陸地ヘックスの場合は描画しない（ただし、始点・終点が陸地の場合は、その境界まで描画する）
+            // 航路は基本的に海ヘックスを通るが、港（陸地）に接続する部分は陸地ヘックスを含む
+            // ここでは、currentHexが陸地の場合、海側の隣接ヘックスとの境界（中点）を端点とする
+
+            let startPoint, endPoint;
+
+            // 始点の計算
+            if (prevHex) {
+                if (!currentHex.properties.isWater) {
+                    // 現在地が陸地の場合、前のヘックス（海のはず）との境界まで
+                    startPoint = getSharedEdgeMidpoint(currentHex, prevHex);
+                } else if (!prevHex.properties.isWater) {
+                    // 前のヘックスが陸地の場合、境界から開始
+                    startPoint = getSharedEdgeMidpoint(currentHex, prevHex);
+                } else {
+                    // 両方海なら通常通り中点（あるいは中心）から
+                    // ベジェ曲線のつなぎ目を滑らかにするため、通常は中点を使う
+                    startPoint = getSharedEdgeMidpoint(currentHex, prevHex);
+                }
+            } else {
+                // パスの始点
+                if (!currentHex.properties.isWater) {
+                    // 始点が陸地（港）の場合、次のヘックスとの境界を開始点とする（つまり描画しない？）
+                    // いや、港から出る船を描画したいなら、港の中心から出るべきか、それとも海岸線から出るべきか。
+                    // 要件「海岸線のヘックス辺までしか描画しない」に従うなら、
+                    // 陸地ヘックス内のパスは描画せず、境界から海側のみ描画する。
+                    // つまり、currentHexが陸地なら、このセグメントは描画対象外（または境界点のみ）
+                    // しかしループは「ヘックスごと」ではなく「パスのノードごと」に回っている
+                    // i番目のヘックスにおける描画範囲を考える。
+
+                    // シンプルに考える：
+                    // セグメントは prevHex -> currentHex ではなく、
+                    // getSharedEdgeMidpoint(prev, current) -> current -> getSharedEdgeMidpoint(current, next)
+                    // という区間で描画されている（Q controlPoint）。
+
+                    // currentHexが陸地の場合：描画しない。
+                    // currentHexが海の場合：
+                    //   prevHexが陸地 -> startPointは境界（getSharedEdgeMidpoint）
+                    //   nextHexが陸地 -> endPointは境界（getSharedEdgeMidpoint）
+                    // これで「陸地内は描画されず、境界で止まる」ことになる。
+                }
+            }
+
+            // ロジック再構築
+            // currentHexが陸地（港）の場合、そのヘックス内の描画はスキップする。
+            if (!currentHex.properties.isWater) continue;
+
+            // currentHexは海。
+            // prevHexが存在する場合、startPointを決める
+            if (prevHex) {
+                startPoint = getSharedEdgeMidpoint(currentHex, prevHex);
+            } else {
+                // パスの始点かつ海（洋上スタート）。中心から開始
+                startPoint = [currentHex.cx, currentHex.cy];
+            }
+
+            // nextHexが存在する場合、endPointを決める
+            if (nextHex) {
+                endPoint = getSharedEdgeMidpoint(currentHex, nextHex);
+            } else {
+                // パスの終点かつ海。中心で終了
+                endPoint = [currentHex.cx, currentHex.cy];
+            }
+
             if (!startPoint || !endPoint) continue;
             const controlPoint = [currentHex.cx, currentHex.cy];
             const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
@@ -1611,12 +1717,24 @@ function drawBlockRivers(block) {
         }
     });
 
+    const isWhiteMap = d3.select('input[name="map-type"]:checked').property('value') === 'white';
+    const isRidgeWaterSystemVisible = layers['ridge-water-system'] && layers['ridge-water-system'].visible;
+    
+    let riverColor;
+    if (isRidgeWaterSystemVisible) {
+        riverColor = config.RIDGE_WATER_SYSTEM_COLORS.RIVER;
+    } else if (isWhiteMap) {
+        riverColor = config.WHITE_MAP_COLORS.WATER;
+    } else {
+        riverColor = config.TERRAIN_COLORS.河川;
+    }
+
     blockGroup.selectAll('path')
         .data(riverPathData)
         .join(
             enter => enter.append('path')
                 .attr('d', d => d.path)
-                .attr('stroke', config.TERRAIN_COLORS.河川)
+                .attr('stroke', riverColor)
                 .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
                 .attr('stroke-linecap', 'round')
                 .style('fill', 'none')
@@ -2138,16 +2256,122 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
     // --- 6. UIイベントハンドラの設定 ---
 
+    // レイヤー状態記憶用オブジェクト
+    const mapTypeLayerStates = {
+        terrain: {
+            'vegetation-overlay': true,
+            'shading': true,
+            'contour': true,
+            'settlement': true,
+            'road': true,
+            'territory-overlay': false,
+            'hex-border': false
+        },
+        white: {
+            'vegetation-overlay': false,
+            'shading': false,
+            'contour': false,
+            'settlement': true,
+            'road': true,
+            'territory-overlay': true,
+            'hex-border': false
+        }
+    };
+
+    // 初期状態の適用（地形図）
+    // setupUIの最後の方で実行されるが、ここでは初期化として定義
+    // 実際にはtoggleLayerVisibilityで制御されるため、初期ロード時はHTMLのclass="active"等に依存する部分もあるが、
+    // ここで明示的に設定することも可能。ただし、setupUI内での初期化順序に注意。
+
     // 6a. 基本地図の切り替え
     d3.selectAll('input[name="map-type"]').on('change', function () {
         const selectedType = d3.select(this).property('value');
+        const prevType = selectedType === 'white' ? 'terrain' : 'white';
         const isWhiteMap = selectedType === 'white';
+
+        // 1. 現在の状態を保存 (前のタイプに対して)
+        Object.keys(mapTypeLayerStates[prevType]).forEach(layerName => {
+            if (layers[layerName]) {
+                mapTypeLayerStates[prevType][layerName] = layers[layerName].visible;
+            }
+        });
+
+        // 2. 新しい状態をロード
+        Object.keys(mapTypeLayerStates[selectedType]).forEach(layerName => {
+            const shouldBeVisible = mapTypeLayerStates[selectedType][layerName];
+            if (layers[layerName]) {
+                // toggleLayerVisibilityを使うとトグルしてしまうので、直接制御するか、
+                // 現在の状態と比較して必要な場合のみトグルする
+                if (layers[layerName].visible !== shouldBeVisible) {
+                    // toggleLayerVisibilityはボタンの状態も更新してくれるので便利
+                    // ただし、ボタン要素を特定する必要がある
+                    // buttonMappingはtoggleLayerVisibility内に隠蔽されているので、
+                    // ここでは直接レイヤーとボタンを操作するヘルパーを使うか、
+                    // toggleLayerVisibilityをうまく使う。
+
+                    // toggleLayerVisibilityを呼ぶために、対応するショートカットボタンを取得してクリックイベントを発火させるのが手っ取り早いが、
+                    // 無限ループや予期せぬ副作用を防ぐため、内部ロジックで処理する。
+
+                    layers[layerName].visible = shouldBeVisible;
+                    layers[layerName].group.style('display', shouldBeVisible ? 'inline' : 'none');
+
+                    // ボタンの同期
+                    // toggleLayerVisibility内のロジックを再利用したいが、スコープ外。
+                    // ここで再実装する。
+                    const buttonMapping = {
+                        'vegetation-overlay': { sidebar: '#toggleVegetationLayer', shortcut: '#shortcut-vegetation' },
+                        'shading': { sidebar: '#toggleReliefLayer', shortcut: '#shortcut-relief' },
+                        'contour': { sidebar: '#toggleContourLayer', shortcut: '#shortcut-contour' },
+                        'settlement': { sidebar: '#toggleSettlementLayer', shortcut: '#shortcut-settlement' },
+                        'road': { sidebar: '#toggleRoadLayer', shortcut: '#shortcut-road' },
+                        'territory-overlay': { sidebar: '#toggleTerritoryLayer', shortcut: '#shortcut-territory' },
+                        'hex-border': { sidebar: '#toggleHexBorderLayer', shortcut: '#shortcut-hex-border' }
+                    };
+                    const mapping = buttonMapping[layerName];
+                    if (mapping) {
+                        const sidebarBtn = document.querySelector(mapping.sidebar);
+                        const shortcutBtn = document.querySelector(mapping.shortcut);
+                        if (sidebarBtn) sidebarBtn.classList.toggle('active', shouldBeVisible);
+                        if (shortcutBtn) shortcutBtn.classList.toggle('active', shouldBeVisible);
+                    }
+
+                    // 連動レイヤーの処理 (toggleLayerVisibilityから抜粋・簡略化)
+                    if (layerName === 'vegetation-overlay') {
+                        const beachLayer = layers['beach'];
+                        if (beachLayer) {
+                            beachLayer.visible = shouldBeVisible;
+                            beachLayer.group.style('display', shouldBeVisible ? 'inline' : 'none');
+                        }
+                        // 積雪も連動
+                        const snowLayer = layers['snow'];
+                        if (snowLayer) {
+                            snowLayer.visible = shouldBeVisible;
+                            snowLayer.group.style('display', shouldBeVisible ? 'inline' : 'none');
+                        }
+                    } else if (layerName === 'road') {
+                        const seaRouteLayer = layers['sea-route'];
+                        if (seaRouteLayer) {
+                            seaRouteLayer.visible = shouldBeVisible;
+                            seaRouteLayer.group.style('display', shouldBeVisible ? 'inline' : 'none');
+                        }
+                    } else if (layerName === 'settlement') {
+                        layers.labels.group.selectAll('.settlement-label')
+                            .style('display', shouldBeVisible ? 'inline' : 'none');
+                        layers.border.visible = shouldBeVisible;
+                        layers.border.group.style('display', shouldBeVisible ? 'inline' : 'none');
+                    }
+                }
+            }
+        });
+
         // 合成レイヤー方式では、terrainレイヤーの表示/非表示を切り替える必要はない
         // 代わりに色を再計算する
         updateAllHexColors();
 
-        layers.river.group.selectAll('.river-segment').attr('stroke', isWhiteMap ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.河川);
-        layers.beach.group.style('display', isWhiteMap ? 'none' : 'inline');
+        // 河川の色を変更 (ブロック内のパスも対象にするため、クラス指定ではなく全パスを対象にするか、再描画時に色を適用する必要がある)
+        // ここでは既存のDOM要素の色を変更する
+        updateRiverColor();
+        // layers.beach.group.style('display', isWhiteMap ? 'none' : 'inline'); // 植生連動に変更されたため削除
         // 変更を即時反映するために描画関数を呼び出す
         updateVisibleBlocks(d3.zoomTransform(svg.node()));
     });
@@ -2191,8 +2415,28 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         toggleLayerVisibility('territory-overlay', this);
         updateVisibleBlocks(d3.zoomTransform(svg.node()));
     });
+    // 河川の色を更新するヘルパー関数
+    function updateRiverColor() {
+        const isRidgeWaterSystemVisible = layers['ridge-water-system'] && layers['ridge-water-system'].visible;
+        const isWhiteMap = d3.select('input[name="map-type"]:checked').property('value') === 'white';
+
+        let riverColor;
+        if (isRidgeWaterSystemVisible) {
+            riverColor = config.RIDGE_WATER_SYSTEM_COLORS.RIVER; // 青色
+        } else if (isWhiteMap) {
+            riverColor = config.WHITE_MAP_COLORS.WATER; // グレー
+        } else {
+            riverColor = config.TERRAIN_COLORS.河川; // 通常色
+        }
+
+        if (layers.river) {
+            layers.river.group.selectAll('path').attr('stroke', riverColor);
+        }
+    }
+
     d3.select('#toggleRidgeWaterSystemLayer').on('click', function () {
         toggleLayerVisibility('ridge-water-system', this);
+        updateRiverColor(); // 色を更新
         // 稜線水系図は静的レイヤーなので直接表示を切り替えるだけで良い
     });
 
@@ -2251,6 +2495,43 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             // 変更を即時反映するために描画関数を呼び出す
             updateVisibleBlocks(d3.zoomTransform(svg.node()));
         });
+    });
+
+    // 6e. ショートカットバーのボタン
+    const shortcutMapping = [
+        { id: '#shortcut-vegetation', layer: 'vegetation-overlay' },
+        { id: '#shortcut-relief', layer: 'shading' },
+        { id: '#shortcut-contour', layer: 'contour' },
+        { id: '#shortcut-settlement', layer: 'settlement' },
+        { id: '#shortcut-road', layer: 'road' },
+        { id: '#shortcut-territory', layer: 'territory-overlay' },
+        { id: '#shortcut-hex-border', layer: 'hex-border' }
+    ];
+
+    shortcutMapping.forEach(item => {
+        d3.select(item.id).on('click', function () {
+            toggleLayerVisibility(item.layer, this);
+            // 国境線はsettlementと連動するので特別扱い
+            if (item.layer === 'settlement') {
+                const isVisible = layers.settlement.visible;
+                layers.border.visible = isVisible;
+                layers.border.group.style('display', isVisible ? 'inline' : 'none');
+            }
+            // 植生の場合は積雪も連動
+            if (item.layer === 'vegetation-overlay') {
+                toggleLayerVisibility('snow', this);
+            }
+            updateVisibleBlocks(d3.zoomTransform(svg.node()));
+        });
+    });
+
+    // 基本地図切り替えショートカット
+    d3.select('#shortcut-map-type').on('click', function () {
+        const currentType = d3.select('input[name="map-type"]:checked').property('value');
+        const newType = currentType === 'terrain' ? 'white' : 'terrain';
+
+        // ラジオボタンを更新
+        d3.select(`input[name="map-type"][value="${newType}"]`).property('checked', true).dispatch('change');
     });
 
 

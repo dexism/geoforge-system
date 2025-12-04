@@ -61,14 +61,16 @@ button.active:hover {
     transform: rotateX(30deg);
     /* rotate: x 30deg; */
     /* transform: scale(1.00); */
-    pointer-events: none; /* コンテナ自体はイベントを透過 */
+    pointer-events: none;
+    /* コンテナ自体はイベントを透過 */
 }
 
 #hexmap {
     width: 120%;
     height: 130%;
     translate: -10% -18%;
-    pointer-events: auto; /* SVGはイベントを受け取る */
+    pointer-events: auto;
+    /* SVGはイベントを受け取る */
 }
 
 .hex-group {
@@ -394,6 +396,14 @@ button.active:hover {
 .menu-toggle-checkbox:checked~.container .sidebar {
     transform: translateX(0);
     /* 表示 */
+}
+
+/* メニュー展開時はショートカットバーを非表示にする */
+.menu-toggle-checkbox:checked~.shortcut-bar {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-20px);
+    pointer-events: none;
 }
 
 /* ハンバーガーメニューアイコンの回転 */
@@ -762,7 +772,8 @@ button.active:hover {
     border-radius: 5px;
     box-shadow: 0 0 10px #000;
     z-index: 10;
-    display: none; /* 初期状態は非表示（ミニマップが表示されているため） */
+    display: none;
+    /* 初期状態は非表示（ミニマップが表示されているため） */
     cursor: pointer;
     align-items: center;
     justify-content: center;
@@ -812,7 +823,7 @@ button.active:hover {
 
     /* スライドイン・アウトのアニメーション設定 */
     transition: transform 0.3s ease-out, opacity 0.3s ease-out, visibility 0.3s;
-    transform: translateY(0); 
+    transform: translateY(0);
     /* 表示時は定位置 */
     opacity: 1;
 }
@@ -1038,3 +1049,50 @@ button.active:hover {
     transform: translateY(1px);
 }
 
+
+/* ================================================================
+   ショートカットバー スタイル
+   ================================================================ */
+.shortcut-bar {
+    position: fixed;
+    top: 60px;
+    left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s;
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+    z-index: 30;
+}
+
+.shortcut-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--sidebar-bg);
+    border: 2px solid #fff;
+    color: #fff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+    transition: all 0.2s;
+}
+
+.shortcut-btn:hover {
+    background-color: #444;
+    transform: scale(1.05);
+}
+
+.shortcut-btn.active {
+    background-color: var(--primary-color);
+    border-color: #fff;
+    box-shadow: 0 0 8px var(--primary-color);
+}
+
+.shortcut-btn .material-icons-round {
+    font-size: 24px;
+}
