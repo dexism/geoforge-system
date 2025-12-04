@@ -842,7 +842,8 @@ function updateVisibleHexes(transform) {
         .join(
             enter => enter.append('polygon')
                 .attr('class', 'interactive-hex')
-                .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+                .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+                .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
                 .style('fill', 'transparent')
                 .style('cursor', 'pointer')
                 .style('pointer-events', 'all') // 明示的にイベントを受け取る設定
@@ -1087,6 +1088,20 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // ここからミニマップ関連の初期化を追加
     minimapContainer = d3.select('body').append('div').attr('id', 'minimap-container');
     minimapSvg = minimapContainer.append('svg').attr('id', 'minimap-svg');
+
+    // ツールチップ用コンテナの作成
+    tooltipContainer = d3.select('body').append('div')
+        .attr('class', 'tooltip')
+        .style('position', 'absolute')
+        .style('visibility', 'hidden')
+        .style('background-color', 'rgba(0, 0, 0, 0.8)')
+        .style('color', '#fff')
+        .style('padding', '5px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none') // マウスイベントを透過
+        .style('white-space', 'pre-wrap') // 改行を有効化
+        .style('z-index', '9999');
 
     // ミニマップ用の地形レイヤーを追加
     const minimapTerrain = minimapSvg.append('g');

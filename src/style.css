@@ -61,12 +61,14 @@ button.active:hover {
     transform: rotateX(30deg);
     /* rotate: x 30deg; */
     /* transform: scale(1.00); */
+    pointer-events: none; /* コンテナ自体はイベントを透過 */
 }
 
 #hexmap {
     width: 120%;
     height: 130%;
     translate: -10% -18%;
+    pointer-events: auto; /* SVGはイベントを受け取る */
 }
 
 .hex-group {
