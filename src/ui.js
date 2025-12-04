@@ -8,7 +8,7 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { getIndex, formatProgressBar, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint } from './utils.js';
+import { getIndex, formatProgressBar, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint, getDistance } from './utils.js';
 import {
     initInfoWindow,
     setAllHexesData,
@@ -406,9 +406,8 @@ function drawRoads(roadPaths) {
             const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
             const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
             const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
-            const controlPoint = [currentHex.cx, currentHex.cy];
             if (!startPoint || !endPoint || (startPoint[0] === endPoint[0] && startPoint[1] === endPoint[1])) continue;
-            const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+            const pathString = generateCurvePath(startPoint, endPoint, currentHex, prevHex, nextHex);
             const fromIndex = prevHex ? prevHex.index : currentHex.index;
             const toIndex = nextHex ? nextHex.index : currentHex.index;
             const segmentKey = Math.min(fromIndex, toIndex) + '-' + Math.max(fromIndex, toIndex);
@@ -499,11 +498,8 @@ function drawRoads(roadPaths) {
 
             if (!startPoint || !endPoint) continue;
 
-            // 制御点は現在のヘックスの中心
-            const controlPoint = [currentHex.cx, currentHex.cy];
-
             // 二次ベジェ曲線のパス文字列を生成
-            const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+            const pathString = generateCurvePath(startPoint, endPoint, currentHex, prevHex, nextHex);
 
             seaRoutePathData.push({
                 path: pathString,
@@ -1400,11 +1396,9 @@ function drawBlockInteraction(block) {
 
                                         const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
                                         const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
-                                        const controlPoint = [currentHex.cx, currentHex.cy];
-
                                         if (!startPoint || !endPoint || (startPoint[0] === endPoint[0] && startPoint[1] === endPoint[1])) continue;
 
-                                        const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                                        const pathString = generateCurvePath(startPoint, endPoint, currentHex, prevHex, nextHex);
                                         pathSegments.push({ path: pathString });
                                     }
                                     highlightLayer.selectAll('.connection-path')
@@ -1446,8 +1440,7 @@ function drawBlockInteraction(block) {
                                 const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
                                 const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
                                 if (!startPoint || !endPoint) continue;
-                                const controlPoint = [currentHex.cx, currentHex.cy];
-                                const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                                const pathString = generateCurvePath(startPoint, endPoint, currentHex, prevHex, nextHex);
                                 seaRouteSegments.push({ path: pathString });
                             }
                         });
@@ -1501,6 +1494,73 @@ function drawBlockInteraction(block) {
         );
 }
 
+/**
+ * 3つのヘックス（前、現在、次）が共有する頂点を特定するヘルパー関数
+ */
+function getCommonVertex(h1, h2, h3) {
+    const edge1 = getSharedEdgePoints(h1, h2);
+    const edge2 = getSharedEdgePoints(h2, h3);
+    if (!edge1 || !edge2) return null;
+    const epsilon = 0.1;
+    for (const p1 of edge1) {
+        for (const p2 of edge2) {
+            if (Math.abs(p1[0] - p2[0]) < epsilon && Math.abs(p1[1] - p2[1]) < epsilon) {
+                return p1;
+            }
+        }
+    }
+    return null;
+}
+
+function getSettlementLevel(name) {
+    const levels = { '首都': 6, '都市': 5, '領都': 4, '街': 4, '町': 3, '村': 2 };
+    return levels[name] || 0;
+}
+
+/**
+ * 道路・航路のパス文字列を生成するヘルパー関数
+ * 急カーブ（隣接辺への移動）の場合は円弧、それ以外は二次ベジェ曲線を使用
+ */
+function generateCurvePath(startPoint, endPoint, currentHex, prevHex, nextHex) {
+    const controlPoint = [currentHex.cx, currentHex.cy];
+
+    // 1. 中心-辺接続（6パターン）: 始点または終点がヘックス中心の場合 -> 直線（L）
+    const isStartCenter = Math.abs(startPoint[0] - controlPoint[0]) < 1e-6 && Math.abs(startPoint[1] - controlPoint[1]) < 1e-6;
+    const isEndCenter = Math.abs(endPoint[0] - controlPoint[0]) < 1e-6 && Math.abs(endPoint[1] - controlPoint[1]) < 1e-6;
+
+    if (isStartCenter || isEndCenter) {
+        return `M ${startPoint[0]},${startPoint[1]} L ${controlPoint[0]},${controlPoint[1]} L ${endPoint[0]},${endPoint[1]}`;
+    }
+
+    // 2. 対辺接続/直進（3パターン）: 始点と終点が中心に対して対称（一直線）の場合 -> 直線（L）
+    // 座標誤差を考慮して判定
+    const midX = (startPoint[0] + endPoint[0]) / 2;
+    const midY = (startPoint[1] + endPoint[1]) / 2;
+    if (Math.abs(midX - controlPoint[0]) < 1.0 && Math.abs(midY - controlPoint[1]) < 1.0) {
+        return `M ${startPoint[0]},${startPoint[1]} L ${controlPoint[0]},${controlPoint[1]} L ${endPoint[0]},${endPoint[1]}`;
+    }
+
+    // 3. 急カーブ（6パターン）: 前後のヘックスが互いに隣接している場合 -> 円弧（A）
+    const isSharpTurn = prevHex && nextHex &&
+        prevHex.neighbors &&
+        prevHex.neighbors.includes(nextHex.index);
+
+    if (isSharpTurn) {
+        const vertex = getCommonVertex(prevHex, currentHex, nextHex);
+        if (vertex) {
+            const r = Math.hypot(startPoint[0] - vertex[0], startPoint[1] - vertex[1]);
+            const vs = [startPoint[0] - vertex[0], startPoint[1] - vertex[1]];
+            const ve = [endPoint[0] - vertex[0], endPoint[1] - vertex[1]];
+            const cp = vs[0] * ve[1] - vs[1] * ve[0];
+            const sweep = cp > 0 ? 1 : 0;
+            return `M ${startPoint[0]},${startPoint[1]} A ${r},${r} 0 0,${sweep} ${endPoint[0]},${endPoint[1]}`;
+        }
+    }
+
+    // 4. 緩やかカーブ（6パターン）: 上記以外 -> ベジェ曲線（Q）
+    return `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+}
+
 function drawBlockRoads(block) {
     const layerName = 'road';
     const blockGroup = layers[layerName].group.select(`#${layerName}-${block.id}`);
@@ -1512,7 +1572,9 @@ function drawBlockRoads(block) {
     const blockHexIds = new Set(block.hexes.map(h => h.index));
     const landRoadPathData = [];
     const roadSegmentGrid = new Map();
-    const landRoads = roadPathsData.filter(d => d.level < 10);
+
+    // 道路レベルの降順でソート（高レベル優先）
+    const landRoads = roadPathsData.filter(d => d.level < 10).sort((a, b) => b.level - a.level);
 
     landRoads.forEach(road => {
         if (road.path.length < 2) return;
@@ -1523,25 +1585,79 @@ function drawBlockRoads(block) {
             if (!currentHex) continue;
             const prevHex = i > 0 ? pathHexes[i - 1] : null;
             const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
+
             const isRelevant = blockHexIds.has(currentHex.index) ||
                 (prevHex && blockHexIds.has(prevHex.index)) ||
                 (nextHex && blockHexIds.has(nextHex.index));
             if (!isRelevant) continue;
 
-            const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
-            const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
-            const controlPoint = [currentHex.cx, currentHex.cy];
+            // 分割判定
+            let shouldSplit = false;
 
-            if (!startPoint || !endPoint || (startPoint[0] === endPoint[0] && startPoint[1] === endPoint[1])) continue;
+            // 1. 直進判定（対辺接続）
+            if (prevHex && nextHex) {
+                // 簡易判定: 座標の中点が中心に近いか
+                const startPoint = getSharedEdgeMidpoint(currentHex, prevHex);
+                const endPoint = getSharedEdgeMidpoint(currentHex, nextHex);
+                if (startPoint && endPoint) {
+                    const midX = (startPoint[0] + endPoint[0]) / 2;
+                    const midY = (startPoint[1] + endPoint[1]) / 2;
+                    if (Math.abs(midX - currentHex.cx) < 1.0 && Math.abs(midY - currentHex.cy) < 1.0) {
+                        shouldSplit = true;
+                    }
+                }
+            }
 
-            const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-            const fromIndex = prevHex ? prevHex.index : currentHex.index;
-            const toIndex = nextHex ? nextHex.index : currentHex.index;
-            const segmentKey = Math.min(fromIndex, toIndex) + '-' + Math.max(fromIndex, toIndex);
+            // 2. 集落経由判定
+            if (currentHex.properties.settlement) {
+                const settlementLevel = getSettlementLevel(currentHex.properties.settlement);
+                // 同等以下の集落がある場合は中心を経由する
+                if (settlementLevel <= road.level) {
+                    shouldSplit = true;
+                }
+            }
 
-            if (!roadSegmentGrid.has(segmentKey)) {
-                roadSegmentGrid.set(segmentKey, true);
-                landRoadPathData.push({ path: pathString, level: road.level, nationId: road.nationId });
+            // 始点・終点は常に分割扱い（片側のみ描画）
+            if (!prevHex || !nextHex) shouldSplit = true;
+
+            if (shouldSplit) {
+                // 分割描画: Prev->Center, Center->Next
+                if (prevHex) {
+                    const start = getSharedEdgeMidpoint(currentHex, prevHex);
+                    const end = [currentHex.cx, currentHex.cy];
+                    if (start) {
+                        const key = `${currentHex.index}-${Math.min(prevHex.index, currentHex.index)}-${Math.max(prevHex.index, currentHex.index)}-Center`;
+                        if (!roadSegmentGrid.has(key)) {
+                            roadSegmentGrid.set(key, true);
+                            const path = generateCurvePath(start, end, currentHex, prevHex, null);
+                            landRoadPathData.push({ path: path, level: road.level, nationId: road.nationId });
+                        }
+                    }
+                }
+                if (nextHex) {
+                    const start = [currentHex.cx, currentHex.cy];
+                    const end = getSharedEdgeMidpoint(currentHex, nextHex);
+                    if (end) {
+                        const key = `${currentHex.index}-${Math.min(nextHex.index, currentHex.index)}-${Math.max(nextHex.index, currentHex.index)}-Center`;
+                        if (!roadSegmentGrid.has(key)) {
+                            roadSegmentGrid.set(key, true);
+                            const path = generateCurvePath(start, end, currentHex, null, nextHex);
+                            landRoadPathData.push({ path: path, level: road.level, nationId: road.nationId });
+                        }
+                    }
+                }
+            } else {
+                // 通常描画（カーブ）
+                const startPoint = getSharedEdgeMidpoint(currentHex, prevHex);
+                const endPoint = getSharedEdgeMidpoint(currentHex, nextHex);
+                if (startPoint && endPoint) {
+                    const key = `${currentHex.index}-${Math.min(prevHex.index, nextHex.index)}-${Math.max(prevHex.index, nextHex.index)}`;
+                    if (!roadSegmentGrid.has(key)) {
+                        roadSegmentGrid.set(key, true);
+                        const path = generateCurvePath(startPoint, endPoint, currentHex, prevHex, nextHex);
+                        landRoadPathData.push({ path: path, level: road.level, nationId: road.nationId });
+                    }
+                }
             }
         }
     });
@@ -1659,8 +1775,9 @@ function drawBlockRoads(block) {
             }
 
             if (!startPoint || !endPoint) continue;
-            const controlPoint = [currentHex.cx, currentHex.cy];
-            const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+            if (!startPoint || !endPoint) continue;
+
+            const pathString = generateCurvePath(startPoint, endPoint, currentHex, prevHex, nextHex);
             seaRoutePathData.push({ path: pathString, shipKey: route.shipKey });
         }
     });
@@ -1719,7 +1836,7 @@ function drawBlockRivers(block) {
 
     const isWhiteMap = d3.select('input[name="map-type"]:checked').property('value') === 'white';
     const isRidgeWaterSystemVisible = layers['ridge-water-system'] && layers['ridge-water-system'].visible;
-    
+
     let riverColor;
     if (isRidgeWaterSystemVisible) {
         riverColor = config.RIDGE_WATER_SYSTEM_COLORS.RIVER;
