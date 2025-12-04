@@ -59,11 +59,212 @@ function toggleLayerVisibility(layerName, buttonElement) {
         return;
     }
     layer.visible = !layer.visible;
-    layer.group.style('display', layer.visible ? 'inline' : 'none');
+
+    // 合成対象のレイヤーかどうかを判定
+    const compositeLayers = ['terrain', 'white-map-overlay', 'vegetation-overlay', 'snow', 'shading', 'territory-overlay',
+        'climate-zone-overlay', 'temp-overlay', 'precip-overlay', 'population-overlay', 'monster-overlay',
+        'mana-overlay', 'agri-overlay', 'forest-overlay', 'mining-overlay', 'fishing-overlay',
+        'hunting-overlay', 'pastoral-overlay', 'livestock-overlay'];
+
+    if (compositeLayers.includes(layerName)) {
+        // 合成レイヤーの場合は、色を再計算して再描画
+        updateAllHexColors();
+        if (svg) updateVisibleHexes(currentTransform);
+    } else {
+        // 独立レイヤーの場合は、従来通りグループの表示/非表示を切り替え
+        layer.group.style('display', layer.visible ? 'inline' : 'none');
+    }
+
     buttonElement.classList.toggle('active', layer.visible);
 }
 
 // Legend functions are imported from infoWindow.js
+
+/**
+ * ヘックスの最終的な表示色を計算する関数 (合成レイヤー用)
+ * @param {Object} d - ヘックスデータ
+ * @returns {string} - 合成された色文字列 (rgb/rgba)
+ */
+function calculateCompositeColor(d) {
+    const p = d.properties;
+    let baseColor;
+
+    // 1. ベースレイヤーの決定
+    // 白地図モードかどうかは、DOMの状態から判定するか、グローバル変数で管理するのが効率的だが、
+    // ここでは既存のロジックに合わせてDOMを参照する (パフォーマンスへの影響は軽微と想定)
+    const isWhiteMap = document.querySelector('input[name="map-type"][value="white"]')?.checked;
+
+    if (isWhiteMap) {
+        baseColor = d.properties.isWater ? config.WHITE_MAP_COLORS.WATER : config.whiteMapElevationColor(d.properties.elevation);
+    } else {
+        // 地形レイヤー
+        if (p.isWater && p.elevation > 0) {
+            baseColor = config.TERRAIN_COLORS['湖沼'];
+        } else {
+            baseColor = config.getElevationColor(p.elevation);
+        }
+    }
+
+    // d3.colorでパースして操作可能なオブジェクトにする
+    let c = d3.color(baseColor);
+
+    // 2. 各種情報オーバーレイ (ベースを上書き、またはブレンド)
+    // 排他制御されている地理情報レイヤーを確認
+    // (layersオブジェクトはグローバルスコープにある前提)
+
+    // 気候ゾーン
+    if (layers['climate-zone-overlay'] && layers['climate-zone-overlay'].visible) {
+        const overlayColor = d3.color(config.CLIMATE_ZONE_COLORS[p.climateZone]);
+        if (overlayColor) {
+            overlayColor.opacity = 0.6;
+            c = interpolateColor(c, overlayColor);
+        }
+    }
+    // 気温
+    else if (layers['temp-overlay'] && layers['temp-overlay'].visible) {
+        const overlayColor = d3.color(config.tempColor(p.temperature));
+        if (overlayColor) {
+            overlayColor.opacity = 0.6;
+            c = interpolateColor(c, overlayColor);
+        }
+    }
+    // 降水量
+    else if (layers['precip-overlay'] && layers['precip-overlay'].visible) {
+        const overlayColor = d3.color(config.precipColor(p.precipitation_mm));
+        if (overlayColor) {
+            overlayColor.opacity = 0.6;
+            c = interpolateColor(c, overlayColor);
+        }
+    }
+    // 人口
+    else if (layers['population-overlay'] && layers['population-overlay'].visible && p.population > 0) {
+        const overlayColor = d3.color(config.populationColor(p.population));
+        if (overlayColor) {
+            overlayColor.opacity = 0.9;
+            c = interpolateColor(c, overlayColor);
+        }
+    }
+    // 魔物
+    else if (layers['monster-overlay'] && layers['monster-overlay'].visible && p.monsterRank) {
+        const overlayColor = d3.color(config.MONSTER_COLORS[p.monsterRank]);
+        if (overlayColor) {
+            overlayColor.opacity = 0.5;
+            c = interpolateColor(c, overlayColor);
+        }
+    }
+    // 資源系 (排他ではないが、ここでは簡易的に同列に扱うか、重ね合わせる)
+    // 実装の簡略化のため、資源系も排他グループとして扱うか、順次重ねる
+    // ここでは順次重ねる実装とする
+    const resourceLayers = [
+        { name: 'mana-overlay', colorFunc: d => config.manaColor(d.properties.manaValue), opacity: 0.6 },
+        { name: 'agri-overlay', colorFunc: d => config.agriColor(d.properties.agriPotential), opacity: 0.7 },
+        { name: 'forest-overlay', colorFunc: d => config.forestColor(d.properties.forestPotential), opacity: 0.7 },
+        { name: 'mining-overlay', colorFunc: d => config.miningColor(d.properties.miningPotential), opacity: 0.7 },
+        { name: 'fishing-overlay', colorFunc: d => config.fishingColor(d.properties.fishingPotential), opacity: 0.7 },
+        { name: 'hunting-overlay', colorFunc: d => config.huntingColor(d.properties.huntingPotential), opacity: 0.7 },
+        { name: 'pastoral-overlay', colorFunc: d => config.pastoralColor(d.properties.pastoralPotential), opacity: 0.7 },
+        { name: 'livestock-overlay', colorFunc: d => config.livestockColor(d.properties.livestockPotential), opacity: 0.7 },
+    ];
+
+    resourceLayers.forEach(layer => {
+        if (layers[layer.name] && layers[layer.name].visible) {
+            const col = d3.color(layer.colorFunc(d));
+            if (col) {
+                col.opacity = layer.opacity;
+                c = interpolateColor(c, col);
+            }
+        }
+    });
+
+
+    // 3. 植生オーバーレイ (陸地のみ)
+    if (!p.isWater && layers['vegetation-overlay'] && layers['vegetation-overlay'].visible) {
+        let displayVeg = p.vegetation;
+        if (displayVeg === '森林' || displayVeg === '針葉樹林') {
+            if (p.landUse.forest < 0.10) {
+                displayVeg = '草原';
+            }
+        }
+        const vegColorStr = config.TERRAIN_COLORS[displayVeg];
+        if (vegColorStr) {
+            const vegColor = d3.color(vegColorStr);
+            vegColor.opacity = 0.6;
+            c = interpolateColor(c, vegColor);
+        }
+    }
+
+    // 4. 積雪レイヤー (陸地のみ)
+    if (!p.isWater && layers.snow && layers.snow.visible && p.hasSnow) {
+        const snowColor = d3.color('#fff');
+        snowColor.opacity = 0.8;
+        c = interpolateColor(c, snowColor);
+    }
+
+    // 5. 領土オーバーレイ
+    if (layers['territory-overlay'] && layers['territory-overlay'].visible) {
+        const nationId = p.nationId || 0;
+        if (nationId > 0) {
+            const territoryColor = d3.color(nationColor(nationId));
+            territoryColor.opacity = 0.5;
+            c = interpolateColor(c, territoryColor);
+        }
+    }
+
+    // 6. 陰影 (レリーフ) レイヤー
+    // 乗算(Multiply)のような効果を出すため、RGB値を調整
+    if (layers.shading && layers.shading.visible) {
+        const shadingValue = p.shadingValue || 0;
+        // ユーザー要望により少し濃くする (0.10 -> 0.20)
+        const shadingOpacity = d3.scaleLinear().domain([0, 400]).range([0, 0.20]).clamp(true)(Math.abs(shadingValue));
+
+        if (shadingValue > 0) {
+            // 明るくする (白をブレンド)
+            const white = d3.color('#fff');
+            white.opacity = shadingOpacity;
+            c = interpolateColor(c, white);
+        } else {
+            // 暗くする (黒をブレンド)
+            const black = d3.color('#000');
+            black.opacity = shadingOpacity;
+            c = interpolateColor(c, black);
+        }
+    }
+
+    return c.formatRgb();
+}
+
+/**
+ * 2つの色をアルファブレンドするヘルパー関数
+ * @param {d3.Color} base - 背景色
+ * @param {d3.Color} overlay - 前景色 (opacityを持つこと)
+ * @returns {d3.Color} - 合成後の色
+ */
+function interpolateColor(base, overlay) {
+    if (!base || !overlay) return base || overlay;
+    const alpha = overlay.opacity;
+    if (isNaN(alpha)) return base;
+
+    const invAlpha = 1 - alpha;
+
+    // 単純なアルファブレンド: out = overlay * alpha + base * (1 - alpha)
+    const r = overlay.r * alpha + base.r * invAlpha;
+    const g = overlay.g * alpha + base.g * invAlpha;
+    const b = overlay.b * alpha + base.b * invAlpha;
+
+    return d3.rgb(r, g, b);
+}
+
+/**
+ * 全ヘックスの表示色を一括更新する関数
+ */
+function updateAllHexColors() {
+    if (!hexes) return;
+    // console.time('updateAllHexColors');
+    hexes.forEach(d => {
+        d._displayColor = calculateCompositeColor(d);
+    });
+    // console.timeEnd('updateAllHexColors');
+}
 
 // ================================================================
 // ■ UIセットアップ メイン関数
@@ -346,7 +547,23 @@ function updateVisibleHexes(transform) {
 
     // 全てのレイヤー変数を "layers.xxx.group" 形式で参照
 
-    // 4a. 基本地形レイヤー
+    // 4. 合成レイヤーの描画 (単一のポリゴンとして描画)
+    // 以前の terrain, white-map, vegetation, snow, shading, overlays を全て統合
+
+    // 念のため、他の合成対象レイヤーのグループを空にする (初期化時や切り替え時のゴミ残り防止)
+    const compositeLayerNames = [
+        'white-map-overlay', 'vegetation-overlay', 'snow', 'shading', 'territory-overlay',
+        'climate-zone-overlay', 'temp-overlay', 'precip-overlay', 'mana-overlay',
+        'agri-overlay', 'forest-overlay', 'mining-overlay', 'fishing-overlay',
+        'hunting-overlay', 'pastoral-overlay', 'livestock-overlay', 'monster-overlay', 'population-overlay'
+    ];
+    compositeLayerNames.forEach(name => {
+        if (layers[name] && layers[name].group) {
+            layers[name].group.selectAll('*').remove();
+        }
+    });
+
+    // メインの描画 (terrainレイヤーを使用)
     layers.terrain.group.selectAll('.hex')
         .data(visibleHexes, d => d.index)
         .join(
@@ -354,107 +571,11 @@ function updateVisibleHexes(transform) {
                 .attr('class', 'hex')
                 .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
                 .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-                .attr('fill', d => {
-                    const p = d.properties;
-                    // ヘックスが「水域」かつ「標高が0より大きい」場合、それは湖沼
-                    if (p.isWater && p.elevation > 0) {
-                        return config.TERRAIN_COLORS['湖沼'];
-                    }
-                    // それ以外（陸地および海洋）の場合は、標高/水深に応じたグラデーションを適用
-                    return config.getElevationColor(p.elevation);
-                })
                 .attr('stroke', 'none'),
             update => update,
             exit => exit.remove()
-        );
-
-    // 4b. 白地図オーバーレイヤー
-    layers['white-map-overlay'].group.selectAll('.white-map-hex')
-        .data(visibleHexes, d => d.index)
-        .join(
-            enter => enter.append('polygon')
-                .attr('class', 'white-map-hex')
-                .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-                .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-                .attr('fill', d => d.properties.isWater ? config.WHITE_MAP_COLORS.WATER : config.whiteMapElevationColor(d.properties.elevation))
-                .style('pointer-events', 'none'),
-            update => update,
-            exit => exit.remove()
-        );
-
-    const visibleLandHexes = visibleHexes.filter(d => !d.properties.isWater);
-
-    // 4c. 植生オーバーレイヤー
-    if (layers['vegetation-overlay'].visible) {
-        layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex')
-            .data(visibleLandHexes, d => d.index)
-            .join(
-                enter => enter.append('polygon')
-                    .attr('class', 'veg-overlay-hex')
-                    .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-                    .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-                    // 表示ルールのみを変更する
-                    .attr('fill', d => {
-                        const p = d.properties;
-                        let displayVeg = p.vegetation; // まずはデータ上の優勢植生を取得
-
-                        // もし優勢植生が森林系なら、優勢度チェックを行う
-                        if (displayVeg === '森林' || displayVeg === '針葉樹林') {
-                            // landUse.forest が 10%未満なら、表示上は「草原」として扱う
-                            if (p.landUse.forest < 0.10) {
-                                displayVeg = '草原';
-                            }
-                        }
-                        // 最終的に表示する植生の色を返す
-                        return config.TERRAIN_COLORS[displayVeg] || 'transparent';
-                    })
-                    .style('fill-opacity', 0.6)
-                    .style('pointer-events', 'none'),
-                update => update, // updateのロジックも必要であれば追記
-                exit => exit.remove()
-            );
-    } else {
-        layers['vegetation-overlay'].group.selectAll('.veg-overlay-hex').remove();
-    }
-
-    // 4d. 積雪レイヤー
-    if (layers.snow.visible) {
-        layers.snow.group.selectAll('.snow-hex')
-            .data(visibleLandHexes.filter(d => d.properties.hasSnow), d => d.index)
-            .join(
-                enter => enter.append('polygon')
-                    .attr('class', 'snow-hex')
-                    .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-                    .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-                    .attr('fill', '#fff')
-                    .style('fill-opacity', 0.8)
-                    .style('pointer-events', 'none'),
-                update => update,
-                exit => exit.remove()
-            );
-    } else {
-        layers.snow.group.selectAll('.snow-hex').remove();
-    }
-
-    // 4e. レリーフ（陰影）レイヤー
-    if (layers.shading.visible) {
-        layers.shading.group.selectAll('.shading-hex')
-            // ここのデータソースを visibleLandHexes から visibleHexes に変更
-            .data(visibleHexes, d => d.index)
-            .join(
-                enter => enter.append('polygon')
-                    .attr('class', 'shading-hex')
-                    .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-                    .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-                    .attr('fill', d => d.properties.shadingValue > 0 ? '#fff' : '#000')
-                    .style('fill-opacity', d => shadingOpacityScale(Math.abs(d.properties.shadingValue)))
-                    .style('pointer-events', 'none'),
-                update => update,
-                exit => exit.remove()
-            );
-    } else {
-        layers.shading.group.selectAll('.shading-hex').remove();
-    }
+        )
+        .attr('fill', d => d._displayColor || '#000'); // 事前に計算された合成色を使用
 
     // 4j. 集落シンボル
     layers.settlement.group.selectAll('.settlement-hex')
@@ -477,44 +598,6 @@ function updateVisibleHexes(transform) {
             update => update,
             exit => exit.remove()
         );
-
-    // 4k. 各種情報オーバーレイヤー
-    const overlayDefinitions = {
-        'climate-zone-overlay': { data: visibleHexes, fill: d => config.CLIMATE_ZONE_COLORS[d.properties.climateZone], opacity: 0.6 },
-        'temp-overlay': { data: visibleHexes, fill: d => config.tempColor(d.properties.temperature), opacity: 0.6 },
-        'precip-overlay': { data: visibleHexes, fill: d => config.precipColor(d.properties.precipitation_mm), opacity: 0.6 },
-        'mana-overlay': { data: visibleHexes, fill: d => config.manaColor(d.properties.manaValue), opacity: 0.6 },
-        'agri-overlay': { data: visibleHexes, fill: d => config.agriColor(d.properties.agriPotential), opacity: 0.7 },
-        'forest-overlay': { data: visibleHexes, fill: d => config.forestColor(d.properties.forestPotential), opacity: 0.7 },
-        'mining-overlay': { data: visibleHexes, fill: d => config.miningColor(d.properties.miningPotential), opacity: 0.7 },
-        'fishing-overlay': { data: visibleHexes, fill: d => config.fishingColor(d.properties.fishingPotential), opacity: 0.7 },
-        'hunting-overlay': { data: visibleHexes, fill: d => config.huntingColor(d.properties.huntingPotential), opacity: 0.7 },
-        'pastoral-overlay': { data: visibleHexes, fill: d => config.pastoralColor(d.properties.pastoralPotential), opacity: 0.7 },
-        'livestock-overlay': { data: visibleHexes, fill: d => config.livestockColor(d.properties.livestockPotential), opacity: 0.7 },
-        'monster-overlay': { data: visibleHexes.filter(d => d.properties.monsterRank), fill: d => config.MONSTER_COLORS[d.properties.monsterRank], opacity: 0.5 },
-        'population-overlay': { data: visibleHexes.filter(d => d.properties.population > 0), fill: d => config.populationColor(d.properties.population), opacity: 0.9 },
-        'territory-overlay': { data: visibleHexes, fill: d => (d.properties.nationId || 0) === 0 ? '#fff0' : nationColor(d.properties.nationId), opacity: 0.5 }
-    };
-
-    for (const [layerName, { data, fill, opacity }] of Object.entries(overlayDefinitions)) {
-        if (!layers[layerName].visible) {
-            layers[layerName].group.selectAll('*').remove();
-            continue;
-        };
-        layers[layerName].group.selectAll(`.${layerName}-hex`)
-            .data(data, d => d.index)
-            .join(
-                enter => enter.append('polygon')
-                    .attr('class', `${layerName}-hex`)
-                    .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-                    .attr('transform', d => `translate(${d.cx},${d.cy}) scale(${hexOverlapScale})`)
-                    .attr('fill', fill)
-                    .style('fill-opacity', opacity)
-                    .style('pointer-events', 'none'),
-                update => update,
-                exit => exit.remove()
-            );
-    }
 
     // 4l. ヘックス境界線レイヤー
     layers['hex-border'].group.selectAll('.hex-border')
@@ -1040,7 +1123,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const ridgeWaterSystemLayer = createLayer('ridge-water-system', false);     // 稜線・水系図
 
     const territoryOverlayLayer = createLayer('territory-overlay', false);      // 領地
-    const hexBorderLayer = createLayer('hex-border', true);                     // ヘックスの境界線
+    const hexBorderLayer = createLayer('hex-border', false);                    // ヘックスの境界線 (デフォルトOFF)
     const roadLayer = createLayer('road');                                      // 道路網
     const seaRouteLayer = createLayer('sea-route');                             // 海路
     const borderLayer = createLayer('border');                                  // 国境線
@@ -1064,6 +1147,9 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const labelLayer = createLayer('labels');                                   // ラベル (集落名など)
     const interactionLayer = createLayer('interaction');                        // クリックイベントを受け取る透明レイヤー
     // ----- [描画順序: 手前] -----
+
+    // レイヤー作成後に全ヘックスの色を計算 (layersオブジェクトが参照可能な状態で実行)
+    updateAllHexColors();
 
     // --- 4. 静的なレイヤーの描画 (初回のみ) ---
 
@@ -1263,14 +1349,10 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             // ズーム終了時に、もともと表示すべきレイヤーを再表示する
             Object.entries(layers).forEach(([name, layer]) => {
                 if (layer.visible) {
-                    // 基本地図の切り替え状態を考慮
-                    if (name === 'terrain' && d3.select('input[value="white"]').property('checked')) {
-                        layer.group.style('display', 'none');
-                    } else if (name === 'white-map-overlay' && !d3.select('input[value="white"]').property('checked')) {
-                        layer.group.style('display', 'none');
-                    } else {
-                        layer.group.style('display', 'inline');
-                    }
+                    // 合成レイヤーの場合は、terrainレイヤー以外は非表示のままにする
+                    // (ただし、toggleLayerVisibilityで制御されているため、ここでは単純にvisibleフラグに従って表示すれば良い)
+                    // terrainレイヤーは常に表示（合成色で描画されるため）
+                    layer.group.style('display', 'inline');
                 }
             });
 
@@ -1295,8 +1377,10 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     d3.selectAll('input[name="map-type"]').on('change', function () {
         const selectedType = d3.select(this).property('value');
         const isWhiteMap = selectedType === 'white';
-        layers.terrain.group.style('display', isWhiteMap ? 'none' : 'inline');
-        layers['white-map-overlay'].group.style('display', isWhiteMap ? 'inline' : 'none');
+        // 合成レイヤー方式では、terrainレイヤーの表示/非表示を切り替える必要はない
+        // 代わりに色を再計算する
+        updateAllHexColors();
+
         layers.river.group.selectAll('.river-segment').attr('stroke', isWhiteMap ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.河川);
         layers.beach.group.style('display', isWhiteMap ? 'none' : 'inline');
         // 変更を即時反映するために描画関数を呼び出す
@@ -1466,6 +1550,7 @@ function updateHexesData(updatedAllHexes) {
  */
 export async function redrawClimate(allHexes) {
     updateHexesData(allHexes);
+    updateAllHexColors(); // 色を再計算
     drawBeaches(hexes); // 砂浜を再描画
     // updateVisibleHexesを呼び出して、表示を完全に再構築する
     if (svg) updateVisibleHexes(currentTransform);
@@ -1481,6 +1566,7 @@ export async function redrawSettlements(allHexes) {
     setAllHexesData(allHexes); // infoWindow側のデータも更新
     updateChildrenMap(allHexes);
     updateOverallInfo(allHexes);
+    updateAllHexColors(); // 色を再計算
     // updateVisibleHexesを呼び出して、表示を完全に再構築する
     if (svg) updateVisibleHexes(currentTransform);
     console.log("集落が更新され、再描画されました。");
@@ -1496,6 +1582,7 @@ export async function redrawRoadsAndNations(allHexes, roadPaths) {
     setAllHexesData(allHexes); // infoWindow側のデータも更新
     updateChildrenMap(allHexes);
     updateOverallInfo(allHexes);
+    updateAllHexColors(); // 色を再計算
 
     // 静的レイヤーを新しいデータで再描画
     drawRoads(roadPaths);
