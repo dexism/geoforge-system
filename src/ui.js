@@ -84,6 +84,8 @@ function toggleLayerVisibility(layerName, buttonElement) {
                 drawBorders();
             } else if (layerName === 'beach') {
                 drawBeaches(hexes);
+            } else if (layerName === 'contour') {
+                drawContours(hexes);
             }
         } else {
             // 非表示: DOM要素を削除してメモリを解放 (グループ自体は残す)
@@ -508,6 +510,77 @@ async function drawBeaches(hexes) {
         .style('pointer-events', 'none');
 }
 
+/**
+ * 等高線を描画する関数
+ * @param {Array} hexes - ヘックスデータの配列
+ * @param {Object} config - 設定オブジェクト
+ */
+async function drawContours(hexes) {
+    const layer = layers['contour'];
+    if (!layer) return;
+
+    // 既存のパスをクリア
+    layer.group.selectAll('*').remove();
+
+    // 非表示の場合は処理しない（DOM削除最適化のため）
+    if (!layer.visible) return;
+
+    // await addLogMessage("等高線の補間計算を開始します..."); // ログ出力は呼び出し元で行うか、ここでは省略
+
+    const hexWidth = 2 * config.r;
+    const hexHeight = Math.sqrt(3) * config.r;
+    // getBBox() は初回描画前に正確な値が取れないため、計算でマップ全体のサイズを算出する
+    const mapBBox = { x: 0, y: 0, width: (config.COLS * hexWidth * 3 / 4 + hexWidth / 4), height: (config.ROWS * hexHeight + hexHeight / 2) };
+    const resolution = config.CONTOUR_RESOLUTION;
+    const gridWidth = Math.floor(mapBBox.width / resolution);
+    const gridHeight = Math.floor(mapBBox.height / resolution);
+    const elevationValues = new Array(gridWidth * gridHeight);
+    const delaunay = d3.Delaunay.from(hexes.map(h => [h.cx, h.cy]));
+
+    // UIフリーズを防ぐため、チャンク処理を行う
+    // 注意: drawContoursが同期的に呼ばれる場合（トグル時など）はawaitできないが、
+    // ここではasync関数として定義し、呼び出し元で待機するか、またはトグル時は非同期で実行されることを許容する。
+
+    // トグル時のレスポンス向上のため、計算負荷が高い部分はWeb Workerにオフロードするのが理想だが、
+    // 現状はメインスレッドで分割実行する。
+
+    const processChunk = async () => {
+        for (let j = 0; j < gridHeight; ++j) {
+            for (let i = 0; i < gridWidth; ++i) {
+                const px = mapBBox.x + i * resolution, py = mapBBox.y + j * resolution;
+                const nearestHexIndex = delaunay.find(px, py), centerHex = hexes[nearestHexIndex];
+                const neighborIndices = centerHex.neighbors;
+                const pointsToConsider = [centerHex, ...neighborIndices.map(idx => hexes[idx])].filter(Boolean);
+                let totalWeight = 0, weightedElevationSum = 0;
+                pointsToConsider.forEach(hex => {
+                    const dist = Math.hypot(hex.cx - px, hex.cy - py);
+                    if (dist < 1e-6) { weightedElevationSum = hex.properties.isWater ? -1 : hex.properties.elevation; totalWeight = 1; return; }
+                    const weight = 1.0 / Math.pow(dist, 2);
+                    totalWeight += weight; weightedElevationSum += weight * (hex.properties.isWater ? -1 : hex.properties.elevation);
+                });
+                elevationValues[j * gridWidth + i] = (totalWeight > 0) ? weightedElevationSum / totalWeight : -1;
+            }
+            // 10行ごとに休憩 (トグル時はそこまで頻繁でなくて良いかもしれないが、念のため)
+            if (j % 10 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        const maxElevation = d3.max(hexes, h => h.properties.elevation);
+        const thresholds = d3.range(config.CONTOUR_INTERVAL, maxElevation, config.CONTOUR_INTERVAL);
+        const contours = d3.contours().size([gridWidth, gridHeight]).thresholds(thresholds)(elevationValues);
+
+        layer.group.selectAll("path")
+            .data(contours).join("path")
+            .attr("class", d => `contour-path ${d.value % 1000 === 0 ? 'contour-index' : 'contour-intermediate'}`)
+            .attr("d", d3.geoPath()).attr("transform", `translate(${mapBBox.x - resolution / 2}, ${mapBBox.y - resolution / 2}) scale(${resolution})`)
+            .style('fill', 'none')
+            .style('stroke', '#642') // 色設定を追加（CSS依存を減らす）
+            .style('stroke-width', d => d.value % 1000 === 0 ? 0.1 : 0.05)
+            .style('pointer-events', 'none');
+    };
+
+    await processChunk();
+}
+
 // getInfoText is imported from infoWindow.js
 
 // getAllSubordinateSettlements and updateChildrenMap are imported from infoWindow.js
@@ -772,6 +845,7 @@ function updateVisibleHexes(transform) {
                 .attr('points', d => d.points.map(p => p.join(',')).join(' '))
                 .style('fill', 'transparent')
                 .style('cursor', 'pointer')
+                .style('pointer-events', 'all') // 明示的にイベントを受け取る設定
                 // データバインディングのためにIDなどを属性として持たせる
                 .attr('data-index', d => d.index),
             update => update,
@@ -1217,6 +1291,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // --- UI操作用 ---
     const labelLayer = createLayer('labels');                                   // ラベル (集落名など)
     const interactionLayer = createLayer('interaction');                        // クリックイベントを受け取る透明レイヤー
+    interactionLayer.style('pointer-events', 'none'); // グループ自体はイベントを透過
     // ----- [描画順序: 手前] -----
 
     // レイヤー作成後に全ヘックスの色を計算 (layersオブジェクトが参照可能な状態で実行)
@@ -1233,48 +1308,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
     // 4g. 等高線
     await addLogMessage("等高線の補間計算を開始します...");
-    // getBBox() は初回描画前に正確な値が取れないため、計算でマップ全体のサイズを算出する
-    const mapBBox = { x: 0, y: 0, width: (config.COLS * hexWidth * 3 / 4 + hexWidth / 4), height: (config.ROWS * hexHeight + hexHeight / 2) };
-    const resolution = config.CONTOUR_RESOLUTION;
-    const gridWidth = Math.floor(mapBBox.width / resolution);
-    const gridHeight = Math.floor(mapBBox.height / resolution);
-    const elevationValues = new Array(gridWidth * gridHeight);
-    const delaunay = d3.Delaunay.from(hexes.map(h => [h.cx, h.cy]));
-    const totalPixels = gridWidth * gridHeight;
-    let processedPixels = 0;
-
-    // UIフリーズを防ぐため、ループの構造を全面的に変更
-    // 一行ずつ計算し、一行ごとにブラウザに制御を返すことで、プログレスバーの描画を確実に行う
-    for (let j = 0; j < gridHeight; ++j) {
-        for (let i = 0; i < gridWidth; ++i) {
-            const px = mapBBox.x + i * resolution, py = mapBBox.y + j * resolution;
-            const nearestHexIndex = delaunay.find(px, py), centerHex = hexes[nearestHexIndex];
-            const neighborIndices = centerHex.neighbors;
-            const pointsToConsider = [centerHex, ...neighborIndices.map(idx => hexes[idx])].filter(Boolean);
-            let totalWeight = 0, weightedElevationSum = 0;
-            pointsToConsider.forEach(hex => {
-                const dist = Math.hypot(hex.cx - px, hex.cy - py);
-                if (dist < 1e-6) { weightedElevationSum = hex.properties.isWater ? -1 : hex.properties.elevation; totalWeight = 1; return; }
-                const weight = 1.0 / Math.pow(dist, 2);
-                totalWeight += weight; weightedElevationSum += weight * (hex.properties.isWater ? -1 : hex.properties.elevation);
-            });
-            elevationValues[j * gridWidth + i] = (totalWeight > 0) ? weightedElevationSum / totalWeight : -1;
-        }
-
-        processedPixels += gridWidth;
-
-        // ブラウザにUIを更新する時間を与えるための非常に重要な一行
-        await new Promise(resolve => setTimeout(resolve, 0));
-    }
-
-    await addLogMessage("等高線のパスを生成中...");
-    const maxElevation = d3.max(hexes, h => h.properties.elevation);
-    const thresholds = d3.range(config.CONTOUR_INTERVAL, maxElevation, config.CONTOUR_INTERVAL);
-    const contours = d3.contours().size([gridWidth, gridHeight]).thresholds(thresholds)(elevationValues);
-    contourLayer.selectAll("path")
-        .data(contours).join("path")
-        .attr("class", d => `contour-path ${d.value % 1000 === 0 ? 'contour-index' : 'contour-intermediate'}`)
-        .attr("d", d3.geoPath()).attr("transform", `translate(${mapBBox.x - resolution / 2}, ${mapBBox.y - resolution / 2}) scale(${resolution})`);
+    await drawContours(hexes);
 
     // 4h. 河川と稜線
 
@@ -1561,7 +1595,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
 
     // --- 7. 初期ズーム位置の設定 ---
-    const targetHex = hexes.find(h => h.x === 57 && h.y === 50);
+    const targetHex = hexes.find(h => h.x === 56 && h.y === 49);
     if (targetHex) {
         const svgWidth = svg.node().getBoundingClientRect().width;
         const svgHeight = svg.node().getBoundingClientRect().height;
