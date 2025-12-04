@@ -109,10 +109,32 @@ function calculateCompositeColor(d) {
     let c = d3.color(baseColor);
     if (!c) return '#000'; // ベースカラーが無効な場合は黒を返す (安全策)
 
-    // 2. 各種情報オーバーレイ (ベースを上書き、またはブレンド)
-    // 排他制御されている地理情報レイヤーを確認
-    // (layersオブジェクトはグローバルスコープにある前提)
+    // 2. 植生オーバーレイ (陸地のみ)
+    if (!p.isWater && layers['vegetation-overlay'] && layers['vegetation-overlay'].visible) {
+        let displayVeg = p.vegetation;
+        if (displayVeg === '森林' || displayVeg === '針葉樹林') {
+            if (p.landUse.forest < 0.10) {
+                displayVeg = '草原';
+            }
+        }
+        const vegColorStr = config.TERRAIN_COLORS[displayVeg];
+        if (vegColorStr) {
+            const vegColor = d3.color(vegColorStr);
+            vegColor.opacity = 0.6;
+            c = interpolateColor(c, vegColor);
+        }
+    }
 
+    // 3. 積雪レイヤー (陸地のみ)
+    if (!p.isWater && layers.snow && layers.snow.visible && p.hasSnow) {
+        const snowColor = d3.color('#fff');
+        snowColor.opacity = 0.8;
+        c = interpolateColor(c, snowColor);
+    }
+
+    // 4. 各種情報オーバーレイ (ベース+植生+積雪の上に重ねる)
+
+    // 排他制御されている地理情報レイヤー
     // 気候ゾーン
     if (layers['climate-zone-overlay'] && layers['climate-zone-overlay'].visible) {
         const overlayColor = d3.color(config.CLIMATE_ZONE_COLORS[p.climateZone]);
@@ -153,9 +175,8 @@ function calculateCompositeColor(d) {
             c = interpolateColor(c, overlayColor);
         }
     }
-    // 資源系 (排他ではないが、ここでは簡易的に同列に扱うか、重ね合わせる)
-    // 実装の簡略化のため、資源系も排他グループとして扱うか、順次重ねる
-    // ここでは順次重ねる実装とする
+
+    // 資源系
     const resourceLayers = [
         { name: 'mana-overlay', colorFunc: d => config.manaColor(d.properties.manaValue), opacity: 0.6 },
         { name: 'agri-overlay', colorFunc: d => config.agriColor(d.properties.agriPotential), opacity: 0.7 },
@@ -167,6 +188,15 @@ function calculateCompositeColor(d) {
         { name: 'livestock-overlay', colorFunc: d => config.livestockColor(d.properties.livestockPotential), opacity: 0.7 },
     ];
 
+    // 資源レイヤーが1つでも有効なら、背景を彩度ダウン・明度アップする
+    const activeResourceLayer = resourceLayers.find(l => layers[l.name] && layers[l.name].visible);
+    if (activeResourceLayer) {
+        const hsl = d3.hsl(c);
+        hsl.s *= 0.3; // 彩度を下げる
+        hsl.l = Math.min(1, hsl.l * 1.4); // 明度を上げる
+        c = hsl.rgb();
+    }
+
     resourceLayers.forEach(layer => {
         if (layers[layer.name] && layers[layer.name].visible) {
             const col = d3.color(layer.colorFunc(d));
@@ -176,30 +206,6 @@ function calculateCompositeColor(d) {
             }
         }
     });
-
-
-    // 3. 植生オーバーレイ (陸地のみ)
-    if (!p.isWater && layers['vegetation-overlay'] && layers['vegetation-overlay'].visible) {
-        let displayVeg = p.vegetation;
-        if (displayVeg === '森林' || displayVeg === '針葉樹林') {
-            if (p.landUse.forest < 0.10) {
-                displayVeg = '草原';
-            }
-        }
-        const vegColorStr = config.TERRAIN_COLORS[displayVeg];
-        if (vegColorStr) {
-            const vegColor = d3.color(vegColorStr);
-            vegColor.opacity = 0.6;
-            c = interpolateColor(c, vegColor);
-        }
-    }
-
-    // 4. 積雪レイヤー (陸地のみ)
-    if (!p.isWater && layers.snow && layers.snow.visible && p.hasSnow) {
-        const snowColor = d3.color('#fff');
-        snowColor.opacity = 0.8;
-        c = interpolateColor(c, snowColor);
-    }
 
     // 5. 領土オーバーレイ
     if (layers['territory-overlay'] && layers['territory-overlay'].visible) {
@@ -1472,6 +1478,8 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                     updateLegend(targetLayerName);
                 }
             }
+            // レイヤーの可視状態が変わったので、色を再計算する
+            updateAllHexColors();
             updateVisibleHexes(d3.zoomTransform(svg.node()));
         });
     });
