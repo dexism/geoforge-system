@@ -312,23 +312,23 @@ export function getElevationColor(elevation) {
     return elevationColor_4k_plus(elevation);
 }
 export const TERRAIN_COLORS = {
+    深海: '#147',
+    海洋: '#48d',
     湖沼: '#058',
     河川: '#37b',
     砂浜: '#eeb',
     砂漠: '#eca',
+    荒れ地: '#ccb',
+    草原: '#bda',
+    湿地: '#676',
     温帯林: '#7a5',
     亜寒帯林: '#475',
     熱帯雨林: '#262',
-    湿地: '#676',
-    草原: '#bda',
-    荒れ地: '#ccb',
     アルパイン: '#aaa',
+    ツンドラ: '#bcd',
     サバンナ: '#dcb',
     ステップ: '#cda',
-    ツンドラ: '#bcd',
-    沿岸植生: '#8db',
-    海洋: '#48d',
-    深海: '#147'
+    沿岸植生: '#8db'
 };
 // 稜線・水系図の配色
 export const RIDGE_WATER_SYSTEM_COLORS = {

@@ -183,8 +183,12 @@ export function getInfoText(d) {
     const p = d.properties;
 
     // --- ヘルパー: アイコン付き行の生成 ---
-    const createRow = (icon, label, value, unit = '') => {
-        return `<div class="info-row"><span class="label"><span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${icon}</span>${label}</span><span class="value">${value}${unit}</span></div>`;
+    const createRow = (icon, label, value, unit = '', color = null) => {
+        let legendHtml = '';
+        if (color) {
+            legendHtml = `<span class="legend-icon" style="background-color:${color};"></span>`;
+        }
+        return `<div class="info-row"><span class="label">${legendHtml}<span class="material-icons-round" style="font-size: 20px; vertical-align: middle; margin-right: 4px;">${icon}</span>${label}</span><span class="value">${value}${unit}</span></div>`;
     };
 
     // --- 1. 基本情報カード ---
@@ -236,8 +240,6 @@ export function getInfoText(d) {
         });
         basicInfoHtml += `</div>`;
     }
-
-
 
     const basicCard = `<div class="info-card"><div class="card-header"><span class="material-icons-round" style="margin-right: 6px;">info</span>基本情報</div><div class="card-content">${basicInfoHtml}</div></div>`;
 
@@ -396,15 +398,15 @@ export function getInfoText(d) {
     envInfoHtml += `<div class="sector-block" style="margin-top:8px; padding-top: 4px;"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">square_foot</span>土地利用面積</h6>`;
 
     // 12. 海洋水域
-    if (oceanArea > 1) envInfoHtml += createRow('water', '海洋水域', Math.round(oceanArea).toLocaleString(), ' ha');
+    if (oceanArea > 1) envInfoHtml += createRow('water', '海洋水域', Math.round(oceanArea).toLocaleString(), ' ha', '#48d');
     // 13. 湖沼水域
-    if (lakeArea > 1) envInfoHtml += createRow('water', '湖沼水域', Math.round(lakeArea).toLocaleString(), ' ha');
+    if (lakeArea > 1) envInfoHtml += createRow('water', '湖沼水域', Math.round(lakeArea).toLocaleString(), ' ha', '#058');
     // 14. 河川水域
-    if (riverArea > 1) envInfoHtml += createRow('water', '河川水域', Math.round(riverArea).toLocaleString(), ' ha');
+    if (riverArea > 1) envInfoHtml += createRow('water', '河川水域', Math.round(riverArea).toLocaleString(), ' ha', '#37b');
 
     // 15. 農地面積
     if (p.cultivatedArea > 1) {
-        envInfoHtml += createRow('agriculture', '農地等', Math.round(p.cultivatedArea).toLocaleString(), ' ha');
+        envInfoHtml += createRow('agriculture', '農地等', Math.round(p.cultivatedArea).toLocaleString(), ' ha', '#fb7');
     }
 
     // 16. 集落面積
@@ -413,7 +415,7 @@ export function getInfoText(d) {
         settlementArea = 0.02 * Math.pow(p.population, 0.85);
     }
     if (settlementArea > 1) {
-        envInfoHtml += createRow('location_city', '集落等', Math.round(settlementArea).toLocaleString(), ' ha');
+        envInfoHtml += createRow('location_city', '集落等', Math.round(settlementArea).toLocaleString(), ' ha', '#d33');
     }
 
     // 17. 道路面積
@@ -422,7 +424,7 @@ export function getInfoText(d) {
         roadArea = p.roadEdges.reduce((a, b) => a + b, 0);
     }
     if (roadArea > 0) {
-        envInfoHtml += createRow('add_road', '道路等', Math.round(roadArea).toLocaleString(), ' ha');
+        envInfoHtml += createRow('add_road', '道路等', Math.round(roadArea).toLocaleString(), ' ha', '#d3d');
     }
 
     // 18. 詳細植生面積 (v3.4)
@@ -430,27 +432,27 @@ export function getInfoText(d) {
     const landUseSegments = [];
 
     // 水域・人為的利用の追加
-    if (oceanArea > 1) landUseSegments.push({ label: '海洋', area: oceanArea, color: '#1f77b4' }); // 濃い青
-    if (lakeArea > 1) landUseSegments.push({ label: '湖沼', area: lakeArea, color: '#aec7e8' }); // 薄い青
-    if (riverArea > 1) landUseSegments.push({ label: '河川', area: riverArea, color: '#6baed6' }); // 中間の青
-    if (p.cultivatedArea > 1) landUseSegments.push({ label: '農地', area: p.cultivatedArea, color: '#ffbb78' }); // 薄いオレンジ
-    if (settlementArea > 1) landUseSegments.push({ label: '集落', area: settlementArea, color: '#d62728' }); // 赤
-    if (roadArea > 0) landUseSegments.push({ label: '道路', area: roadArea, color: '#7f7f7f' }); // グレー
+    if (oceanArea > 1) landUseSegments.push({ label: '海洋', area: oceanArea, color: '#48d' }); // 濃い青
+    if (lakeArea > 1) landUseSegments.push({ label: '湖沼', area: lakeArea, color: '#058' }); // 薄い青
+    if (riverArea > 1) landUseSegments.push({ label: '河川', area: riverArea, color: '#37b' }); // 中間の青
+    if (p.cultivatedArea > 1) landUseSegments.push({ label: '農地', area: p.cultivatedArea, color: '#fb7' }); // 薄いオレンジ
+    if (settlementArea > 1) landUseSegments.push({ label: '集落', area: settlementArea, color: '#d33' }); // 赤
+    if (roadArea > 0) landUseSegments.push({ label: '道路', area: roadArea, color: '#d3d' }); // グレー
 
     if (p.vegetationAreas) {
         const vegLabelMap = {
-            desert: { label: '砂漠帯', icon: 'landscape', color: '#e6c288' }, // 砂色
-            wasteland: { label: '荒地帯', icon: 'terrain', color: '#a69b8f' }, // 灰色っぽい茶色
-            grassland: { label: '草原帯', icon: 'grass', color: '#7cfc00' }, // 明るい緑
-            wetland: { label: '湿地帯', icon: 'water_drop', color: '#20b2aa' }, // ライトシーグリーン
-            temperateForest: { label: '温帯林', icon: 'forest', color: '#228b22' }, // フォレストグリーン
-            subarcticForest: { label: '亜寒帯林', icon: 'forest', color: '#006400' }, // ダークグリーン
-            tropicalRainforest: { label: '熱帯雨林', icon: 'forest', color: '#004d00' }, // 非常に濃い緑
-            alpine: { label: 'アルパイン', icon: 'terrain', color: '#dcdcdc' }, // ゲインズボロ (薄いグレー)
-            tundra: { label: 'ツンドラ', icon: 'ac_unit', color: '#e0ffff' }, // ライトシアン
-            savanna: { label: 'サバンナ', icon: 'grass', color: '#f0e68c' }, // カーキ
-            steppe: { label: 'ステップ', icon: 'grass', color: '#bdb76b' }, // ダークカーキ
-            coastal: { label: '沿岸植生', icon: 'waves', color: '#40e0d0' } // ターコイズ
+            desert: { label: '砂漠帯', icon: 'landscape', color: '#eca' }, // 砂色
+            wasteland: { label: '荒地帯', icon: 'terrain', color: '#ccb' }, // 灰色っぽい茶色
+            grassland: { label: '草原帯', icon: 'grass', color: '#bda' }, // 明るい緑
+            wetland: { label: '湿地帯', icon: 'water_drop', color: '#676' }, // ライトシーグリーン
+            temperateForest: { label: '温帯林', icon: 'forest', color: '#7a5' }, // フォレストグリーン
+            subarcticForest: { label: '亜寒帯林', icon: 'forest', color: '#475' }, // ダークグリーン
+            tropicalRainforest: { label: '熱帯雨林', icon: 'forest', color: '#262' }, // 非常に濃い緑
+            alpine: { label: 'アルパイン', icon: 'terrain', color: '#aaa' }, // ゲインズボロ (薄いグレー)
+            tundra: { label: 'ツンドラ', icon: 'ac_unit', color: '#bcd' }, // ライトシアン
+            savanna: { label: 'サバンナ', icon: 'grass', color: '#dcb' }, // カーキ
+            steppe: { label: 'ステップ', icon: 'grass', color: '#cda' }, // ダークカーキ
+            coastal: { label: '沿岸植生', icon: 'waves', color: '#8db' } // ターコイズ
         };
 
         // 人為的な土地利用面積の合計を計算
@@ -480,11 +482,11 @@ export function getInfoText(d) {
             .forEach(([key, area]) => {
                 const info = vegLabelMap[key];
                 if (info) {
-                    envInfoHtml += createRow(info.icon, info.label, Math.round(area).toLocaleString(), ' ha');
+                    envInfoHtml += createRow(info.icon, info.label, Math.round(area).toLocaleString(), ' ha', info.color);
                     landUseSegments.push({ label: info.label, area: area, color: info.color });
                 } else {
                     // 未定義のキーがあればそのまま表示
-                    envInfoHtml += createRow('help_outline', key, Math.round(area).toLocaleString(), ' ha');
+                    envInfoHtml += createRow('help_outline', key, Math.round(area).toLocaleString(), ' ha', '#ccc');
                     landUseSegments.push({ label: key, area: area, color: '#ccc' });
                 }
             });
@@ -492,7 +494,7 @@ export function getInfoText(d) {
         // 旧データ互換
         const forestArea = p.landUse.forest * config.HEX_AREA_HA;
         if (forestArea > 1) {
-            envInfoHtml += createRow('forest', '森林面積', Math.round(forestArea).toLocaleString(), ' ha');
+            envInfoHtml += createRow('forest', '森林面積', Math.round(forestArea).toLocaleString(), ' ha', '#228b22');
             landUseSegments.push({ label: '森林', area: forestArea, color: '#228b22' });
         }
     }
