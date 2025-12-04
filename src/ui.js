@@ -107,6 +107,7 @@ function calculateCompositeColor(d) {
 
     // d3.colorでパースして操作可能なオブジェクトにする
     let c = d3.color(baseColor);
+    if (!c) return '#000'; // ベースカラーが無効な場合は黒を返す (安全策)
 
     // 2. 各種情報オーバーレイ (ベースを上書き、またはブレンド)
     // 排他制御されている地理情報レイヤーを確認
@@ -1592,6 +1593,16 @@ export async function redrawRoadsAndNations(allHexes, roadPaths) {
     // updateVisibleHexesを呼び出して、表示を完全に再構築する
     if (svg) updateVisibleHexes(currentTransform);
     console.log("道路・国家が更新され、再描画されました。");
+}
+
+/**
+ * 汎用的な再描画関数 (大陸生成中などに使用)
+ * @param {Array<object>} allHexes - 更新された全ヘックスデータ
+ */
+export async function redrawMap(allHexes) {
+    updateHexesData(allHexes);
+    updateAllHexColors();
+    if (svg) updateVisibleHexes(currentTransform);
 }
 
 /**

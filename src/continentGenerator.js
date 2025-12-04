@@ -742,7 +742,7 @@ function calculateFinalProperties(allHexes) {
  * @param {Function} addLogMessage - ログ出力用の関数
  * @returns {Array<object>} - 生成された全ヘックスのデータ
  */
-export async function generatePhysicalMap(addLogMessage) {
+export async function generatePhysicalMap(addLogMessage, redrawFn) {
     // 処理の開始時にノイズ関数を再初期化する
     initializeNoiseFunctions();
 
@@ -776,14 +776,17 @@ export async function generatePhysicalMap(addLogMessage) {
     // パス1.2：大陸棚の形成
     await addLogMessage("大陸棚と深海を形成しています...");
     generateContinentalShelves(allHexes);
+    if (redrawFn) await redrawFn(allHexes);
 
     // パス2：水系を生成
     await addLogMessage("水系と河川を配置しています...");
     generateWaterSystems(allHexes);
+    if (redrawFn) await redrawFn(allHexes);
 
     // パス2.2：陸地の最低標高を補正
     await addLogMessage("沿岸の地形を最終調整しています...");
     adjustLandElevation(allHexes);
+    if (redrawFn) await redrawFn(allHexes);
 
     return allHexes;
 }

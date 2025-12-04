@@ -9,7 +9,7 @@ import { generateCivilization, determineTerritories, defineNations, assignTerrit
 import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership } from './economySimulator.js';
 
 
-import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI } from './ui.js';
+import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex } from './utils.js';
 
@@ -106,7 +106,21 @@ async function runStep1_Continent() {
     await addLogMessage("ステップ1: 大陸の土台を生成しています...");
 
     // 物理マップ生成のみを呼び出す
-    worldData.allHexes = await generatePhysicalMap(addLogMessage);
+    // 途中経過を描画するためのコールバック関数
+    const redrawFn = async (currentHexes) => {
+        if (!uiInitialized) {
+            await addLogMessage("初回描画を準備しています...");
+            await setupUI(currentHexes, [], addLogMessage);
+            uiInitialized = true;
+        } else {
+            // 既に初期化されている場合は、データと色を更新して再描画
+            await redrawMap(currentHexes);
+            // UI更新のために少し待機
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+    };
+
+    worldData.allHexes = await generatePhysicalMap(addLogMessage, redrawFn);
 
     if (!uiInitialized) {
         await addLogMessage("初回描画を準備しています...");
