@@ -32,6 +32,7 @@ let currentTransform = d3.zoomIdentity; // 現在のズーム状態
 let allHexesData = [];
 let infoWindow;
 let infoContent;
+let tooltipContainer; // ツールチップ用コンテナ
 // childrenMapはinfoWindow.jsからインポート
 const nationColor = d3.scaleOrdinal(d3.schemeTableau10); // 国家ごとの色を固定するためのカラースケール
 // ミニマップ関連の変数を追加
@@ -71,8 +72,24 @@ function toggleLayerVisibility(layerName, buttonElement) {
         updateAllHexColors();
         if (svg) updateVisibleHexes(currentTransform);
     } else {
-        // 独立レイヤーの場合は、従来通りグループの表示/非表示を切り替え
-        layer.group.style('display', layer.visible ? 'inline' : 'none');
+        // 独立レイヤーの最適化: 非表示時はDOMを削除し、表示時に再描画する
+        if (layer.visible) {
+            // 表示: グループを表示状態にし、必要なら再描画
+            layer.group.style('display', 'inline');
+
+            // データが存在する場合のみ再描画を実行
+            if (layerName === 'road' || layerName === 'sea-route') {
+                if (roadPathsData && roadPathsData.length > 0) drawRoads(roadPathsData);
+            } else if (layerName === 'border') {
+                drawBorders();
+            } else if (layerName === 'beach') {
+                drawBeaches(hexes);
+            }
+        } else {
+            // 非表示: DOM要素を削除してメモリを解放 (グループ自体は残す)
+            layer.group.selectAll('*').remove();
+            layer.group.style('display', 'none');
+        }
     }
 
     buttonElement.classList.toggle('active', layer.visible);
@@ -668,6 +685,25 @@ function updateVisibleHexes(transform) {
 
     // インタラクションレイヤー
 
+    // --- ツールチップとイベント委譲の実装 ---
+
+    // 既存のツールチップがあれば削除 (初期化時用)
+    if (!tooltipContainer) {
+        tooltipContainer = d3.select('body').append('div')
+            .attr('class', 'custom-tooltip')
+            .style('position', 'absolute')
+            .style('visibility', 'hidden')
+            .style('background-color', 'rgba(0, 0, 0, 0.8)')
+            .style('color', '#fff')
+            .style('padding', '8px')
+            .style('border-radius', '4px')
+            .style('font-size', '12px')
+            .style('pointer-events', 'none')
+            .style('z-index', '9999')
+            .style('white-space', 'pre-wrap')
+            .style('max-width', '300px');
+    }
+
     const getTooltipText = (d) => {
         const p = d.properties;
 
@@ -678,7 +714,7 @@ function updateVisibleHexes(transform) {
         const vegetation = p.vegetation || 'なし';
 
         headerText += `地形：${terrain}\n`;
-        headerText += `植生：${vegetation}\n`;
+        headerText += `代表植生：${vegetation}\n`;
 
         // 特性リストを動的に生成
         const features = [];
@@ -727,185 +763,213 @@ function updateVisibleHexes(transform) {
         return headerText + bodyText;
     };
 
+    // インタラクションレイヤーの更新 (イベントリスナーは集約するため、ここでは要素生成のみ)
     layers.interaction.group.selectAll('.interactive-hex')
         .data(visibleHexes, d => d.index)
         .join(
-            enter => {
-                const newHexes = enter.append('polygon').attr('class', 'interactive-hex')
-                    .attr('points', d => d.points.map(p => p.join(',')).join(' '))
-                    .style('fill', 'transparent')
-                    .style('cursor', 'pointer');
+            enter => enter.append('polygon')
+                .attr('class', 'interactive-hex')
+                .attr('points', d => d.points.map(p => p.join(',')).join(' '))
+                .style('fill', 'transparent')
+                .style('cursor', 'pointer')
+                // データバインディングのためにIDなどを属性として持たせる
+                .attr('data-index', d => d.index),
+            update => update,
+            exit => exit.remove()
+        );
 
-                newHexes.append('title').text(d => getTooltipText(d));
+    // イベント委譲 (Event Delegation)
+    // 親グループに1つだけリスナーを設定
+    layers.interaction.group.on('click', (event) => {
+        const target = event.target;
+        if (target.tagName === 'polygon' && target.classList.contains('interactive-hex')) {
+            // D3のデータバインディングからデータを取得
+            const d = d3.select(target).datum();
+            if (!d) return;
 
-                newHexes.on('click', (event, d) => {
-                    // (クリック時の処理は変更なし)
-                    const highlightLayer = layers['highlight-overlay'].group;
-                    highlightLayer.selectAll('*').remove();
-                    const p = d.properties;
-                    if (['首都', '都市', '領都', '街', '町', '村'].includes(p.settlement)) {
-                        const findAllDescendants = (startIndex) => {
-                            const descendants = [];
-                            const queue = [{ index: startIndex, depth: 0 }];
-                            const visited = new Set([startIndex]);
-                            let head = 0;
-                            while (head < queue.length) {
-                                const current = queue[head++];
-                                const children = childrenMap.get(current.index) || [];
-                                children.forEach(childIndex => {
-                                    if (!visited.has(childIndex)) {
-                                        visited.add(childIndex);
-                                        const childDepth = current.depth + 1;
-                                        descendants.push({ hex: hexes[childIndex], depth: childDepth });
-                                        queue.push({ index: childIndex, depth: childDepth });
-                                    }
-                                });
+            const highlightLayer = layers['highlight-overlay'].group;
+            highlightLayer.selectAll('*').remove();
+            const p = d.properties;
+            if (['首都', '都市', '領都', '街', '町', '村'].includes(p.settlement)) {
+                const findAllDescendants = (startIndex) => {
+                    const descendants = [];
+                    const queue = [{ index: startIndex, depth: 0 }];
+                    const visited = new Set([startIndex]);
+                    let head = 0;
+                    while (head < queue.length) {
+                        const current = queue[head++];
+                        const children = childrenMap.get(current.index) || [];
+                        children.forEach(childIndex => {
+                            if (!visited.has(childIndex)) {
+                                visited.add(childIndex);
+                                const childDepth = current.depth + 1;
+                                descendants.push({ hex: hexes[childIndex], depth: childDepth });
+                                queue.push({ index: childIndex, depth: childDepth });
                             }
-                            return descendants;
-                        };
-                        const descendants = findAllDescendants(d.index);
-                        if (descendants.length > 0) {
-                            const maxDepth = Math.max(0, ...descendants.map(item => item.depth));
-                            const colorScale = d3.scaleLinear().domain([2, Math.max(2, maxDepth)])
-                                .range(['#600', 'black']).interpolate(d3.interpolateRgb);
-                            descendants.forEach(item => {
-                                let color = (item.depth === 1) ? 'red' : colorScale(item.depth);
-                                highlightLayer.append('polygon')
-                                    .attr('points', item.hex.points.map(pt => pt.join(',')).join(' '))
-                                    .attr('fill', color)
-                                    .style('fill-opacity', 0.8)
-                                    .style('pointer-events', 'none');
-                            });
-                        }
-
-                        if (p.parentHexId !== null) {
-                            const superiorHex = hexes[p.parentHexId];
-                            if (superiorHex) {
-                                highlightLayer.append('polygon')
-                                    .attr('points', superiorHex.points.map(pt => pt.join(',')).join(' '))
-                                    .attr('fill', '#0ff')
-                                    .style('fill-opacity', 1.0)
-                                    .style('pointer-events', 'none');
-
-                                const childIndex = d.index;
-                                const parentIndex = superiorHex.index;
-                                const targetRoad = roadPathsData.find(road => {
-                                    if (road.path.length < 2) return false;
-                                    const startNodeIndex = getIndex(road.path[0].x, road.path[0].y);
-                                    const endNodeIndex = getIndex(road.path[road.path.length - 1].x, road.path[road.path.length - 1].y);
-                                    return (startNodeIndex === childIndex && endNodeIndex === parentIndex) || (startNodeIndex === parentIndex && endNodeIndex === childIndex);
-                                });
-
-                                if (targetRoad) {
-                                    const pathSegments = [];
-                                    const pathHexes = targetRoad.path.map(pos => hexes[getIndex(pos.x, pos.y)]);
-
-                                    for (let i = 0; i < pathHexes.length; i++) {
-                                        const currentHex = pathHexes[i];
-                                        if (!currentHex) continue;
-                                        const prevHex = i > 0 ? pathHexes[i - 1] : null;
-                                        const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
-
-                                        const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
-                                        const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
-                                        const controlPoint = [currentHex.cx, currentHex.cy];
-
-                                        if (!startPoint || !endPoint || (startPoint[0] === endPoint[0] && startPoint[1] === endPoint[1])) continue;
-
-                                        const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                                        pathSegments.push({ path: pathString });
-                                    }
-                                    highlightLayer.selectAll('.connection-path')
-                                        .data(pathSegments)
-                                        .enter()
-                                        .append('path')
-                                        .attr('class', 'connection-path')
-                                        .attr('d', segment => segment.path)
-                                        .attr('stroke', 'cyan')
-                                        .attr('stroke-width', 4)
-                                        .attr('fill', 'none')
-                                        .style('pointer-events', 'none');
-                                }
-                            }
-                        }
+                        });
                     }
-
-                    // --- 3. 航路ハイライトのロジック ---
-                    const clickedIndex = d.index;
-                    // クリックされた港から発着する全ての航路をフィルタリング
-                    const relatedSeaRoutes = roadPathsData.filter(road => {
-                        if (road.level !== 10 || road.path.length < 2) return false;
-                        const startIndex = getIndex(road.path[0].x, road.path[0].y);
-                        const endIndex = getIndex(road.path[road.path.length - 1].x, road.path[road.path.length - 1].y);
-                        return startIndex === clickedIndex || endIndex === clickedIndex;
+                    return descendants;
+                };
+                const descendants = findAllDescendants(d.index);
+                if (descendants.length > 0) {
+                    const maxDepth = Math.max(0, ...descendants.map(item => item.depth));
+                    const colorScale = d3.scaleLinear().domain([2, Math.max(2, maxDepth)])
+                        .range(['#600', 'black']).interpolate(d3.interpolateRgb);
+                    descendants.forEach(item => {
+                        let color = (item.depth === 1) ? 'red' : colorScale(item.depth);
+                        highlightLayer.append('polygon')
+                            .attr('points', item.hex.points.map(pt => pt.join(',')).join(' '))
+                            .attr('fill', color)
+                            .style('fill-opacity', 0.8)
+                            .style('pointer-events', 'none');
                     });
+                }
 
-                    if (relatedSeaRoutes.length > 0) {
-                        const seaRouteSegments = [];
-                        relatedSeaRoutes.forEach(route => {
-                            const pathHexes = route.path.map(p => hexes[getIndex(p.x, p.y)]).filter(Boolean);
-                            if (pathHexes.length < 2) return;
+                if (p.parentHexId !== null) {
+                    const superiorHex = hexes[p.parentHexId];
+                    if (superiorHex) {
+                        highlightLayer.append('polygon')
+                            .attr('points', superiorHex.points.map(pt => pt.join(',')).join(' '))
+                            .attr('fill', '#0ff')
+                            .style('fill-opacity', 1.0)
+                            .style('pointer-events', 'none');
+
+                        const childIndex = d.index;
+                        const parentIndex = superiorHex.index;
+                        const targetRoad = roadPathsData.find(road => {
+                            if (road.path.length < 2) return false;
+                            const startNodeIndex = getIndex(road.path[0].x, road.path[0].y);
+                            const endNodeIndex = getIndex(road.path[road.path.length - 1].x, road.path[road.path.length - 1].y);
+                            return (startNodeIndex === childIndex && endNodeIndex === parentIndex) || (startNodeIndex === parentIndex && endNodeIndex === childIndex);
+                        });
+
+                        if (targetRoad) {
+                            const pathSegments = [];
+                            const pathHexes = targetRoad.path.map(pos => hexes[getIndex(pos.x, pos.y)]);
 
                             for (let i = 0; i < pathHexes.length; i++) {
                                 const currentHex = pathHexes[i];
-                                if (!currentHex.properties.isWater && i > 0 && i < pathHexes.length - 1) continue;
+                                if (!currentHex) continue;
                                 const prevHex = i > 0 ? pathHexes[i - 1] : null;
                                 const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
+
                                 const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
                                 const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
-                                if (!startPoint || !endPoint) continue;
                                 const controlPoint = [currentHex.cx, currentHex.cy];
+
+                                if (!startPoint || !endPoint || (startPoint[0] === endPoint[0] && startPoint[1] === endPoint[1])) continue;
+
                                 const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                                seaRouteSegments.push({ path: pathString });
+                                pathSegments.push({ path: pathString });
                             }
-                        });
-
-                        // ハイライトレイヤーに航路を描画
-                        highlightLayer.selectAll('.sea-route-highlight')
-                            .data(seaRouteSegments).enter().append('path')
-                            .attr('class', 'sea-route-highlight')
-                            .attr('d', d => d.path)
-                            .attr('stroke', 'cyan')
-                            .attr('stroke-width', 4)
-                            .attr('fill', 'none')
-                            .style('pointer-events', 'none');
+                            highlightLayer.selectAll('.connection-path')
+                                .data(pathSegments)
+                                .enter()
+                                .append('path')
+                                .attr('class', 'connection-path')
+                                .attr('d', segment => segment.path)
+                                .attr('stroke', 'cyan')
+                                .attr('stroke-width', 4)
+                                .attr('fill', 'none')
+                                .style('pointer-events', 'none');
+                        }
                     }
+                }
+            }
 
-                    // --- 4. 共通の処理 (変更なし) ---
-                    highlightLayer.append('polygon').attr('points', d.points.map(p => p.join(',')).join(' '))
-                        .attr('fill', 'none')
-                        .attr('stroke', 'cyan')
-                        .attr('stroke-width', 5)
-                        .style('pointer-events', 'none');
+            // --- 3. 航路ハイライトのロジック ---
+            const clickedIndex = d.index;
+            // クリックされた港から発着する全ての航路をフィルタリング
+            const relatedSeaRoutes = roadPathsData.filter(road => {
+                if (road.level !== 10 || road.path.length < 2) return false;
+                const startIndex = getIndex(road.path[0].x, road.path[0].y);
+                const endIndex = getIndex(road.path[road.path.length - 1].x, road.path[road.path.length - 1].y);
+                return startIndex === clickedIndex || endIndex === clickedIndex;
+            });
 
-                    infoContent.innerHTML = getInfoText(d);
+            if (relatedSeaRoutes.length > 0) {
+                const seaRouteSegments = [];
+                relatedSeaRoutes.forEach(route => {
+                    const pathHexes = route.path.map(p => hexes[getIndex(p.x, p.y)]).filter(Boolean);
+                    if (pathHexes.length < 2) return;
 
-                    // コピーボタンのイベントリスナーを設定
-                    const copyBtn = document.getElementById('copy-info-json-btn');
-                    if (copyBtn) {
-                        copyBtn.addEventListener('click', () => {
-                            const jsonStr = generateHexJson(d);
-                            navigator.clipboard.writeText(jsonStr).then(() => {
-                                alert('JSONをクリップボードにコピーしました。');
-                            }).catch(err => {
-                                console.error('コピーに失敗しました:', err);
-                                alert('コピーに失敗しました。');
-                            });
-                        });
+                    for (let i = 0; i < pathHexes.length; i++) {
+                        const currentHex = pathHexes[i];
+                        if (!currentHex.properties.isWater && i > 0 && i < pathHexes.length - 1) continue;
+                        const prevHex = i > 0 ? pathHexes[i - 1] : null;
+                        const nextHex = i < pathHexes.length - 1 ? pathHexes[i + 1] : null;
+                        const startPoint = prevHex ? getSharedEdgeMidpoint(currentHex, prevHex) : [currentHex.cx, currentHex.cy];
+                        const endPoint = nextHex ? getSharedEdgeMidpoint(currentHex, nextHex) : [currentHex.cx, currentHex.cy];
+                        if (!startPoint || !endPoint) continue;
+                        const controlPoint = [currentHex.cx, currentHex.cy];
+                        const pathString = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
+                        seaRouteSegments.push({ path: pathString });
                     }
-
-                    infoWindow.classList.remove('hidden');
-                    adjustSidebarHeight();
-                    event.stopPropagation();
                 });
-                return newHexes;
-            },
-            update => {
-                update.select('title').text(d => getTooltipText(d));
-                return update;
-            },
-            exit => exit.remove()
-        );
+
+                // ハイライトレイヤーに航路を描画
+                highlightLayer.selectAll('.sea-route-highlight')
+                    .data(seaRouteSegments).enter().append('path')
+                    .attr('class', 'sea-route-highlight')
+                    .attr('d', d => d.path)
+                    .attr('stroke', 'cyan')
+                    .attr('stroke-width', 4)
+                    .attr('fill', 'none')
+                    .style('pointer-events', 'none');
+            }
+
+            // --- 4. 共通の処理 (変更なし) ---
+            highlightLayer.append('polygon').attr('points', d.points.map(p => p.join(',')).join(' '))
+                .attr('fill', 'none')
+                .attr('stroke', 'cyan')
+                .attr('stroke-width', 5)
+                .style('pointer-events', 'none');
+
+            infoContent.innerHTML = getInfoText(d);
+
+            // コピーボタンのイベントリスナーを設定
+            const copyBtn = document.getElementById('copy-info-json-btn');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', () => {
+                    const jsonStr = generateHexJson(d);
+                    navigator.clipboard.writeText(jsonStr).then(() => {
+                        alert('JSONをクリップボードにコピーしました。');
+                    }).catch(err => {
+                        console.error('コピーに失敗しました:', err);
+                        alert('コピーに失敗しました。');
+                    });
+                });
+            }
+
+            infoWindow.classList.remove('hidden');
+            adjustSidebarHeight();
+            event.stopPropagation();
+        }
+    })
+        .on('mousemove', (event) => {
+            // ツールチップの位置更新
+            if (tooltipContainer.style('visibility') === 'visible') {
+                tooltipContainer
+                    .style('top', (event.pageY - 10) + 'px')
+                    .style('left', (event.pageX + 10) + 'px');
+            }
+        })
+        .on('mouseover', (event) => {
+            const target = event.target;
+            if (target.tagName === 'polygon' && target.classList.contains('interactive-hex')) {
+                const d = d3.select(target).datum();
+                if (d) {
+                    tooltipContainer.text(getTooltipText(d));
+                    tooltipContainer.style('visibility', 'visible');
+                }
+            }
+        })
+        .on('mouseout', (event) => {
+            const target = event.target;
+            if (target.tagName === 'polygon' && target.classList.contains('interactive-hex')) {
+                tooltipContainer.style('visibility', 'hidden');
+            }
+        });
 }
 
 /**
@@ -1497,11 +1561,11 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
 
     // --- 7. 初期ズーム位置の設定 ---
-    const targetHex = hexes.find(h => h.x === 50 && h.y === 43);
+    const targetHex = hexes.find(h => h.x === 57 && h.y === 50);
     if (targetHex) {
         const svgWidth = svg.node().getBoundingClientRect().width;
         const svgHeight = svg.node().getBoundingClientRect().height;
-        const initialTransform = d3.zoomIdentity.translate(svgWidth / 2 - targetHex.cx, svgHeight / 2 - targetHex.cy).scale(1.0);
+        const initialTransform = d3.zoomIdentity.translate(svgWidth / 2 - targetHex.cx, svgHeight / 2 - targetHex.cy).scale(2.0);
 
         // D3にtransformを適用させる
         svg.call(zoom.transform, initialTransform);
