@@ -671,74 +671,112 @@ function drawRidges(visibleHexes) {
 }
 
 /**
- * 等高線を描画する関数
- * @param {Array} hexes - ヘックスデータの配列
- * @param {Object} config - 設定オブジェクト
+ * ブロック単位で等高線を描画する関数
+ * @param {Object} block - ブロックオブジェクト
  */
-async function drawContours(hexes) {
-    const layer = layers['contour'];
-    if (!layer) return;
+async function drawBlockContours(block) {
+    const layerName = 'contour';
+    const blockGroup = layers[layerName].group.select(`#${layerName}-${block.id}`);
+    if (blockGroup.empty()) return;
 
-    // 既存のパスをクリア
-    layer.group.selectAll('*').remove();
+    // クリップパスを適用 (defsに定義されたパスを使用)
+    blockGroup.attr('clip-path', `url(#clip-block-${block.id})`);
 
-    // 非表示の場合は処理しない（DOM削除最適化のため）
-    if (!layer.visible) return;
+    // 既存の内容をクリア
+    blockGroup.selectAll('*').remove();
 
-    // await addLogMessage("等高線の補間計算を開始します..."); // ログ出力は呼び出し元で行うか、ここでは省略
+    const blockHexes = block.allHexes; // バッファ込みのヘックスを使用
+    if (!blockHexes || blockHexes.length === 0) return;
 
     const hexWidth = 2 * config.r;
-    const hexHeight = Math.sqrt(3) * config.r;
-    // getBBox() は初回描画前に正確な値が取れないため、計算でマップ全体のサイズを算出する
-    const mapBBox = { x: 0, y: 0, width: (config.COLS * hexWidth * 3 / 4 + hexWidth / 4), height: (config.ROWS * hexHeight + hexHeight / 2) };
     const resolution = config.CONTOUR_RESOLUTION;
-    const gridWidth = Math.floor(mapBBox.width / resolution);
-    const gridHeight = Math.floor(mapBBox.height / resolution);
+
+    // ブロックのバウンディングボックスより少し広めに計算範囲を取る
+    // グリッドをグローバルな解像度に合わせるために、resolutionの倍数にスナップする
+    const margin = hexWidth * 2;
+    const rawXMin = block.bounds.xMin - margin;
+    const rawYMin = block.bounds.yMin - margin;
+    const rawXMax = block.bounds.xMax + margin;
+    const rawYMax = block.bounds.yMax + margin;
+
+    const xMin = Math.floor(rawXMin / resolution) * resolution;
+    const yMin = Math.floor(rawYMin / resolution) * resolution;
+    const xMax = Math.ceil(rawXMax / resolution) * resolution;
+    const yMax = Math.ceil(rawYMax / resolution) * resolution;
+
+    const width = xMax - xMin;
+    const height = yMax - yMin;
+
+    const gridWidth = Math.floor(width / resolution);
+    const gridHeight = Math.floor(height / resolution);
     const elevationValues = new Array(gridWidth * gridHeight);
-    const delaunay = d3.Delaunay.from(hexes.map(h => [h.cx, h.cy]));
 
-    // UIフリーズを防ぐため、チャンク処理を行う
-    // 注意: drawContoursが同期的に呼ばれる場合（トグル時など）はawaitできないが、
-    // ここではasync関数として定義し、呼び出し元で待機するか、またはトグル時は非同期で実行されることを許容する。
+    // Delaunay三角形分割 (計算対象ヘックスのみ)
+    const delaunay = d3.Delaunay.from(blockHexes.map(h => [h.cx, h.cy]));
 
-    // トグル時のレスポンス向上のため、計算負荷が高い部分はWeb Workerにオフロードするのが理想だが、
-    // 現状はメインスレッドで分割実行する。
+    // グリッド点ごとの標高を計算
+    for (let j = 0; j < gridHeight; ++j) {
+        for (let i = 0; i < gridWidth; ++i) {
+            const px = xMin + i * resolution;
+            const py = yMin + j * resolution;
 
-    const processChunk = async () => {
-        for (let j = 0; j < gridHeight; ++j) {
-            for (let i = 0; i < gridWidth; ++i) {
-                const px = mapBBox.x + i * resolution, py = mapBBox.y + j * resolution;
-                const nearestHexIndex = delaunay.find(px, py), centerHex = hexes[nearestHexIndex];
-                const neighborIndices = centerHex.neighbors;
-                const pointsToConsider = [centerHex, ...neighborIndices.map(idx => hexes[idx])].filter(Boolean);
-                let totalWeight = 0, weightedElevationSum = 0;
-                pointsToConsider.forEach(hex => {
-                    const dist = Math.hypot(hex.cx - px, hex.cy - py);
-                    if (dist < 1e-6) { weightedElevationSum = hex.properties.isWater ? -1 : hex.properties.elevation; totalWeight = 1; return; }
-                    const weight = 1.0 / Math.pow(dist, 2);
-                    totalWeight += weight; weightedElevationSum += weight * (hex.properties.isWater ? -1 : hex.properties.elevation);
-                });
-                elevationValues[j * gridWidth + i] = (totalWeight > 0) ? weightedElevationSum / totalWeight : -1;
+            // 最寄りのヘックスを探す
+            const nearestIdx = delaunay.find(px, py);
+            const centerHex = blockHexes[nearestIdx];
+
+            // 近傍ヘックスを取得 (global hexes arrayを参照)
+            // centerHex.neighbors はグローバルインデックス
+            const neighbors = centerHex.neighbors.map(ni => hexes[ni]).filter(Boolean);
+            const points = [centerHex, ...neighbors];
+
+            let totalWeight = 0;
+            let weightedSum = 0;
+            let exactMatch = false;
+
+            for (const h of points) {
+                const distSq = (h.cx - px) ** 2 + (h.cy - py) ** 2;
+                if (distSq < 1e-6) {
+                    // 湖沼も実際の標高を使用する (ユーザー要望)
+                    weightedSum = h.properties.elevation;
+                    totalWeight = 1;
+                    exactMatch = true;
+                    break;
+                }
+                const weight = 1.0 / distSq;
+                totalWeight += weight;
+                // 湖沼も実際の標高を使用する
+                weightedSum += weight * h.properties.elevation;
             }
-            // 10行ごとに休憩 (トグル時はそこまで頻繁でなくて良いかもしれないが、念のため)
-            if (j % 10 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+
+            if (exactMatch) {
+                elevationValues[j * gridWidth + i] = weightedSum;
+            } else {
+                elevationValues[j * gridWidth + i] = (totalWeight > 0) ? weightedSum / totalWeight : -1;
+            }
         }
+    }
 
-        const maxElevation = d3.max(hexes, h => h.properties.elevation);
-        const thresholds = d3.range(config.CONTOUR_INTERVAL, maxElevation, config.CONTOUR_INTERVAL);
-        const contours = d3.contours().size([gridWidth, gridHeight]).thresholds(thresholds)(elevationValues);
+    // 等高線生成
+    // 閾値はマップ全体で統一する必要があるため、固定値または設定値を使用
+    const maxElevation = 7500; // 高標高部(7000m級)もカバーできるように値を設定 
+    const thresholds = d3.range(config.CONTOUR_INTERVAL, maxElevation, config.CONTOUR_INTERVAL);
 
-        layer.group.selectAll("path")
-            .data(contours).join("path")
-            .attr("class", d => `contour-path ${d.value % 1000 === 0 ? 'contour-index' : 'contour-intermediate'}`)
-            .attr("d", d3.geoPath()).attr("transform", `translate(${mapBBox.x - resolution / 2}, ${mapBBox.y - resolution / 2}) scale(${resolution})`)
-            .style('fill', 'none')
-            .style('stroke', '#642') // 色設定を追加（CSS依存を減らす）
-            .style('stroke-width', d => d.value % 1000 === 0 ? 0.1 : 0.05)
-            .style('pointer-events', 'none');
-    };
+    const contours = d3.contours()
+        .size([gridWidth, gridHeight])
+        .thresholds(thresholds)
+        (elevationValues);
 
-    await processChunk();
+    // パスを描画
+    blockGroup.selectAll("path")
+        .data(contours)
+        .join("path")
+        .attr("class", d => `contour-path ${d.value % 1000 === 0 ? 'contour-index' : 'contour-intermediate'}`)
+        .attr("d", d3.geoPath())
+        .attr("transform", `translate(${xMin - resolution / 2}, ${yMin - resolution / 2}) scale(${resolution})`)
+        .style('fill', 'none')
+        .style('stroke', '#642')
+        .style('stroke-width', d => d.value % 1000 === 0 ? 0.1 : 0.05)
+        .style('pointer-events', 'none');
 }
 
 // getInfoText is imported from infoWindow.js
@@ -788,6 +826,14 @@ function initializeBlocks() {
     const blockRowSize = Math.ceil(config.ROWS / BLOCK_ROWS);
     const buffer = 1; // 1ヘックス分のバッファ
 
+    // クリップパス用のdefs要素を取得または作成
+    let defs = svg.select('defs');
+    if (defs.empty()) {
+        defs = svg.append('defs');
+    }
+    // 既存のブロック用クリップパスをクリア
+    defs.selectAll('.block-clip-path').remove();
+
     for (let by = 0; by < BLOCK_ROWS; by++) {
         for (let bx = 0; bx < BLOCK_COLS; bx++) {
             const startCol = bx * blockColSize;
@@ -818,26 +864,51 @@ function initializeBlocks() {
                 bx: bx,
                 by: by,
                 bounds: { xMin, xMax, yMin, yMax },
-                hexes: [],
+                hexes: [],      // 互換性のために残すが、基本は coreHexes を使用推奨
+                coreHexes: [],  // 描画対象（バッファなし）
+                allHexes: [],   // 計算対象（バッファあり）
                 rendered: false, // 遅延レンダリング用フラグ
                 visible: false
             };
 
-            // ブロックに含まれるヘックスを抽出
-            // バッファ範囲内のヘックスを含める
-            for (let r = bufferedStartRow; r < bufferedEndRow; r++) {
-                for (let c = bufferedStartCol; c < bufferedEndCol; c++) {
+            // 1. coreHexes (本来のブロック領域) を抽出
+            for (let r = startRow; r < endRow; r++) {
+                for (let c = startCol; c < endCol; c++) {
                     const hexIndex = getIndex(c, r);
                     if (hexes[hexIndex]) {
-                        block.hexes.push(hexes[hexIndex]);
+                        block.coreHexes.push(hexes[hexIndex]);
                     }
                 }
             }
 
+            // 2. allHexes (バッファ込み) を抽出
+            for (let r = bufferedStartRow; r < bufferedEndRow; r++) {
+                for (let c = bufferedStartCol; c < bufferedEndCol; c++) {
+                    const hexIndex = getIndex(c, r);
+                    if (hexes[hexIndex]) {
+                        block.allHexes.push(hexes[hexIndex]);
+                    }
+                }
+            }
+
+            // 互換性維持: hexes は coreHexes を指すようにする
+            block.hexes = block.coreHexes;
+
             blocks.push(block);
 
+            // 3. クリップパスの生成
+            const clipPathId = `clip-block-${block.id}`;
+            const clipPath = defs.append('clipPath')
+                .attr('id', clipPathId)
+                .attr('class', 'block-clip-path');
+
+            clipPath.selectAll('polygon')
+                .data(block.coreHexes)
+                .enter()
+                .append('polygon')
+                .attr('points', d => d.points.map(p => `${p[0]},${p[1]}`).join(' ')); // 絶対座標
+
             // 各レイヤーにブロックごとのグループを作成
-            // 既存のレイヤーグループの中に、ブロックIDごとのサブグループを作る
             Object.keys(layers).forEach(layerName => {
                 const layer = layers[layerName];
                 // 既存のブロックグループがあれば削除（再生成時）
@@ -972,6 +1043,9 @@ function renderBlock(block) {
 
     // 稜線・水系 (Ridge/Water System)
     drawBlockRidgeLines(block);
+
+    // 等高線 (Contour)
+    drawBlockContours(block);
 
     // 集落 (Settlement)
     drawBlockSettlements(block);
@@ -1999,8 +2073,9 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // drawBeaches(hexes);
 
     // 4g. 等高線
-    await addLogMessage("等高線の補間計算を開始します...");
-    await drawContours(hexes);
+    // ブロックレンダリングに移行したため、ここでの一括描画は廃止
+    // await addLogMessage("等高線の補間計算を開始します...");
+    // await drawContours(hexes);
 
     // 4h. 河川と稜線
 
