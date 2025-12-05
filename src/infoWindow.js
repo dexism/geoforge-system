@@ -457,7 +457,8 @@ export function getInfoText(d) {
             tundra: { label: 'ツンドラ', icon: 'ac_unit', color: '#bcd' }, // ライトシアン
             savanna: { label: 'サバンナ', icon: 'grass', color: '#dcb' }, // カーキ
             steppe: { label: 'ステップ', icon: 'grass', color: '#cda' }, // ダークカーキ
-            coastal: { label: '沿岸植生', icon: 'waves', color: '#8db' } // ターコイズ
+            coastal: { label: '沿岸植生', icon: 'waves', color: '#8db' }, // ターコイズ
+            iceSnow: { label: '氷雪帯', icon: 'ac_unit', color: '#eff' } // 氷雪
         };
 
         // 人為的な土地利用面積の合計を計算

@@ -2699,21 +2699,41 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
 
 
     // --- 7. 初期ズーム位置の設定 ---
+    // 画面中央に表示するための座標計算
+    // SVGのサイズが取得できない場合（非表示状態など）はwindowサイズをフォールバックとして使用
+    const svgNode = svg.node();
+    let svgWidth = svgNode.clientWidth || svgNode.getBoundingClientRect().width;
+    let svgHeight = svgNode.clientHeight || svgNode.getBoundingClientRect().height;
+
+    if (svgWidth === 0 || svgHeight === 0) {
+        console.warn('SVG dimensions are 0, using window dimensions as fallback.');
+        svgWidth = window.innerWidth;
+        svgHeight = window.innerHeight;
+    }
+
     const targetHex = hexes.find(h => h.x === 56 && h.y === 49);
+
     if (targetHex) {
-        const svgWidth = svg.node().getBoundingClientRect().width;
-        const svgHeight = svg.node().getBoundingClientRect().height;
-        const initialTransform = d3.zoomIdentity.translate(svgWidth / 2 - targetHex.cx, svgHeight / 2 - targetHex.cy).scale(2.0);
+        console.log(`Setting initial zoom to hex: [${targetHex.x}, ${targetHex.y}] (${targetHex.cx}, ${targetHex.cy})`);
+
+        const initialScale = 2.0;
+        const initialTransform = d3.zoomIdentity
+            .translate(svgWidth / 2 - targetHex.cx * initialScale, svgHeight / 2 - targetHex.cy * initialScale)
+            .scale(initialScale);
 
         // D3にtransformを適用させる
+        // 注意: call(zoom.transform) は 'zoom' イベントを発火させる
         svg.call(zoom.transform, initialTransform);
 
         // 適用されたtransformを基に、初回の表示要素を描画する
+        // updateVisibleBlocksはzoomイベントハンドラからも呼ばれるが、確実に行うためにここでも呼ぶ
+        // (イベント発火が非同期の場合があるため)
         updateVisibleBlocks(initialTransform);
         updateOverallInfo(allHexes);
     } else {
+        console.warn('Target hex for initial zoom not found. Using default transform.');
         // フォールバックとして、現在のtransformで初回描画
-        updateVisibleBlocks(d3.zoomTransform(svg.node()));
+        updateVisibleBlocks(d3.zoomTransform(svgNode));
         updateOverallInfo(allHexes);
     }
 }

@@ -1062,7 +1062,7 @@ export function calculateFinalProperties(allHexes) {
             properties.vegetationAreas = vegAreas;
 
             let maxArea = -1;
-            let dominantVeg = '荒れ地';
+            let dominantVeg = 'wasteland';
             const excludeKeys = ['water'];
             for (const [key, area] of Object.entries(vegAreas)) {
                 if (excludeKeys.includes(key)) continue;
@@ -1081,9 +1081,6 @@ export function calculateFinalProperties(allHexes) {
                 subarcticForest: '亜寒帯林',
                 tropicalRainforest: '熱帯雨林',
                 alpine: 'アルパイン',
-                tundra: 'ツンドラ',
-                savanna: 'サバンナ',
-                steppe: 'ステップ',
                 tundra: 'ツンドラ',
                 savanna: 'サバンナ',
                 steppe: 'ステップ',
