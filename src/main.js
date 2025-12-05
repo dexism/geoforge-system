@@ -4,14 +4,33 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions } from './continentGenerator.js';
-import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
-import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership } from './economySimulator.js';
-
-
-import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap } from './ui.js';
-import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
+import { 
+    generateCivilization, 
+    determineTerritories, 
+    defineNations, 
+    assignTerritoriesByTradeRoutes, 
+    generateMonsterDistribution, 
+    generateHuntingPotential, 
+    generateLivestockPotential 
+} from './civilizationGenerator.js';
+import { 
+    simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership 
+} from './economySimulator.js';
+import { 
+    setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap 
+} from './ui.js';
+import { 
+    generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes 
+} from './roadGenerator.js';
 import { getIndex } from './utils.js';
+import {
+    generatePhysicalMap,
+    generateClimateAndVegetation,
+    generateRidgeLines,
+    recalculateGeographicFlags,
+    calculateFinalProperties,
+    initializeNoiseFunctions
+} from './continentGenerator.js';
 
 // GASのデプロイで取得したウェブアプリのURL
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyS8buNL8u2DK9L3UZRtQqLWgDLvuj0WE5ZrzzdXNXSWH3bnGo-JsiO9KSrHp6YOjmtvg/exec';
@@ -66,8 +85,8 @@ async function addLogMessage(message, id = null) {
 // ボタンの有効/無効を管理する関数
 function updateButtonStates(currentStep) {
     step1Btn.disabled = false; // 大陸生成はいつでも可能
-    step2Btn.disabled = currentStep < 1;
-    step3Btn.disabled = currentStep < 2;
+    step2Btn.disabled = true; // 統合されたため無効化
+    step3Btn.disabled = currentStep < 1; // Step 1完了でStep 3へ
     step4Btn.disabled = currentStep < 3;
     step5Btn.disabled = currentStep < 4;
     downloadJsonBtn.disabled = currentStep < 4;
@@ -98,14 +117,14 @@ function resetWorld() {
 // ■ 各生成ステップの関数
 // ================================================================
 
-// ステップ1: 大陸・河川生成
+// ステップ1: 大陸・気候・河川生成 (統合)
 async function runStep1_Continent() {
     resetWorld();
     loadingOverlay.style.display = 'flex';
     logContainer.innerHTML = '';
-    await addLogMessage("ステップ1: 大陸の土台を生成しています...");
+    await addLogMessage("ステップ1: 大陸・気候・河川を統合生成しています...");
 
-    // 物理マップ生成のみを呼び出す
+    // 統合マップ生成を呼び出す
     // 途中経過を描画するためのコールバック関数
     const redrawFn = async (currentHexes) => {
         if (!uiInitialized) {
@@ -124,38 +143,19 @@ async function runStep1_Continent() {
 
     if (!uiInitialized) {
         await addLogMessage("初回描画を準備しています...");
-        // この時点では植生データは不完全だが、エラーにはならない
         await setupUI(worldData.allHexes, [], addLogMessage);
         uiInitialized = true;
     }
 
-    updateButtonStates(1);
+    updateButtonStates(1); // Step 1完了 (次はStep 3)
     loadingOverlay.style.display = 'none';
 }
 
-// ステップ2: 気候・植生生成
+// ステップ2: 気候・植生生成 (廃止/スキップ)
 async function runStep2_Climate() {
-    loadingOverlay.style.display = 'flex';
-    logContainer.innerHTML = '';
-    await addLogMessage("ステップ2: 気候と植生を計算しています...");
-
-    // ステップ1のデータに気候・植生情報を追加する
-    worldData.allHexes = await generateClimateAndVegetation(worldData.allHexes, addLogMessage);
-
-    await addLogMessage("気候と植生を再描画しています...");
-    await redrawClimate(worldData.allHexes);
-
-    // [DEBUG] 植生データの検証
-    const missingVeg = worldData.allHexes.filter(h => !h.properties.vegetation).length;
-    if (missingVeg > 0) {
-        console.error(`[ERROR] Step 2 finished but ${missingVeg} hexes have no vegetation!`);
-        await addLogMessage(`[警告] ${missingVeg} 個のヘックスで植生が設定されていません。`);
-    } else {
-        console.log("[INFO] Step 2 finished. All hexes have vegetation.");
-    }
-
+    // 統合されたため、何もしないか、ログだけ出す
+    await addLogMessage("気候・植生はステップ1で生成済みです。");
     updateButtonStates(2);
-    loadingOverlay.style.display = 'none';
 }
 
 // ステップ3: 集落生成

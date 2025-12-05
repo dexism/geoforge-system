@@ -1,11 +1,11 @@
 // ================================================================
-// GeoForge System - 大陸生成モジュール (v3.2 - 新降水モデル)
+// GeoForge System - 大陸生成モジュール (統合版)
 // ================================================================
 
 import { createNoise2D } from 'simplex-noise';
 import * as config from './config.js';
 import { getIndex } from './utils.js';
-import * as d3 from 'd3'; // d3-scaleをスケール計算に利用
+import * as d3 from 'd3';
 import { WorldMap } from './WorldMap.js';
 
 // ノイズ変数を let で宣言のみ行う
@@ -26,8 +26,7 @@ let continentNoise,
 /**
  * 全てのノイズ関数を新しいシードで再初期化する関数
  */
-function initializeNoiseFunctions() {
-    // Math.random をシード"関数"として使用する
+export function initializeNoiseFunctions() {
     const seedFn = Math.random;
 
     continentNoise = createNoise2D(seedFn);
@@ -45,17 +44,133 @@ function initializeNoiseFunctions() {
     shelfNoise = createNoise2D(seedFn);
 }
 
+// ================================================================
+// ■ 定数定義 (保水力計算用)
+// ================================================================
+
+const TERRAIN_RETENTION = {
+    '深海': 0, // N/A
+    '海洋': 0, // N/A
+    '湖沼': 0, // N/A
+    '平地': 0.60,
+    '丘陵': 0.50,
+    '山地': 0.40,
+    '山岳': 0.30,
+    '水域': 0 // フォールバック
+};
+
+const CLIMATE_RETENTION_PARAMS = {
+    '砂漠気候(寒)': { retention: 0.1, evap: 0.85 },
+    'ツンドラ気候': { retention: 0.35, evap: 0.55 },
+    '亜寒帯湿潤気候': { retention: 0.65, evap: 0.40 },
+    'ステップ気候': { retention: 0.25, evap: 0.75 },
+    '地中海性気候': { retention: 0.55, evap: 0.55 },
+    '温暖湿潤気候': { retention: 0.65, evap: 0.45 },
+    '砂漠気候(熱)': { retention: 0.08, evap: 0.95 },
+    '熱帯草原気候': { retention: 0.40, evap: 0.65 },
+    '熱帯雨林気候': { retention: 0.75, evap: 0.35 },
+    '亜熱帯湿潤気候': { retention: 0.60, evap: 0.50 },
+    '亜寒帯乾燥気候': { retention: 0.30, evap: 0.70 },
+    '氷雪気候': { retention: 0.12, evap: 0.80 }
+};
+
+// ================================================================
+// ■ ヘルパー関数
+// ================================================================
+
+function clip01(x) {
+    return Math.max(0, Math.min(1, x));
+}
+
 /**
- * 安定した手法で自然な地形を生成する
- * @param {number} col - ヘックスの列
- * @param {number} row - ヘックスの行
- * @returns {object} - 計算されたプロパティ
+ * 水源発生確率を計算する関数
+ */
+function waterSourceProbability(E, P, R, {
+    Emax = 4500,   // 最大標高 [m]
+    P_half = 800,  // 降水量の半飽和定数 [mm]
+    alpha = 1.2,   // 降水の閾値強調係数
+    beta = 0.7     // 標高寄与の指数
+} = {}) {
+    // 標高の正規化と源頭寄与
+    const E_norm = clip01(E / Emax);
+    const E_src = Math.pow(E_norm, beta); // 標高寄与
+
+    // 降水の飽和（ミカエリス・メンテン型）
+    const P_eff = P / (P + P_half);
+
+    // 保水・標高のブースト因子
+    const retentionBoost = 0.5 + 0.5 * R;
+    const elevationBoost = 0.4 + 0.6 * E_src;
+
+    // 最終確率
+    const prob = Math.pow(P_eff, alpha) * retentionBoost * elevationBoost;
+    return clip01(prob);
+}
+
+/**
+ * 保水力を計算する関数
+ */
+function calculateWaterRetention(terrainType, climateZone) {
+    const terrainR = TERRAIN_RETENTION[terrainType] !== undefined ? TERRAIN_RETENTION[terrainType] : 0.5;
+    const climateParams = CLIMATE_RETENTION_PARAMS[climateZone] || { retention: 0.5, evap: 0.5 };
+    const climateR = climateParams.retention;
+    const evap = climateParams.evap;
+
+    // 保水力 = clip((0.6 * 地形保水基準 + 0.4 * 気候保水基準) * (1 - 0.7 * 蒸発散係数), 0, 1)
+    const retention = (0.6 * terrainR + 0.4 * climateR) * (1 - 0.7 * evap);
+    return clip01(retention);
+}
+
+/**
+ * 気候区分判定
+ */
+function classifyClimate(T_mean, P_annual, H_m) {
+    const H_ice = 3600;
+    const H_alpine = 3000;
+    const C = 140;
+    const Rb = 20 * T_mean + C;
+    const P_rainforest = 2000;
+    const P_humid = 800;
+    const P_mediterranean_upper = 700;
+
+    if (H_m >= H_ice || T_mean < -5) return "氷雪気候";
+    if (H_m >= H_alpine || T_mean < 0.5) return "ツンドラ気候";
+
+    if (P_annual < 0.5 * Rb) return T_mean >= 18 ? "砂漠気候(熱)" : "砂漠気候(寒)";
+    if (P_annual < Rb) return "ステップ気候";
+
+    if (T_mean < -3) return P_annual >= Rb ? "亜寒帯湿潤気候" : "亜寒帯乾燥気候";
+
+    if (T_mean >= -3 && T_mean < 18) {
+        if (P_annual <= P_mediterranean_upper && P_annual >= 0.5 * Rb) return "地中海性気候";
+        return "温暖湿潤気候";
+    }
+
+    if (T_mean >= 18 && T_mean < 24) {
+        if (P_annual >= P_humid) return "亜熱帯湿潤気候";
+        return "熱帯草原気候";
+    }
+
+    if (T_mean >= 24) {
+        if (P_annual >= P_rainforest) return "熱帯雨林気候";
+        return "熱帯草原気候";
+    }
+
+    return "温暖湿潤気候";
+}
+
+// ================================================================
+// ■ 生成ロジック
+// ================================================================
+
+/**
+ * ベースプロパティ生成 (標高、気温、降水量)
  */
 function generateBaseProperties(col, row) {
     const nx = col / config.COLS;
     const ny = row / config.ROWS;
 
-    // --- 1. 大陸マスクの生成 ---
+    // --- 1. 大陸マスク ---
     let landStrength = (continentNoise(nx * config.CONTINENT_NOISE_FREQ, ny * config.CONTINENT_NOISE_FREQ) + 1) / 2;
     const distFromCenter = Math.hypot(nx - 0.5, ny - 0.5) * 2;
     if (distFromCenter > config.CONTINENT_FALLOFF_START) {
@@ -74,21 +189,14 @@ function generateBaseProperties(col, row) {
     landStrength = Math.max(0, landStrength);
     const isWater = landStrength < config.SEA_LEVEL;
 
-    // --- 2. 陸地と水深の標高を計算 ---
+    // --- 2. 標高 ---
     let elevation = 0;
-    if (isWater) {
-        // ここでは何もしない。海の標高は一旦0のまま。
-        // 水深の計算は、大陸棚を生成する専門の関数で行う。
-    } else {
-        // 1. 海岸線に近いほど、標高全体を抑制する係数を計算する
-        // landStrengthがSEA_LEVELに近いほど0.0に、1.0に近づくほど1.0になる係数
-        // これにより、内陸に行くほど本来の標高に近づく
+    if (!isWater) {
         const coastalDampeningFactor = d3.scaleLinear()
-            .domain([config.SEA_LEVEL, config.SEA_LEVEL + 0.2]) // 海岸線から0.2の範囲で効果を適用
-            .range([0.1, 1.0]) // 海岸線ギリギリでは標高を10%まで抑え、徐々に本来の高さへ
+            .domain([config.SEA_LEVEL, config.SEA_LEVEL + 0.2])
+            .range([0.1, 1.0])
             .clamp(true)(landStrength);
 
-        // 2. 各地形ノイズを計算
         let mountain = (mountainNoise(nx * config.MOUNTAIN_NOISE_FREQ, ny * config.MOUNTAIN_NOISE_FREQ) + 1) / 2;
         mountain = Math.pow(mountain, config.MOUNTAIN_DISTRIBUTION_POWER);
         mountain *= Math.pow(landStrength, config.MOUNTAIN_SHAPE_POWER);
@@ -100,120 +208,54 @@ function generateBaseProperties(col, row) {
         let details = (detailNoise(nx * config.DETAIL_NOISE_FREQ, ny * config.DETAIL_NOISE_FREQ) + 1) / 2;
         details *= config.DETAIL_HEIGHT_MAX;
 
-        // 3. 計算した標高に、海岸線抑制係数を乗算する
         const finalElevation = (mountain + hills + details) * coastalDampeningFactor;
         elevation = config.elevationScale(finalElevation);
     }
 
-    // --- 3. 気温と標高を計算 ---
-    const properties = {};
-    properties.isWater = isWater;
-    properties.elevation = Math.round(elevation);
+    // --- 3. 気温 ---
     const latitude = row / config.ROWS;
     const baseTemp = 0 + (latitude * 40);
-    properties.climate = baseTemp + climateNoise(nx, ny) * 5;
+    const climateVal = baseTemp + climateNoise(nx, ny) * 5;
     let elevationCorrection = 0;
-    if (properties.elevation > 0) {
-        elevationCorrection = (properties.elevation / 100) * 0.6;
+    if (elevation > 0) {
+        elevationCorrection = (elevation / 100) * 0.6;
     }
-    properties.temperature = properties.climate - elevationCorrection;
+    const temperature = climateVal - elevationCorrection;
 
-    // a. 大域勾配: 西から東へ行くほど降水量が増加するベースを作成
+    // --- 4. 降水量 ---
     const gradient = Math.pow(nx, config.PRECIPITATION_PARAMS.GRADIENT_POWER);
     let basePrecip = d3.scaleLinear()
         .domain([0, 1])
         .range([config.PRECIPITATION_PARAMS.WEST_COAST_MM, config.PRECIPITATION_PARAMS.EAST_COAST_MM])(gradient);
 
-    // b. 局所ノイズ: 大域的なムラと、局所的な変化を追加
     const largeNoise = (precipitationNoise(nx * config.PRECIPITATION_PARAMS.LARGE_NOISE_FREQ, ny * config.PRECIPITATION_PARAMS.LARGE_NOISE_FREQ) + 1) / 2;
     const detailNoiseValue = (precipitationNoise(nx * config.PRECIPITATION_PARAMS.DETAIL_NOISE_FREQ, ny * config.PRECIPITATION_PARAMS.DETAIL_NOISE_FREQ) + 1) / 2;
-    // 乾燥地帯は大きなムラ、湿潤地帯は細かい変化の影響を強く受けるように合成
     const noiseEffect = d3.scaleLinear().domain([250, 800]).range([300, 600]).clamp(true)(basePrecip);
     basePrecip += (largeNoise * 0.6 + detailNoiseValue * 0.4 - 0.5) * noiseEffect;
 
-    // c. 南東部の多雨バイアス: 南東角に近いほど降水量をブースト
     const distFromSE = Math.hypot(1.0 - nx, 1.0 - ny);
-    const southeastBias = Math.max(0, 1.0 - distFromSE / 0.5); // 南東角から半径50%の範囲
+    const southeastBias = Math.max(0, 1.0 - distFromSE / 0.5);
     basePrecip += Math.pow(southeastBias, 2) * config.PRECIPITATION_PARAMS.SOUTHEAST_BIAS_INTENSITY;
 
-    // d. 海上では陸地よりも降水量を少し多めにする補正
     if (isWater) {
         basePrecip *= 1.2;
     }
 
-    properties.precipitation_mm = Math.max(0, basePrecip);
-    // 古い0-1スケールの降水量は廃止。互換性のため最大3000mmで正規化した値を残す。
-    properties.precipitation = Math.min(1.0, properties.precipitation_mm / 3000);
+    const precipitation_mm = Math.max(0, basePrecip);
 
-    // ケッペンの乾燥限界に基づいた新しい気候帯判定 (ユーザー指定仕様)
-    const H_m = properties.elevation || 0;
-    const T_mean = properties.temperature || 15;
-    const P_annual = properties.precipitation_mm || 1000;
-
-    const climateZone = classifyClimate(T_mean, P_annual, H_m);
-    properties.climateZone = climateZone || "温暖湿潤気候";
-
-    // --- 4. その他のプロパティ ---
-    properties.hasSnow = false;
-    if (!isWater && properties.temperature <= config.SNOW_THRESHOLDS.TEMPERATURE && properties.precipitation > config.SNOW_THRESHOLDS.PRECIPITATION_LIGHT) {
-        properties.hasSnow = true;
-    }
-
-    const rawManaValue = manaNoise(nx * 2, ny * 2);
-    properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
-    if (properties.manaValue > 0.9) properties.manaRank = 'S';
-    else if (properties.manaValue > 0.7) properties.manaRank = 'A';
-    else if (properties.manaValue > 0.4) properties.manaRank = 'B';
-    else if (properties.manaValue > 0.1) properties.manaRank = 'C';
-    else properties.manaRank = 'D';
-    const resourceSymbols = ['石', '鉄', '金', '晶'];
-    properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
-
-    return properties;
+    return {
+        isWater,
+        elevation: Math.round(elevation),
+        temperature,
+        precipitation_mm,
+        climate: climateVal // base temp without elevation correction
+    };
 }
 
 /**
- * 第1.5パス：山脈や海岸線に応じて降水量を補正する
- * @param {Array<object>} allHexes - 全ヘックスのデータ
- */
-function applyGeographicPrecipitationEffects(allHexes) {
-    const precipCorrections = new Array(allHexes.length).fill(0);
-
-    allHexes.forEach((h, index) => {
-        const p = h.properties;
-        if (p.isWater) return;
-
-        // a. 山岳による地形性降水 (風上)
-        if (p.elevation > 1500) {
-            precipCorrections[index] += config.PRECIPITATION_PARAMS.MOUNTAIN_UPLIFT_BONUS * (p.elevation / 7000);
-        }
-
-        // b. 雨陰効果 (風下)
-        const westNeighbor = h.col > 0 ? allHexes[getIndex(h.col - 1, h.row)] : null;
-        if (westNeighbor && !westNeighbor.properties.isWater) {
-            const elevationDiff = westNeighbor.properties.elevation - p.elevation;
-            if (elevationDiff > 800) { // 西側が800m以上高い山なら雨陰
-                precipCorrections[index] += config.PRECIPITATION_PARAMS.RAIN_SHADOW_PENALTY;
-            }
-        }
-    });
-
-    // 補正を適用
-    allHexes.forEach((h, index) => {
-        if (!h.properties.isWater) {
-            h.properties.precipitation_mm = Math.max(0, h.properties.precipitation_mm + precipCorrections[index]);
-            h.properties.precipitation = Math.min(1.0, h.properties.precipitation_mm / 3000);
-        }
-    });
-}
-
-/**
- * 第1.2パス：大陸棚と深海を生成する (深度揺らぎ対応版)
- * 海ヘックスの標高（水深）を計算して設定する
- * @param {Array<object>} allHexes - 全ヘックスのデータ
+ * 大陸棚生成 (既存ロジック)
  */
 function generateContinentalShelves(allHexes) {
-    // --- STEP 1: 海岸からの距離を計算 (BFSアルゴリズム) ---
     const distanceFromLand = new Map();
     const queue = allHexes.filter(h =>
         h.properties.isWater && h.neighbors.some(n => !allHexes[n].properties.isWater)
@@ -232,7 +274,6 @@ function generateContinentalShelves(allHexes) {
         });
     }
 
-    // --- STEP 2: 各海ヘックスの水深を計算 ---
     const C = config.SHELF_PARAMS;
     const seaHexes = allHexes.filter(h => h.properties.isWater);
 
@@ -240,30 +281,23 @@ function generateContinentalShelves(allHexes) {
         const p = h.properties;
         const nx = h.col / config.COLS;
         const ny = h.row / config.ROWS;
-        const noise = (shelfNoise(nx * C.NOISE_FREQ, ny * C.NOISE_FREQ) + 1) / 2; // 0..1
+        const noise = (shelfNoise(nx * C.NOISE_FREQ, ny * C.NOISE_FREQ) + 1) / 2;
 
-        // その場所固有の大陸棚の幅をノイズで決定
         const shelfWidthInHexes = C.BASE_WIDTH_HEXES + Math.floor(noise * C.NOISE_WIDTH_HEXES);
         const dist = distanceFromLand.get(getIndex(h.col, h.row));
-
-        // その場所固有の大陸棚の最大深度をノイズで決定 (-100m ～ -200m の範囲で揺らぐ)
         const randomizedShelfDepth = C.MAX_DEPTH + noise * 100;
 
         if (dist !== undefined && dist <= shelfWidthInHexes) {
-            // --- パターンA: 大陸棚の上にいる場合 ---
-            // 揺らぎのある深度に向かって緩やかに深くなるよう設定
             const shelfSlope = d3.scaleLinear()
                 .domain([1, shelfWidthInHexes])
                 .range([-10, randomizedShelfDepth])
                 .clamp(true);
             p.elevation = Math.round(shelfSlope(dist));
         } else {
-            // --- パターンB: 大陸棚の外（深海）にいる場合 ---
-            // 揺らぎのある深度から最深部に向かって急激に深くなる
             const landStrength = (continentNoise(nx * config.CONTINENT_NOISE_FREQ, ny * config.CONTINENT_NOISE_FREQ) + 1) / 2;
             const abyssalSlope = d3.scaleLinear()
                 .domain([config.SEA_LEVEL * 0.8, 0])
-                .range([randomizedShelfDepth, C.ABYSSAL_DEPTH]) // 開始点を揺らぎのある深度に
+                .range([randomizedShelfDepth, C.ABYSSAL_DEPTH])
                 .clamp(true);
             p.elevation = Math.round(abyssalSlope(landStrength));
         }
@@ -271,22 +305,121 @@ function generateContinentalShelves(allHexes) {
 }
 
 /**
- * 第2パス：水系（河川）を生成する
- * @param {Array<object>} allHexes - 全ヘックスのデータ
+ * 降水量補正 (既存ロジック)
  */
-function generateWaterSystems(allHexes) {
-    const riverSources = allHexes.filter(h => {
-        if (h.properties.isWater || h.properties.elevation < 1000) return false;
-        const isRainyMountain = h.properties.elevation > 1500 && h.properties.precipitation > 0.5;
-        const isHighPeak = h.properties.elevation > 2000;
-        let probability = 0;
-        if (isRainyMountain) probability = 0.25;
-        else if (isHighPeak) probability = 0.10;
-        return Math.random() < probability;
+export function applyGeographicPrecipitationEffects(allHexes) {
+    const precipCorrections = new Array(allHexes.length).fill(0);
+
+    allHexes.forEach((h, index) => {
+        const p = h.properties;
+        if (p.isWater) return;
+
+        if (p.elevation > 1500) {
+            precipCorrections[index] += config.PRECIPITATION_PARAMS.MOUNTAIN_UPLIFT_BONUS * (p.elevation / 7000);
+        }
+
+        const westNeighbor = h.col > 0 ? allHexes[getIndex(h.col - 1, h.row)] : null;
+        if (westNeighbor && !westNeighbor.properties.isWater) {
+            const elevationDiff = westNeighbor.properties.elevation - p.elevation;
+            if (elevationDiff > 800) {
+                precipCorrections[index] += config.PRECIPITATION_PARAMS.RAIN_SHADOW_PENALTY;
+            }
+        }
     });
 
-    allHexes.forEach(h => h.properties.flow = 0);
+    allHexes.forEach((h, index) => {
+        if (!h.properties.isWater) {
+            h.properties.precipitation_mm = Math.max(0, h.properties.precipitation_mm + precipCorrections[index]);
+            h.properties.precipitation = Math.min(1.0, h.properties.precipitation_mm / 3000);
+        }
+    });
+}
 
+/**
+ * 派生プロパティ計算 (地形、平坦度、気候区分)
+ */
+function calculateDerivedProperties(allHexes) {
+    allHexes.forEach(h => {
+        const p = h.properties;
+
+        // 地形タイプ
+        if (p.isWater) {
+            if (p.elevation < config.SHELF_PARAMS.MAX_DEPTH) {
+                p.terrainType = '深海'; // カスタムタイプ (WorldMap.jsのTERRAIN_TYPESにはないが、処理用に使用)
+            } else if (p.elevation <= 0) {
+                p.terrainType = '海洋';
+            } else {
+                p.terrainType = '湖沼';
+            }
+        } else {
+            if (p.elevation >= config.TERRAIN_ELEVATION.MOUNTAIN_PEAK) {
+                p.terrainType = '山岳';
+            } else if (p.elevation >= config.TERRAIN_ELEVATION.MOUNTAIN) {
+                p.terrainType = '山地';
+            } else if (p.elevation >= config.TERRAIN_ELEVATION.HILLS) {
+                p.terrainType = '丘陵';
+            } else {
+                p.terrainType = '平地';
+            }
+        }
+
+        // 平坦度
+        let elevationRange = 0;
+        if (h.neighbors.length > 0) {
+            const neighborElevations = h.neighbors.map(nIndex => allHexes[nIndex].properties.elevation);
+            const maxNeighborElev = Math.max(...neighborElevations);
+            const minNeighborElev = Math.min(...neighborElevations);
+            elevationRange = maxNeighborElev - minNeighborElev;
+        }
+        // 標高差0m -> 1.0, 標高差1000m -> 0.0
+        p.flatness = Math.max(0, 1.0 - (elevationRange / 1000));
+
+        // 気候区分
+        p.climateZone = classifyClimate(p.temperature, p.precipitation_mm, p.elevation);
+    });
+}
+
+/**
+ * 水系生成 (新ロジック)
+ */
+/**
+ * 水系生成 (安定版ロジック + 描画用インデックス修正)
+ */
+/**
+ * 水系生成 (新水源ロジック + 安定版流下ロジック + 描画用インデックス)
+ */
+/**
+ * 保水力計算 (ヘルパー)
+ */
+
+
+export function generateWaterSystems(allHexes) {
+    const riverSources = [];
+
+    // 1. 水源の決定 (新ロジック: 保水力モデル)
+    allHexes.forEach(h => {
+        const p = h.properties;
+        if (p.isWater) return;
+
+        // 保水力計算
+        const retention = calculateWaterRetention(p.terrainType, p.climateZone);
+        p.retention = retention; // デバッグ用に保存
+
+        // 水源発生確率
+        const prob = waterSourceProbability(p.elevation, p.precipitation_mm, retention);
+
+        if (Math.random() < prob) {
+            riverSources.push(h);
+        }
+    });
+
+    // 2. 流量と下流インデックスの初期化
+    allHexes.forEach(h => {
+        h.properties.flow = 0;
+        h.downstreamIndex = -1; // 下流インデックスを初期化
+    });
+
+    // 3. 河川の流下 (安定版ロジック)
     riverSources.forEach(source => {
         let currentCol = source.col;
         let currentRow = source.row;
@@ -296,23 +429,32 @@ function generateWaterSystems(allHexes) {
             const neighbors = allHexes[currentIndex].neighbors.map(i => allHexes[i]);
             let lowestNeighbor = null;
             let minElevation = allHexes[currentIndex].properties.elevation;
+
             neighbors.forEach(n => {
                 if (n.properties.elevation < minElevation) {
                     minElevation = n.properties.elevation;
                     lowestNeighbor = n;
                 }
             });
+
             if (lowestNeighbor) {
+                // 下流への接続を設定 (描画用)
+                allHexes[currentIndex].downstreamIndex = lowestNeighbor.index;
+
                 currentCol = lowestNeighbor.col;
                 currentRow = lowestNeighbor.row;
-                // 川の終点を、標高0の水域(海)に到達した場合のみとする
+
+                // 川の終点を、標高0の水域(海)に到達した場合のみとする (安定版の条件)
                 if (lowestNeighbor.properties.isWater && lowestNeighbor.properties.elevation <= 0) {
                     lowestNeighbor.properties.flow += 1;
                     break;
                 }
             } else {
+                // 窪地の場合
                 if (!allHexes[currentIndex].properties.isWater) {
                     allHexes[currentIndex].properties.isWater = true;
+                    // 湖になった場合、地形タイプを更新 (整合性のため)
+                    allHexes[currentIndex].properties.terrainType = '湖沼';
                 }
                 break;
             }
@@ -321,20 +463,14 @@ function generateWaterSystems(allHexes) {
 }
 
 /**
- * 第2.2パス：陸地の最低標高を10mに補正する
- * @param {Array<object>} allHexes - 全ヘックスのデータ
+ * 陸地標高補正 (既存ロジック)
  */
 function adjustLandElevation(allHexes) {
     const MIN_ELEVATION_TARGET = 10;
-
-    // 補正対象となるヘックス（陸地 または 湖沼）をリストアップ
     const targetHexes = allHexes.filter(h => !h.properties.isWater || (h.properties.isWater && h.properties.elevation > 0));
 
-    if (targetHexes.length === 0) {
-        return; // 補正対象がなければ何もしない
-    }
+    if (targetHexes.length === 0) return;
 
-    // 1. 対象ヘックスの中から、現在の最低標高を見つける
     let minElevation = Infinity;
     targetHexes.forEach(h => {
         if (h.properties.elevation < minElevation) {
@@ -342,64 +478,51 @@ function adjustLandElevation(allHexes) {
         }
     });
 
-    // 2. 最低標高が目標値より低い場合、全体の底上げ量を計算
     if (minElevation < MIN_ELEVATION_TARGET) {
         const elevationToAdd = MIN_ELEVATION_TARGET - minElevation;
-
-        // 3. 全ての対象ヘックスの標高に、計算した底上げ量を加算する
         targetHexes.forEach(h => {
             h.properties.elevation += elevationToAdd;
         });
     }
 }
-
 /**
- * 第2.5パス：稜線を生成する
- * @param {Array<object>} allHexes - 全ヘックスのデータ
+ * 稜線生成 (安定版ロジック + 描画用インデックス修正)
  */
-function generateRidgeLines(allHexes) {
-    // 1. 稜線の起点となるヘックスを選定
+export function generateRidgeLines(allHexes) {
     const ridgeSources = allHexes.filter(h => {
         const p = h.properties;
-        // 水域と、川が流れているヘックス（水系）は除外
         if (p.isWater || p.flow > 0) return false;
-
         const elevation = p.elevation;
-        // 標高1000m～6000mの陸地ヘックスを候補とする
         const isCandidate = elevation >= 1000 && elevation < 6000;
         if (!isCandidate) return false;
-
-        // その中から30%をランダムで選ぶ
         return Math.random() < 1.0;
     });
 
-    // 2. 全ヘックスのridgeFlowプロパティを初期化
-    allHexes.forEach(h => h.properties.ridgeFlow = 0);
+    allHexes.forEach(h => {
+        h.properties.ridgeFlow = 0;
+        h.ridgeUpstreamIndex = -1; // 稜線上流インデックスを初期化
+    });
 
-    // 3. 各起点から、標高が最も高い隣人に向かって探索
     ridgeSources.forEach(source => {
         let currentHex = source;
-        for (let i = 0; i < 50; i++) { // 無限ループ防止
-            // 現在地のridgeFlowをインクリメント
+        for (let i = 0; i < 50; i++) {
             currentHex.properties.ridgeFlow += 1;
-
-            // 隣接ヘックスの中で、最も標高が高いものを探す
             let highestNeighbor = null;
             let maxElevation = currentHex.properties.elevation;
 
             currentHex.neighbors.map(i => allHexes[i]).forEach(n => {
-                // 自分より標高が高い隣人のみ対象
                 if (n.properties.elevation > maxElevation) {
                     maxElevation = n.properties.elevation;
                     highestNeighbor = n;
                 }
             });
 
-            // より高い隣人が見つかれば、そちらへ移動
             if (highestNeighbor) {
+                // 稜線上流への接続を設定
+                currentHex.ridgeUpstreamIndex = highestNeighbor.index;
+
                 currentHex = highestNeighbor;
             } else {
-                // 見つからなければ（＝尾根の頂上）、探索終了
                 break;
             }
         }
@@ -407,75 +530,142 @@ function generateRidgeLines(allHexes) {
 }
 
 /**
- * 第3パス：最終的なプロパティ（植生、産業ポテンシャル）を計算する
- * @param {Array<object>} allHexes - 全ヘックスのデータ
+ * 植生分布計算 (ヘルパー)
  */
-function calculateFinalProperties(allHexes) {
-    console.log("DEBUG: calculateFinalProperties started.");
-    let setVegetationCount = 0;
-    let missingVegetationCount = 0;
+function allocateVegetation({
+    T, P, H, waterHa,
+    flatness, soilFert, D,
+    coastalDist, oceanicity
+}) {
+    const hexAreaHa = config.HEX_AREA_HA || 8660;
+    const landHa = Math.max(0, hexAreaHa - waterHa);
 
+    const s = {
+        desert: 0, wasteland: 0, grassland: 0, wetland: 0,
+        temperateForest: 0, subarcticForest: 0, tropicalRainforest: 0,
+        alpine: 0, tundra: 0, savanna: 0, steppe: 0, coastal: 0
+    };
+
+    s.wasteland += 0.05;
+    s.grassland += 0.05;
+
+    if (flatness < 0.5) {
+        s.wasteland += 0.2 * (1.0 - flatness);
+        if (H > 1500) s.alpine += 0.1;
+    }
+
+    if (D < 0.5) {
+        s.desert += (0.5 - D) * (T >= 18 ? 2.0 : 1.5);
+        s.wasteland += 0.2;
+    }
+
+    if (soilFert < 0.4 || P < 500) {
+        s.wasteland += 0.4 * (1.0 - soilFert);
+        if (P >= 300) s.grassland += 0.2 * (1.0 - soilFert);
+    }
+
+    if (D >= 0.8 && P >= 300) {
+        let score = 0.6 * flatness;
+        if (P < 800) score *= 1.2;
+        s.grassland += score;
+    }
+
+    if (flatness > 0.8 && (P > 1200 || oceanicity > 0.6 || waterHa > 50)) {
+        s.wetland += 0.8 * flatness;
+    }
+
+    if (P >= 500) {
+        if (T >= 24) {
+            if (P >= 1500) s.tropicalRainforest += 1.0 * (P / 2000);
+            else s.savanna += 0.5;
+        } else if (T >= 5) {
+            s.temperateForest += 0.8 * soilFert * (P / 1000);
+        } else if (T >= -5) {
+            s.subarcticForest += 0.7 * (P / 800);
+        }
+    }
+
+    if (H >= 2500) {
+        s.alpine += (H - 2500) / 1000;
+        s.wasteland += 0.2;
+    }
+
+    if (T < 2) {
+        s.tundra += (2 - T) * 0.2;
+    }
+
+    if (D >= 0.4 && D < 1.0) {
+        if (T >= 18) s.savanna += 0.5;
+        else s.steppe += 0.5;
+    }
+
+    if (coastalDist < 20) {
+        s.coastal += Math.max(0, (20 - coastalDist) / 20) * 0.8;
+        s.grassland += 0.2;
+    }
+    if (oceanicity > 0.7) {
+        s.coastal += 0.3;
+    }
+
+    Object.keys(s).forEach(k => {
+        if (s[k] > 0) {
+            s[k] *= (0.8 + Math.random() * 0.4);
+        }
+    });
+
+    const sum = Object.values(s).reduce((a, b) => a + b, 0);
+    const areas = {};
+    if (sum === 0) {
+        areas.wasteland = landHa;
+    } else {
+        let total = 0;
+        for (const [k, v] of Object.entries(s)) {
+            areas[k] = Math.floor((v / sum) * landHa);
+            total += areas[k];
+        }
+        const diff = landHa - total;
+        if (diff > 0) {
+            const maxKey = Object.keys(areas).reduce((a, b) => areas[a] > areas[b] ? a : b);
+            areas[maxKey] += diff;
+        }
+    }
+    areas.water = waterHa;
+    return areas;
+}
+
+/**
+ * 最終プロパティ計算 (植生、産業ポテンシャル)
+ */
+export function calculateFinalProperties(allHexes) {
     allHexes.forEach(h => {
         const { properties, col, row } = h;
-        const { isWater, elevation, temperature } = properties; // precipitation は直接使わないので削除
-        // 座標の正規化手法をgenerateBasePropertiesと統一する
+        const { isWater, elevation, temperature } = properties;
         const nx = col / config.COLS;
         const ny = row / config.ROWS;
 
-        // [DEBUG] 特定ヘックスの追跡
-        const debugHex = (col === 52 && row === 37);
-        if (debugHex) console.log(`DEBUG: Hex[${h.index}] (52,37) processing start. isWater: ${isWater}, elevation: ${elevation}`);
+        // terrainType, flatness は calculateDerivedProperties で計算済みだが、
+        // 湖沼化などで変更されている可能性があるため、必要なら再確認
+        // ここでは既存の値を信頼する
 
-        // 標高から地形タイプを決定
-        if (isWater) {
-            properties.terrainType = '水域';
-        } else if (elevation >= config.TERRAIN_ELEVATION.MOUNTAIN_PEAK) {
-            properties.terrainType = '山岳';
-        } else if (elevation >= config.TERRAIN_ELEVATION.MOUNTAIN) {
-            properties.terrainType = '山地';
-        } else if (elevation >= config.TERRAIN_ELEVATION.HILLS) {
-            properties.terrainType = '丘陵';
-        } else {
-            properties.terrainType = '平地';
-        }
-
-        // 沖積平野フラグ
         properties.isAlluvial = properties.flow > 0 && !isWater && elevation < 4000;
-
-        // 1. 新しいプロパティ landUse を初期化
         properties.landUse = { river: 0, desert: 0, barren: 0, grassland: 0, forest: 0 };
 
         if (isWater) {
-            // 水域の植生タイプを標高ベースで判定する
-            // config.SHELF_PARAMS.MAX_DEPTH (-200m) より深ければ深海とする
             if (properties.elevation < config.SHELF_PARAMS.MAX_DEPTH) {
                 properties.vegetation = '深海';
             } else if (properties.elevation <= 0) {
                 properties.vegetation = '海洋';
-            } else { // 標高が0より大きい水域は湖
+            } else {
                 properties.vegetation = '湖沼';
             }
-
-            // 安全策: elevationがNaNなどで判定漏れした場合
-            if (!properties.vegetation) {
-                properties.vegetation = '海洋';
-            }
-
-            // 水域用ダミーデータ
             properties.vegetationAreas = { water: config.HEX_AREA_HA };
-            properties.landUse = { river: 0, desert: 0, barren: 0, grassland: 0, forest: 0 };
         } else {
-            // --- 陸地ヘックスの植生判定 (新ロジック) ---
-
-            // 1. パラメータの準備
             const T = properties.temperature;
             const P = properties.precipitation_mm;
             const H = properties.elevation;
 
-            // 水域面積 (簡易計算: 川の流れから推定)
             let waterHa = 0;
             if (properties.flow > 0) {
-                // flow=1 で約10ha, flow=100で約1000ha程度になるような簡易式
                 waterHa = Math.min(config.HEX_AREA_HA * 0.5, properties.flow * 10);
             }
 
@@ -489,23 +679,16 @@ function calculateFinalProperties(allHexes) {
             }
             // 標高差0m -> 1.0, 標高差1000m -> 0.0
             const flatness = Math.max(0, 1.0 - (elevationRange / 1000));
+            properties.flatness = flatness; // プロパティにも保存しておく
 
-            // 土壌肥沃度 (soilFert): ノイズから生成 (0.0 - 1.0)
-            // 既存の forestPotentialNoise などを流用して、少しランダム性を持たせる
             const soilNoiseVal = (forestPotentialNoise(nx * 5, ny * 5) + 1) / 2;
             const soilFert = Math.max(0, Math.min(1, soilNoiseVal + (properties.isAlluvial ? 0.3 : 0)));
 
-            // 乾燥指数 D
             const C = 140;
             const D = P / (20 * T + C);
 
-            // 距岸距離 (coastalDist) & 海洋性係数 (oceanicity)
-            // 簡易的に、isCoastalなら距離0、そうでなければ距離50とする
-            // 本来はBFSで計算すべきだが、パフォーマンスのため簡易化
             let coastalDist = 100;
             let oceanicity = 0.2;
-
-            // 周囲に海があるかチェック
             let hasSeaNeighbor = false;
             h.neighbors.forEach(nIdx => {
                 const nHex = allHexes[nIdx];
@@ -517,12 +700,11 @@ function calculateFinalProperties(allHexes) {
             if (hasSeaNeighbor) {
                 coastalDist = 5;
                 oceanicity = 0.9;
-            } else if (properties.isCoastal) { // 既存フラグの活用
+            } else if (properties.isCoastal) {
                 coastalDist = 10;
                 oceanicity = 0.8;
             }
 
-            // 2. 植生配分計算 (allocateVegetation)
             const vegAreas = allocateVegetation({
                 T, P, H, waterHa,
                 flatness, soilFert, D,
@@ -531,13 +713,9 @@ function calculateFinalProperties(allHexes) {
 
             properties.vegetationAreas = vegAreas;
 
-            // 3. 最も面積の広い植生を dominantVegetation とする
             let maxArea = -1;
             let dominantVeg = '荒れ地';
-
-            // 除外するキー（waterなど）
             const excludeKeys = ['water'];
-
             for (const [key, area] of Object.entries(vegAreas)) {
                 if (excludeKeys.includes(key)) continue;
                 if (area > maxArea) {
@@ -546,7 +724,6 @@ function calculateFinalProperties(allHexes) {
                 }
             }
 
-            // キー名を日本語表記に変換
             const vegNameMap = {
                 desert: '砂漠',
                 wasteland: '荒れ地',
@@ -555,7 +732,7 @@ function calculateFinalProperties(allHexes) {
                 temperateForest: '温帯林',
                 subarcticForest: '亜寒帯林',
                 tropicalRainforest: '熱帯雨林',
-                alpine: 'アルパイン', // または高山
+                alpine: 'アルパイン',
                 tundra: 'ツンドラ',
                 savanna: 'サバンナ',
                 steppe: 'ステップ',
@@ -563,15 +740,12 @@ function calculateFinalProperties(allHexes) {
             };
 
             properties.vegetation = vegNameMap[dominantVeg] || dominantVeg;
-            // if (dominantVeg === 'alpine') properties.vegetation = '高山'; // 削除: アルパインで統一
 
-            // 4. 既存の landUse プロパティへのマッピング (互換性維持)
-            // { river, desert, barren, grassland, forest } (割合 0.0-1.0)
             const totalLandArea = config.HEX_AREA_HA - waterHa;
             const safeTotal = totalLandArea > 0 ? totalLandArea : 1;
 
             properties.landUse = {
-                river: waterHa / config.HEX_AREA_HA, // 全体に対する割合
+                river: waterHa / config.HEX_AREA_HA,
                 desert: (vegAreas.desert || 0) / safeTotal,
                 barren: ((vegAreas.wasteland || 0) + (vegAreas.alpine || 0) + (vegAreas.tundra || 0)) / safeTotal,
                 grassland: ((vegAreas.grassland || 0) + (vegAreas.savanna || 0) + (vegAreas.steppe || 0) + (vegAreas.wetland || 0) + (vegAreas.coastal || 0)) / safeTotal,
@@ -579,8 +753,7 @@ function calculateFinalProperties(allHexes) {
             };
         }
 
-        // 産業ポテンシャル
-        // 農業ポテンシャルの計算で新しい降水量基準を使用
+        // 産業ポテンシャル (既存ロジック)
         let agriPotential = 0;
         if (!isWater) {
             if (properties.isAlluvial) agriPotential += 0.5;
@@ -590,47 +763,31 @@ function calculateFinalProperties(allHexes) {
             const tempFactor = Math.max(0, 1 - Math.abs(temperature - idealTemp) / 15);
             agriPotential += tempFactor * 0.3;
 
-            // 新しい降水量スケール(mm/年)で農業適性を評価
             const precipFactor = d3.scaleLinear()
                 .domain([config.PRECIPITATION_PARAMS.DRYNESS_PASTORAL_THRESHOLD, config.PRECIPITATION_PARAMS.DRYNESS_FARMING_THRESHOLD])
-                .range([0.1, 1.0]) // 牧畜限界で少し、農耕限界で最大のボーナス
+                .range([0.1, 1.0])
                 .clamp(true)(properties.precipitation_mm);
             agriPotential += precipFactor * 0.2;
         }
-        // 標高によるペナルティを追加
-        // 500mまではペナルティなし、そこから2500mにかけて適性が徐々に減少し、最終的に90%減となる
         const elevationFactor = d3.scaleLinear()
-            .domain([500, 2500])      // 標高500mからペナルティ開始、2500mで最大化
-            .range([1.0, 0.1])      // 標高500mで効率100%、2500mで効率10%
+            .domain([500, 2500])
+            .range([1.0, 0.1])
             .clamp(true)(properties.elevation);
-
-        // これまで計算した適性に、標高係数を乗算する
         agriPotential *= elevationFactor;
-
         properties.agriPotential = Math.min(1.0, agriPotential);
 
         properties.forestPotential = properties.landUse.forest || 0;
 
-        // 鉱業適性の計算ロジック
         let miningPotential = 0;
         if (!isWater) {
-            // 1. ノイズ関数から-1.0～1.0の範囲で「鉱脈の素」となる値を取得
-            const rawMiningValue = miningPotentialNoise(nx * 2.0, ny * 2.0); // 周波数を調整
-
-            // 2. 値のピークを鋭くする (powの指数を大きくするほど鋭くなる)
+            const rawMiningValue = miningPotentialNoise(nx * 2.0, ny * 2.0);
             const peakFactor = 8;
             let noisePotential = Math.pow(1.0 - Math.abs(rawMiningValue), peakFactor);
-
-            // 3. 標高が高いほど鉱脈が存在しやすい、という補正を加える
             const elevationFactor = 1 + (Math.min(4000, elevation) / 4000) * 0.5;
-
-            // 4. 最終的なポテンシャルを計算
             miningPotential = noisePotential * elevationFactor;
         }
-        // 最終的な値を 0.0 ～ 1.0 の範囲に収める
         properties.miningPotential = Math.min(1.0, miningPotential);
 
-        // 沿岸・湖岸フラグの計算
         let isCoastal = false;
         let isLakeside = false;
         if (!isWater) {
@@ -652,11 +809,7 @@ function calculateFinalProperties(allHexes) {
         let fishingPotential = 0;
         if (!isWater) {
             let waterBonus = 0;
-            // 沿岸であれば基礎ポテンシャルを与える
-            if (isCoastal) {
-                waterBonus = 0.4; // 沿岸基礎値
-            }
-
+            if (isCoastal) waterBonus = 0.4;
             h.neighbors.forEach(nIndex => {
                 const neighborHex = allHexes[nIndex];
                 if (neighborHex.properties.isWater) {
@@ -668,16 +821,12 @@ function calculateFinalProperties(allHexes) {
                 }
             });
             fishingPotential += waterBonus;
-            // 面積依存ではなく、水量(flow)依存に変更 (v3.3)
-            // flow=1で0.1, flow=25で0.5程度
             fishingPotential += Math.min(0.8, Math.sqrt(properties.flow) * 0.1);
         }
         properties.fishingPotential = Math.min(1.0, fishingPotential);
 
-        // 狩猟適性の計算
         let huntingPotential = 0;
         if (!isWater) {
-            // [基準1] 基本スコア
             let baseScore = 0;
             switch (properties.vegetation) {
                 case '温帯林':
@@ -695,136 +844,50 @@ function calculateFinalProperties(allHexes) {
                     baseScore = 0.1;
                     break;
             }
-            // 地形タイプによる補正
             if (properties.terrainType === '丘陵' || properties.terrainType === '山地') {
                 baseScore = Math.max(baseScore, 0.5);
             }
             if (properties.terrainType === '山岳' || properties.vegetation === '砂漠') {
-                baseScore = 0; // 過酷な環境では基本スコアを0に
+                baseScore = 0;
             }
-
             huntingPotential = baseScore;
 
-            // [基準2] ボーナス要素
             if (properties.monsterRank) {
                 switch (properties.monsterRank) {
-                    case 'S':
-                    case 'A':
-                    case 'B':
-                        huntingPotential += 0.4;
-                        break;
-                    case 'C':
-                    case 'D':
-                        huntingPotential += 0.2;
-                        break;
+                    case 'S': case 'A': case 'B': huntingPotential += 0.4; break;
+                    case 'C': case 'D': huntingPotential += 0.2; break;
                 }
             }
             if (properties.flow > 0 || h.neighbors.some(nIndex => allHexes[nIndex].properties.vegetation === '湖沼')) {
                 huntingPotential += 0.1;
             }
-
-            // [基準3] ペナルティ要素
             if (properties.population > 0) {
-                // 人口が5000人でポテンシャルが-1.0されるような、急なカーブのペナルティ
                 const populationPenalty = Math.pow(Math.min(5000, properties.population) / 5000, 2);
                 huntingPotential -= populationPenalty;
             }
-            huntingPotential -= properties.agriPotential * 0.2; // 農地ペナルティ
+            huntingPotential -= properties.agriPotential * 0.2;
         }
-        // 最終的な値を 0.0 ～ 1.0 の範囲に収める
         properties.huntingPotential = Math.max(0.0, Math.min(1.0, huntingPotential));
-    });
-}
 
-
-/**
- * ステップ1: 物理的な大陸と水系を生成する
- * @param {Function} addLogMessage - ログ出力用の関数
- * @returns {Array<object>} - 生成された全ヘックスのデータ
- */
-export async function generatePhysicalMap(addLogMessage, redrawFn) {
-    // 処理の開始時にノイズ関数を再初期化する
-    initializeNoiseFunctions();
-
-    // パス1：全ヘックスの基本プロパティを生成
-    await addLogMessage("地面の起伏を生成しています...");
-    const allHexes = new WorldMap(config.COLS, config.ROWS);
-    for (let row = 0; row < config.ROWS; row++) {
-        for (let col = 0; col < config.COLS; col++) {
-            // この時点では植生などは仮計算
-            const index = getIndex(col, row);
-            const hex = allHexes[index];
-            hex.col = col;
-            hex.row = row;
-            const props = generateBaseProperties(col, row);
-            Object.assign(hex.properties, props);
+        // その他のプロパティ
+        properties.hasSnow = false;
+        if (!isWater && properties.temperature <= config.SNOW_THRESHOLDS.TEMPERATURE && properties.precipitation > config.SNOW_THRESHOLDS.PRECIPITATION_LIGHT) {
+            properties.hasSnow = true;
         }
-    }
-    // 隣接情報をキャッシュ
-    allHexes.forEach(h => {
-        const { col, row } = h;
-        const isOddCol = col % 2 !== 0;
-        h.neighbors = [
-            { col: col, row: row - 1 }, { col: col, row: row + 1 },
-            { col: col - 1, row: row }, { col: col + 1, row: row },
-            { col: col - 1, row: isOddCol ? row + 1 : row - 1 },
-            { col: col + 1, row: isOddCol ? row + 1 : row - 1 },
-        ].filter(n => n.col >= 0 && n.col < config.COLS && n.row >= 0 && n.row < config.ROWS)
-            .map(n => getIndex(n.col, n.row));
+
+        const rawManaValue = manaNoise(nx * 2, ny * 2);
+        properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
+        if (properties.manaValue > 0.9) properties.manaRank = 'S';
+        else if (properties.manaValue > 0.7) properties.manaRank = 'A';
+        else if (properties.manaValue > 0.4) properties.manaRank = 'B';
+        else if (properties.manaValue > 0.1) properties.manaRank = 'C';
+        else properties.manaRank = 'D';
+        const resourceSymbols = ['石', '鉄', '金', '晶'];
+        properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
     });
-
-    // パス1.2：大陸棚の形成
-    await addLogMessage("大陸棚と深海を形成しています...");
-    generateContinentalShelves(allHexes);
-    if (redrawFn) await redrawFn(allHexes);
-
-    // パス2：水系を生成
-    await addLogMessage("水系と河川を配置しています...");
-    generateWaterSystems(allHexes);
-    if (redrawFn) await redrawFn(allHexes);
-
-    // パス2.2：陸地の最低標高を補正
-    await addLogMessage("沿岸の地形を最終調整しています...");
-    adjustLandElevation(allHexes);
-    if (redrawFn) await redrawFn(allHexes);
-
-    return allHexes;
 }
 
-/**
- * ステップ2: 気候と植生を生成する
- * @param {Array<object>} allHexes - 物理マップデータ
- * @param {Function} addLogMessage - ログ出力用の関数
- * @returns {Array<object>} - 気候・植生情報が追加された全ヘックスデータ
- */
-export async function generateClimateAndVegetation(allHexes, addLogMessage) {
-    // パス1.5：降水量の地理的補正を適用
-    await addLogMessage("風と地形による降水量を計算しています...");
-    applyGeographicPrecipitationEffects(allHexes);
-
-    // パス2.5：稜線を生成
-    await addLogMessage("山系の稜線を計算しています...");
-    generateRidgeLines(allHexes);
-
-    // パス3：最終的なプロパティ（植生など）を計算
-    await addLogMessage("気候と植生を最終決定しています...");
-    calculateFinalProperties(allHexes);
-
-    await addLogMessage("海岸線の砂浜を形成しています...");
-    generateBeaches(allHexes);
-
-    return allHexes;
-}
-
-/**
- * 第3.5パス：砂浜を生成する (確率的モデル + 湿地帯の考慮)
- * @param {Array<object>} allHexes - 全ヘックスのデータ
- */
 function generateBeaches(allHexes) {
-    console.log("DEBUG: generateBeaches started."); // [DEBUG] 開始ログ
-    let totalBeachSegments = 0; // [DEBUG] 生成数カウンタ
-
-    // --- スケール関数を事前に定義 ---
     const landElevationScale = d3.scaleLinear().domain([50, 300]).range([1.0, 0.0]).clamp(true);
     const seaDepthScale = d3.scaleLinear().domain([0, -500]).range([1.0, 0.0]).clamp(true);
 
@@ -841,61 +904,32 @@ function generateBeaches(allHexes) {
             const n_p = neighbor.properties;
             if (!n_p.isWater) return;
 
-            // 湿地帯の特別ルール
-            // 陸地側が湿地の場合、原則として砂浜は生成しない
             if (p.vegetation === '湿地') {
-                // 例外: 流量が非常に大きい河口（20以上）であれば、砂が供給される可能性がある
-                if (p.flow < 20) {
-                    return; // 通常の湿地海岸はここで処理を打ち切り、砂浜を生成しない
-                }
-                // 大河口の湿地は、処理を続行（砂浜ができる可能性がある）
+                if (p.flow < 20) return;
             }
 
-            // --- STEP 1: 基本地形スコア ---
             const landScore = landElevationScale(p.elevation);
             const seaScore = seaDepthScale(n_p.elevation);
             let beachScore = landScore * seaScore;
             if (beachScore < 0.1) return;
 
-            // --- STEP 2: 河口ボーナス ---
             const riverBonus = 1.0 + Math.min(0.5, Math.sqrt(p.flow / 10) * 0.5);
             beachScore *= riverBonus;
 
-            // --- STEP 3: 内湾ボーナス ---
             const landNeighborCount = neighbor.neighbors.filter(idx => !allHexes[idx].properties.isWater).length;
             const bayBonus = 1.0 + (landNeighborCount / 6) * 0.5;
             beachScore *= bayBonus;
 
-            // --- STEP 4: ランダム揺らぎ ---
             const randomFactor = 0.7 + (beachNoise(nx * 15, ny * 15) + 1) / 2 * 0.6;
             beachScore *= randomFactor;
 
-            // --- 最終判定 ---
             if (beachScore > 0.8) {
                 p.beachNeighbors.push(neighborIndex);
-                totalBeachSegments++; // [DEBUG] カウントアップ
-                // [DEBUG] 最初の5件だけ詳細ログを出す
-                if (totalBeachSegments <= 5) {
-                    console.log(`DEBUG: Beach created at Hex[${h.index}] -> Neighbor[${neighborIndex}]. Score: ${beachScore.toFixed(3)}`);
-                }
             }
         });
     });
-    console.log(`DEBUG: generateBeaches finished. Total segments created: ${totalBeachSegments}`); // [DEBUG] 終了ログ
 }
 
-// main.jsから呼び出すために、個別の関数をエクスポートする
-export {
-    applyGeographicPrecipitationEffects,
-    generateWaterSystems,
-    generateRidgeLines,
-    calculateFinalProperties,
-    initializeNoiseFunctions
-};
-/**
- * ロード時に地理的フラグ（沿岸・湖岸）を再計算する
- * @param {Array<object>} allHexes 
- */
 export function recalculateGeographicFlags(allHexes) {
     allHexes.forEach(h => {
         const p = h.properties;
@@ -926,205 +960,81 @@ export function recalculateGeographicFlags(allHexes) {
 }
 
 /**
- * GeoForge System: 12気候区分判定
+ * 統合マップ生成関数 (メインエントリポイント)
  */
-function classifyClimate(T_mean, P_annual, H_m) {
-    // ------------- 調整可能な閾値（世界観チューニング用） -------------
-    const H_ice = 3600;     // 氷雪域の標高（m）: 高山・寒冷地での氷雪気候
-    const H_alpine = 3000;  // 森林限界の代表値（m）: これ以上は樹木生育が困難（ツンドラ相当）
+export async function generateIntegratedMap(addLogMessage, redrawFn) {
+    initializeNoiseFunctions();
 
-    // 乾燥限界（ケッペン準拠の簡易形）
-    const C = 140;
-    const Rb = 20 * T_mean + C; // 乾燥限界（mm）
+    await addLogMessage("大陸の土台と気候を生成しています...");
+    const allHexes = new WorldMap(config.COLS, config.ROWS);
 
-    const P_rainforest = 2000;   // 熱帯雨林の代表閾（mm）
-    const P_humid = 800;         // 温帯湿潤/亜熱帯湿潤の下限（mm）
-    const P_mediterranean_upper = 700; // 地中海性の年降水量上限（mm）目安
-
-    // ------------- 1) 標高優先の寒冷域判定 -------------
-    if (H_m >= H_ice || T_mean < -5) {
-        return "氷雪気候";
-    }
-    if (H_m >= H_alpine || T_mean < 0.5) {
-        // 森林限界以上 or 非常に低温 → ツンドラ
-        return "ツンドラ気候";
-    }
-
-    // ------------- 2) 乾燥帯（砂漠/ステップ）判定 -------------
-    // 乾燥帯の入口は年降水量と乾燥限界の比較で決定
-    if (P_annual < 0.5 * Rb) {
-        // 砂漠（熱/寒）は年平均気温で分岐
-        return T_mean >= 18 ? "砂漠気候(熱)" : "砂漠気候(寒)";
-    }
-    if (P_annual < Rb) {
-        return "ステップ気候";
-    }
-
-    // ------------- 3) 帯域（熱帯/亜熱帯/温帯/亜寒帯）と湿潤タイプ -------------
-    // 亜寒帯（冷帯）: 寒冷な温帯の上位
-    if (T_mean < -3) {
-        // すでにツンドラ/氷雪でない寒冷湿潤域
-        // 年降水量が乾燥限界以上なら湿潤、それ未満寄りなら乾燥
-        return P_annual >= Rb ? "亜寒帯湿潤気候" : "亜寒帯乾燥気候";
-    }
-
-    // 温帯域（基準）
-    if (T_mean >= -3 && T_mean < 18) {
-        // 地中海性候補：温帯で比較的少雨（乾燥帯には入らない）
-        if (P_annual <= P_mediterranean_upper && P_annual >= 0.5 * Rb) {
-            return "地中海性気候";
-        }
-        // 十分湿潤なら温暖湿潤
-        if (P_annual >= P_humid) {
-            return "温暖湿潤気候";
-        }
-        // 湿潤下限に満たないが乾燥帯ではない場合は、温帯の中庸を温暖湿潤に吸収
-        return "温暖湿潤気候";
-    }
-
-    // 亜熱帯・熱帯域（高温側）
-    if (T_mean >= 18 && T_mean < 24) {
-        // 乾燥帯に該当しない前提で、湿潤なら亜熱帯湿潤、比較的少雨なら熱帯草原に近い
-        if (P_annual >= P_humid) {
-            return "亜熱帯湿潤気候";
-        }
-        // 湿潤下限に満たないが乾燥帯ではない → 熱帯草原寄り
-        return "熱帯草原気候";
-    }
-
-    // 熱帯（高温・多雨）
-    if (T_mean >= 24) {
-        // 多雨なら熱帯雨林、そうでなければ熱帯草原
-        if (P_annual >= P_rainforest) {
-            return "熱帯雨林気候";
-        }
-        return "熱帯草原気候";
-    }
-
-    // 万一のフォールバック（理論上到達しない）
-    return "温暖湿潤気候";
-}
-
-/**
- * 植生分布計算
- */
-function allocateVegetation({
-    T, P, H, waterHa,
-    flatness, soilFert, D,
-    coastalDist, oceanicity
-}) {
-    const hexAreaHa = config.HEX_AREA_HA || 8660;
-    const landHa = Math.max(0, hexAreaHa - waterHa);
-
-    // 適性スコア初期化
-    const s = {
-        desert: 0, wasteland: 0, grassland: 0, wetland: 0,
-        temperateForest: 0, subarcticForest: 0, tropicalRainforest: 0,
-        alpine: 0, tundra: 0, savanna: 0, steppe: 0, coastal: 0
-    };
-
-    // --- 植生適性スコア計算 ---
-    // ベーススコア（どこにでも少しは混ざる可能性）
-    s.wasteland += 0.05;
-    s.grassland += 0.05;
-
-    // 地形による補正
-    // 山岳・山地は荒れ地やアルパインが増えやすい
-    if (flatness < 0.5) {
-        s.wasteland += 0.2 * (1.0 - flatness);
-        if (H > 1500) s.alpine += 0.1;
-    }
-
-    // 砂漠: 乾燥指数 <0.5
-    if (D < 0.5) {
-        s.desert += (0.5 - D) * (T >= 18 ? 2.0 : 1.5); // スコア加重を強化
-        s.wasteland += 0.2; // 砂漠の周りは荒れ地になりやすい
-    }
-
-    // 荒れ地: 土壌肥沃度が低い & 降水不足
-    if (soilFert < 0.4 || P < 500) {
-        s.wasteland += 0.4 * (1.0 - soilFert);
-        // 低肥沃度でも少しは草原が生える余地を残す
-        if (P >= 300) s.grassland += 0.2 * (1.0 - soilFert);
-    }
-
-    // 草原: 中程度の降水 & 平坦度高
-    if (D >= 0.8 && P >= 300) { // 条件を緩和
-        let score = 0.6 * flatness;
-        if (P < 800) score *= 1.2; // 少雨地域は草原が優勢
-        s.grassland += score;
-    }
-
-    // 湿地: 平坦度高 & 排水不良
-    if (flatness > 0.8 && (P > 1200 || oceanicity > 0.6 || waterHa > 50)) {
-        s.wetland += 0.8 * flatness;
-    }
-
-    // 森林（温帯・亜寒帯・熱帯）: 降水量が十分なら、どこでも少しは生える
-    if (P >= 500) {
-        // 気温による分岐
-        if (T >= 24) {
-            if (P >= 1500) s.tropicalRainforest += 1.0 * (P / 2000);
-            else s.savanna += 0.5; // 雨が少ない熱帯はサバンナ
-        } else if (T >= 5) {
-            s.temperateForest += 0.8 * soilFert * (P / 1000);
-        } else if (T >= -5) {
-            s.subarcticForest += 0.7 * (P / 800);
+    // Pass 1: Base Properties
+    for (let row = 0; row < config.ROWS; row++) {
+        for (let col = 0; col < config.COLS; col++) {
+            const index = getIndex(col, row);
+            const hex = allHexes[index];
+            hex.col = col;
+            hex.row = row;
+            const props = generateBaseProperties(col, row);
+            Object.assign(hex.properties, props);
         }
     }
 
-    // アルパイン: 標高依存
-    if (H >= 2500) {
-        s.alpine += (H - 2500) / 1000;
-        s.wasteland += 0.2; // 高山は荒れ地も多い
-    }
-
-    // ツンドラ: 低温
-    if (T < 2) {
-        s.tundra += (2 - T) * 0.2;
-    }
-
-    // サバンナ・ステップ（乾燥・高温/中温）
-    if (D >= 0.4 && D < 1.0) {
-        if (T >= 18) s.savanna += 0.5;
-        else s.steppe += 0.5;
-    }
-
-    // 沿岸植生
-    if (coastalDist < 20) {
-        s.coastal += Math.max(0, (20 - coastalDist) / 20) * 0.8; // 距離減衰 + 係数調整
-        s.grassland += 0.2; // 海岸は草原も多い
-    }
-    if (oceanicity > 0.7) {
-        s.coastal += 0.3;
-    }
-
-    // ノイズによるゆらぎ（ランダム性）を少し加える
-    Object.keys(s).forEach(k => {
-        if (s[k] > 0) {
-            s[k] *= (0.8 + Math.random() * 0.4); // +/- 20% のゆらぎ
-        }
+    // Neighbors cache
+    allHexes.forEach(h => {
+        const { col, row } = h;
+        const isOddCol = col % 2 !== 0;
+        h.neighbors = [
+            { col: col, row: row - 1 }, { col: col, row: row + 1 },
+            { col: col - 1, row: row }, { col: col + 1, row: row },
+            { col: col - 1, row: isOddCol ? row + 1 : row - 1 },
+            { col: col + 1, row: isOddCol ? row + 1 : row - 1 },
+        ].filter(n => n.col >= 0 && n.col < config.COLS && n.row >= 0 && n.row < config.ROWS)
+            .map(n => getIndex(n.col, n.row));
     });
 
-    // --- 正規化して面積配分 ---
-    const sum = Object.values(s).reduce((a, b) => a + b, 0);
-    const areas = {};
-    if (sum === 0) {
-        areas.wasteland = landHa; // フォールバック
-    } else {
-        let total = 0;
-        for (const [k, v] of Object.entries(s)) {
-            areas[k] = Math.floor((v / sum) * landHa); // ha単位で丸め
-            total += areas[k];
-        }
-        // 誤差調整: 残りを最大カテゴリに加算
-        const diff = landHa - total;
-        if (diff > 0) {
-            const maxKey = Object.keys(areas).reduce((a, b) => areas[a] > areas[b] ? a : b);
-            areas[maxKey] += diff;
-        }
-    }
-    areas.water = waterHa;
+    // Pass 1.2: Continental Shelves
+    await addLogMessage("大陸棚と深海を形成しています...");
+    generateContinentalShelves(allHexes);
+    if (redrawFn) await redrawFn(allHexes);
 
-    return areas;
+    // Pass 1.5: Geographic Precip
+    await addLogMessage("風と地形による降水量を計算しています...");
+    applyGeographicPrecipitationEffects(allHexes);
+
+    // Pass 2: Derived Properties (Terrain, Flatness, ClimateZone)
+    await addLogMessage("気候区分と地形タイプを判定しています...");
+    calculateDerivedProperties(allHexes);
+
+    // Pass 3: Water Systems (New Logic)
+    await addLogMessage("水系と河川を配置しています (新保水モデル)...");
+    generateWaterSystems(allHexes);
+    if (redrawFn) await redrawFn(allHexes);
+
+    // Pass 4: Adjust Land Elevation
+    adjustLandElevation(allHexes);
+
+    // Pass 5: Ridge Lines
+    await addLogMessage("山系の稜線を計算しています...");
+    generateRidgeLines(allHexes);
+
+    // Pass 6: Final Properties (Vegetation, etc.)
+    await addLogMessage("植生と資源分布を決定しています...");
+    calculateFinalProperties(allHexes);
+
+    await addLogMessage("海岸線の砂浜を形成しています...");
+    generateBeaches(allHexes);
+
+    if (redrawFn) await redrawFn(allHexes);
+
+    return allHexes;
 }
+
+// 互換性のためのダミー関数 (Step 2が呼ばれた場合用)
+export async function generateClimateAndVegetation(allHexes, addLogMessage) {
+    await addLogMessage("気候と植生は既に統合生成されています。");
+    return allHexes;
+}
+
+// 互換性のためのエイリアス
+export const generatePhysicalMap = generateIntegratedMap;

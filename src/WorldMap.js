@@ -127,9 +127,12 @@ export class WorldMap {
         this.territoryData = new Array(this.size).fill(null);
         this.beachNeighbors = new Array(this.size).fill(null);
 
-        // Road Usage (Float32)
         this.roadUsage = new Float32Array(this.size);
         this.roadLoss = new Float32Array(this.size);
+
+        // Flow Indices (Int32) - Added for persistence
+        this.downstreamIndex = new Int32Array(this.size).fill(-1);
+        this.ridgeUpstreamIndex = new Int32Array(this.size).fill(-1);
 
         return new Proxy(this, {
             get: (target, prop) => {
@@ -403,4 +406,10 @@ class Hex {
 
     get roadLoss() { return this._map.roadLoss[this._index]; }
     set roadLoss(v) { this._map.roadLoss[this._index] = v; }
+
+    get downstreamIndex() { return this._map.downstreamIndex[this._index]; }
+    set downstreamIndex(v) { this._map.downstreamIndex[this._index] = v; }
+
+    get ridgeUpstreamIndex() { return this._map.ridgeUpstreamIndex[this._index]; }
+    set ridgeUpstreamIndex(v) { this._map.ridgeUpstreamIndex[this._index] = v; }
 }

@@ -1128,7 +1128,7 @@ const getTooltipText = (d) => {
     // --- STEP 2: 既存の本文セクションを生成 ---
     let bodyText = '';
     const locationText = formatLocation(d, 'short');
-    const settlementType = (p.settlement || '未開地').padEnd(2, '　');
+    const settlementType = (p.settlement || '散居').padEnd(2, '　');
     const populationText = `人口：${(p.population || 0).toLocaleString()}人`;
     bodyText += `${settlementType}：${locationText}\n${populationText}`;
 
@@ -2184,9 +2184,10 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             }
             const elevationDifference = southElevation - northElevation;
 
-            // 河川の流下方向を計算
-            let downstreamIndex = -1;
-            if (hexData.properties.flow > 0 && !hexData.properties.isWater) {
+            // 河川の流下方向を取得 (生成器で計算済みの値を使用)
+            let downstreamIndex = hexData.downstreamIndex;
+            // 未設定の場合のみ再計算 (互換性のため)
+            if ((downstreamIndex === undefined || downstreamIndex === -1) && hexData.properties.flow > 0 && !hexData.properties.isWater) {
                 let lowestNeighbor = null;
                 let minElevation = hexData.properties.elevation;
                 hexData.neighbors.map(i => allHexes[i]).forEach(n => {
@@ -2200,9 +2201,10 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                 }
             }
 
-            // 稜線の流れを計算するロジック
-            let ridgeUpstreamIndex = -1;
-            if (hexData.properties.ridgeFlow > 0 && !hexData.properties.isWater) {
+            // 稜線の流れを取得 (生成器で計算済みの値を使用)
+            let ridgeUpstreamIndex = hexData.ridgeUpstreamIndex;
+            // 未設定の場合のみ再計算
+            if ((ridgeUpstreamIndex === undefined || ridgeUpstreamIndex === -1) && hexData.properties.ridgeFlow > 0 && !hexData.properties.isWater) {
                 let highestNeighbor = null;
                 let maxElevation = hexData.properties.elevation;
                 // 隣接ヘックスの中から、自身より標高が最も高いものを探す
@@ -2680,6 +2682,26 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
  * 内部の描画用ヘックスデータを更新するヘルパー関数
  * @param {Array<object>} updatedAllHexes - 更新された全ヘックスデータ
  */
+
+
+/**
+ * 気候・植生情報が更新されたときに呼び出される再描画関数
+ * @param {Array<object>} allHexes - 更新された全ヘックスデータ
+ */
+/**
+ * ブロックのレンダリング状態をリセットする関数
+ * データ更新時に呼び出し、次回の可視判定時に再描画をトリガーする
+ */
+function resetBlockRenderStatus() {
+    blocks.forEach(block => {
+        block.rendered = false;
+    });
+}
+
+/**
+ * 内部の描画用ヘックスデータを更新するヘルパー関数
+ * @param {Array<object>} updatedAllHexes - 更新された全ヘックスデータ
+ */
 function updateHexesData(updatedAllHexes) {
     if (!hexes || hexes.length === 0) return;
 
@@ -2698,29 +2720,27 @@ function updateHexesData(updatedAllHexes) {
         return southElevation - northElevation;
     }
 
+    let updatedCount = 0;
+    let flowCount = 0;
+
     updatedAllHexes.forEach((h, index) => {
         if (hexes[index]) {
             // プロパティをマージするのではなく、完全に上書きする
             // これにより、roadGeneratorで変更された nationId が確実に反映される
             hexes[index].properties = h.properties;
+
+            // 河川・稜線の流下インデックスも更新する (重要: これがないと再生成後に河川が描画されない)
+            hexes[index].downstreamIndex = h.downstreamIndex;
+            hexes[index].ridgeUpstreamIndex = h.ridgeUpstreamIndex;
+
             // 描画用のシェーディング値のみ、追加で計算する
             hexes[index].properties.shadingValue = calculateShading(h, updatedAllHexes);
+
+            updatedCount++;
+            if (h.properties.flow > 0) flowCount++;
         }
     });
-}
-
-/**
- * 気候・植生情報が更新されたときに呼び出される再描画関数
- * @param {Array<object>} allHexes - 更新された全ヘックスデータ
- */
-/**
- * ブロックのレンダリング状態をリセットする関数
- * データ更新時に呼び出し、次回の可視判定時に再描画をトリガーする
- */
-function resetBlockRenderStatus() {
-    blocks.forEach(block => {
-        block.rendered = false;
-    });
+    console.log(`updateHexesData: Updated ${updatedCount} hexes. Flow > 0 count: ${flowCount}`);
 }
 
 /**

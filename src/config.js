@@ -135,10 +135,10 @@ export const POPULATION_PARAMS = {
     HABITABILITY_THRESHOLD: 0.0,
 
     // 1ヘックスあたりの最大人口数。居住適性が1.0の地点の理論上の最大値。
-    MAX_POPULATION_PER_HEX: 50000,
+    MAX_POPULATION_PER_HEX: 30000,
 
     // 人口の集中度合いを調整する指数。値が大きいほど、ごく一部の好立地に人口が集中する。
-    POPULATION_CURVE: 8.0,
+    POPULATION_CURVE: 10.0,
 };
 export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面積(ha)
     '小麦': { yield: 0.60, type: '畑作', cultivation_ha_per_person: 1.5 },
