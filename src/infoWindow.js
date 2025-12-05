@@ -317,8 +317,11 @@ export function getInfoText(d) {
         lakeArea += lakeNeighbors * 100;
         oceanArea += oceanNeighbors * 100;
 
-        // 2. 河川の面積 (流量^2 x 1ha x 河川長)
-        if (p.flow > 0) {
+        // 2. 河川の面積 (流量^2 x 1ha x 河川長) -> 修正: 生成時に計算された waterArea を使用
+        if (p.waterArea > 0) {
+            riverArea += p.waterArea;
+        } else if (p.flow > 0) {
+            // フォールバック (古いデータなど、waterAreaがない場合)
             // 下流（流出先）を特定: 最も標高が低い隣接ヘックス
             let outflow = null;
             let minElev = p.elevation;
@@ -382,8 +385,10 @@ export function getInfoText(d) {
             // 河川長 (km)
             const riverLengthKm = baseLength * flatness;
 
-            // 面積計算: 流量^2 * 1ha * 長さ
-            let calculatedArea = Math.pow(p.flow, 2) * 1 * riverLengthKm;
+            // 面積計算: 物理ベースに近い近似 (w = 2 * Q^0.5)
+            // Area = w * L = 2 * Q^0.5 * L * 1000 / 10000 (ha) = 0.2 * Q^0.5 * L
+            // 旧ロジック (Q^2) は過大評価すぎるため修正
+            let calculatedArea = 0.2 * Math.sqrt(p.flow) * riverLengthKm;
 
             // 湿地帯係数 (v3.3): 湿地の場合は水域が広いとみなして2倍
             if (p.vegetation === '湿地') {

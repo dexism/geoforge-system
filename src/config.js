@@ -17,7 +17,7 @@ export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
 // ■ 2. 地形生成パラメータ (v3.2 - 大陸生成パラメータ再調整版)
 // ================================================================
 // --- 大陸の形状と配置 ---
-export const CONTINENT_NOISE_FREQ = 4.0;  // 大陸形状の複雑さ。2.0-3.0が推奨
+export const CONTINENT_NOISE_FREQ = 3.0;  // 大陸形状の複雑さ。2.0-3.0が推奨
 export const CONTINENT_FALLOFF_START = 1.40; // マップ中央からx%の距離までは大陸が一切削られない
 export const CONTINENT_FALLOFF_RANGE = 0.20; // そこからx%の距離をかけて海になる
 export const SEA_LEVEL = 0.05; // 陸地強度がこれより低いと海になる。0.3-0.4が推奨
@@ -328,7 +328,8 @@ export const TERRAIN_COLORS = {
     ツンドラ: '#bcd',
     サバンナ: '#dcb',
     ステップ: '#cda',
-    沿岸植生: '#8db'
+    沿岸植生: '#8db',
+    氷雪帯: '#eff'
 };
 // 稜線・水系図の配色
 export const RIDGE_WATER_SYSTEM_COLORS = {

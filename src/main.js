@@ -4,23 +4,23 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { 
-    generateCivilization, 
-    determineTerritories, 
-    defineNations, 
-    assignTerritoriesByTradeRoutes, 
-    generateMonsterDistribution, 
-    generateHuntingPotential, 
-    generateLivestockPotential 
+import {
+    generateCivilization,
+    determineTerritories,
+    defineNations,
+    assignTerritoriesByTradeRoutes,
+    generateMonsterDistribution,
+    generateHuntingPotential,
+    generateLivestockPotential
 } from './civilizationGenerator.js';
-import { 
-    simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership 
+import {
+    simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership
 } from './economySimulator.js';
-import { 
-    setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap 
+import {
+    setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap
 } from './ui.js';
-import { 
-    generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes 
+import {
+    generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes
 } from './roadGenerator.js';
 import { getIndex } from './utils.js';
 import {
@@ -438,7 +438,15 @@ const KEY_MAP = {
     facilities: 'fac',
     livingConditions: 'lc',
     logistics: 'log',
-    vegetationAreas: 'va'
+    vegetationAreas: 'va',
+
+    // River & Water Data (Added for persistence)
+    downstreamIndex: 'di',
+    ridgeUpstreamIndex: 'rui',
+    waterArea: 'wa',
+    riverWidth: 'rw',
+    riverDepth: 'rd',
+    riverVelocity: 'rv'
 };
 
 // 逆マッピング（解凍用）

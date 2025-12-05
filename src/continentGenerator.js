@@ -379,18 +379,6 @@ function calculateDerivedProperties(allHexes) {
     });
 }
 
-/**
- * 水系生成 (新ロジック)
- */
-/**
- * 水系生成 (安定版ロジック + 描画用インデックス修正)
- */
-/**
- * 水系生成 (新水源ロジック + 安定版流下ロジック + 描画用インデックス)
- */
-/**
- * 保水力計算 (ヘルパー)
- */
 
 
 export function generateWaterSystems(allHexes) {
@@ -413,53 +401,403 @@ export function generateWaterSystems(allHexes) {
         }
     });
 
+    console.log(`[River Generation] Sources found: ${riverSources.length}`);
+    if (riverSources.length > 0) {
+        const sample = riverSources[0];
+        console.log(`[River Generation] Sample Source: Elev=${sample.properties.elevation}, Precip=${sample.properties.precipitation_mm}, Retention=${sample.properties.retention}`);
+    } else {
+        console.log("[River Generation] No sources found. Checking probability stats...");
+        let maxProb = 0;
+        let maxP = 0;
+        allHexes.forEach(h => {
+            const p = h.properties;
+            if (p.isWater) return;
+            const retention = calculateWaterRetention(p.terrainType, p.climateZone);
+            const prob = waterSourceProbability(p.elevation, p.precipitation_mm, retention);
+            if (prob > maxProb) maxProb = prob;
+            if (p.precipitation_mm > maxP) maxP = p.precipitation_mm;
+        });
+        console.log(`[River Generation] Max Prob: ${maxProb}, Max Precip: ${maxP}`);
+    }
+
     // 2. 流量と下流インデックスの初期化
     allHexes.forEach(h => {
         h.properties.flow = 0;
         h.downstreamIndex = -1; // 下流インデックスを初期化
+        h.properties.riverWidth = 0;
+        h.properties.riverDepth = 0;
+        h.properties.riverVelocity = 0;
+        h.properties.waterArea = 0;
+        h.properties.Qin = 0; // 一時的な流入量累積用
+        h.properties.inflowCount = 0; // 入次数
     });
 
-    // 3. 河川の流下 (安定版ロジック)
+    // 3. 河川の流下経路決定 (物理ベース: 既存河川への合流優先)
+    // ここでは経路(downstreamIndex)のみを確定させる
+
+    // 一時的に「川である」フラグを管理 (Setでインデックスを保持)
+    const riverPathSet = new Set();
+
     riverSources.forEach(source => {
-        let currentCol = source.col;
-        let currentRow = source.row;
-        for (let i = 0; i < 50; i++) {
-            const currentIndex = getIndex(currentCol, currentRow);
-            allHexes[currentIndex].properties.flow += 1;
-            const neighbors = allHexes[currentIndex].neighbors.map(i => allHexes[i]);
-            let lowestNeighbor = null;
-            let minElevation = allHexes[currentIndex].properties.elevation;
+        let currentHex = source;
+        riverPathSet.add(currentHex.index);
 
-            neighbors.forEach(n => {
-                if (n.properties.elevation < minElevation) {
-                    minElevation = n.properties.elevation;
-                    lowestNeighbor = n;
+        for (let i = 0; i < 100; i++) { // ループ回数を少し増やす
+            const neighbors = currentHex.neighbors.map(i => allHexes[i]);
+
+            // 候補: 現在地より低いヘックス
+            const lowerNeighbors = neighbors.filter(n => n.properties.elevation < currentHex.properties.elevation);
+
+            if (lowerNeighbors.length === 0) {
+                // 窪地 (湖)
+                if (!currentHex.properties.isWater) {
+                    currentHex.properties.isWater = true;
+                    currentHex.properties.terrainType = '湖沼';
                 }
+                break;
+            }
+
+            let nextHex = null;
+
+            // 優先順位: 
+            // 1. 最も低い場所へ (最大勾配・物理法則)
+            // 2. 標高が同じなら、既存の川への合流を優先
+            lowerNeighbors.sort((a, b) => {
+                const diff = a.properties.elevation - b.properties.elevation;
+                if (Math.abs(diff) < 0.1) { // ほぼ同じ高さなら
+                    const aIsRiver = riverPathSet.has(a.index);
+                    const bIsRiver = riverPathSet.has(b.index);
+                    if (aIsRiver && !bIsRiver) return -1;
+                    if (!aIsRiver && bIsRiver) return 1;
+                }
+                return diff;
             });
+            nextHex = lowerNeighbors[0];
 
-            if (lowestNeighbor) {
-                // 下流への接続を設定 (描画用)
-                allHexes[currentIndex].downstreamIndex = lowestNeighbor.index;
+            if (nextHex) {
+                // 既存の経路があれば合流とする（上書きしない）
+                if (currentHex.downstreamIndex === -1) {
+                    currentHex.downstreamIndex = nextHex.index;
+                    riverPathSet.add(nextHex.index);
 
-                currentCol = lowestNeighbor.col;
-                currentRow = lowestNeighbor.row;
-
-                // 川の終点を、標高0の水域(海)に到達した場合のみとする (安定版の条件)
-                if (lowestNeighbor.properties.isWater && lowestNeighbor.properties.elevation <= 0) {
-                    lowestNeighbor.properties.flow += 1;
+                    // 終点チェック
+                    if (nextHex.properties.isWater && nextHex.properties.elevation <= 0) {
+                        break;
+                    }
+                    currentHex = nextHex;
+                } else {
+                    // 既に流出先が決まっている場合はそこで終了（合流）
                     break;
                 }
             } else {
-                // 窪地の場合
-                if (!allHexes[currentIndex].properties.isWater) {
-                    allHexes[currentIndex].properties.isWater = true;
-                    // 湖になった場合、地形タイプを更新 (整合性のため)
-                    allHexes[currentIndex].properties.terrainType = '湖沼';
-                }
                 break;
             }
         }
     });
+
+
+
+    let flowPathCount = 0;
+    allHexes.forEach(h => {
+        if (h.downstreamIndex !== -1) flowPathCount++;
+    });
+    console.log(`[River Generation] Hexes with downstream: ${flowPathCount}`);
+
+    // 4. 流量・水域面積の計算 (トポロジカルソート順)
+
+    // 入次数の計算
+    allHexes.forEach(h => {
+        if (h.downstreamIndex !== -1) {
+            const downstream = allHexes[h.downstreamIndex];
+            downstream.properties.inflowCount = (downstream.properties.inflowCount || 0) + 1;
+        }
+    });
+
+    // 入次数0のヘックス（水源）をキューに追加
+    const queue = [];
+    allHexes.forEach(h => {
+        // 川の一部である（下流がある）か、または川が流れ込んでいる（inflowCount > 0）場合のみ対象
+        // ただし、inflowCountが0なら水源候補
+        if (h.downstreamIndex !== -1 || h.properties.inflowCount > 0) {
+            if (h.properties.inflowCount === 0) {
+                queue.push(h);
+            }
+        }
+    });
+
+    // トポロジカル順序で処理
+    while (queue.length > 0) {
+        const current = queue.shift();
+        const p = current.properties;
+
+        // 流入方向の特定 (最大の流入量を持つ上流ヘックスを探す)
+        // Note: 単純化のため、neighborsBufferを直接参照して方向インデックスを取得
+        let maxInflowQ = -1;
+        let upstreamIndex = -1;
+
+        // currentへ流れ込むヘックスを探す（逆参照は持っていないため、neighborsを走査）
+        // パフォーマンスのため、neighborsBufferの逆引きマップがあれば早いが、
+        // ここではneighborsが少ないのでループで許容
+        // 実際には、前のステップで「誰から流れてきたか」を記録しておくと良いが、
+        // ここでは「最大の流入元」を決定するために、neighborsの中で downstreamIndex === current.index のものを探す
+
+        const upstreamNeighbors = current.neighbors.map(i => allHexes[i]).filter(n => n.downstreamIndex === current.index);
+
+        if (upstreamNeighbors.length > 0) {
+            upstreamNeighbors.forEach(up => {
+                if (up.properties.flow > maxInflowQ) {
+                    maxInflowQ = up.properties.flow;
+                    upstreamIndex = up.index;
+                }
+            });
+        }
+
+        // 流出方向
+        const downstreamIndex = current.downstreamIndex;
+
+        // 流れのタイプ判定
+        let type = "source";
+        if (upstreamIndex !== -1 && downstreamIndex !== -1) {
+            const getDir = (fromHex, toIdx) => {
+                const start = fromHex.index * 6;
+                for (let i = 0; i < 6; i++) {
+                    if (fromHex._map.neighborsBuffer[start + i] === toIdx) return i;
+                }
+                return -1;
+            };
+
+            const inDir = getDir(current, upstreamIndex); // currentから見たupstreamの方向
+            const outDir = getDir(current, downstreamIndex); // currentから見たdownstreamの方向
+
+            if (inDir !== -1 && outDir !== -1) {
+                const diff = Math.abs(inDir - outDir);
+                // inDirは「上流がいる方向」。流れが入ってくる方向はその逆サイドだが、
+                // 角度差の計算としては「上流へのベクトル」と「下流へのベクトル」のなす角を見るのが直感的
+                // diff=3 (180度) -> 直線 (Opposite)
+                // diff=2 or 4 (120度) -> Second
+                // diff=1 or 5 (60度) -> Adjacent
+                // diff=0 -> ありえない（逆流）
+
+                if (diff === 3) type = "opposite";
+                else if (diff === 2 || diff === 4) type = "second";
+            }
+        } else if (upstreamIndex !== -1) {
+            // 下流がない（湖、海への河口など）
+            type = "opposite"; // 仮
+        }
+
+        // 高低差 (下流への勾配)
+        let dH = 0;
+        if (downstreamIndex !== -1) {
+            dH = Math.max(0, p.elevation - allHexes[downstreamIndex].properties.elevation);
+        } else {
+            dH = 10; // デフォルト勾配
+        }
+
+        // 海洋性 (簡易判定)
+        let oceanicity = 0.2;
+        if (current.neighbors.some(ni => {
+            const n = allHexes[ni];
+            return n.properties.isWater && n.properties.elevation <= 0;
+        })) {
+            oceanicity = 0.9;
+        }
+
+        // 河口判定 (下流が海または湖)
+        let isRiverMouth = false;
+        let downstreamTerrain = null;
+        if (downstreamIndex !== -1) {
+            const ds = allHexes[downstreamIndex];
+            if (ds.properties.isWater) {
+                isRiverMouth = true;
+                downstreamTerrain = ds.properties.terrainType;
+            }
+        }
+
+        // 面積計算
+        const result = calcWaterArea({
+            Qin: p.Qin, // 累積された流入量
+            P: p.precipitation_mm,
+            R: p.retention || 0.5,
+            dH: dH,
+            flatness: p.flatness,
+            type: type,
+            oceanicity: oceanicity,
+            isRiverMouth: isRiverMouth,
+            downstreamTerrain: downstreamTerrain
+        });
+
+        // 結果を格納
+        p.flow = result.Qout; // Qoutをflowとして保存
+        p.waterArea = result.WaterArea_ha;
+        p.riverWidth = result.width;
+        p.riverDepth = result.depth;
+        p.riverVelocity = result.v;
+
+        // 1000ha以上の水域は「湖沼」として扱うロジックは削除 (リアルさに欠けるため)
+        // if (p.waterArea >= 1000) { ... }
+
+        // 下流へ伝播
+        if (downstreamIndex !== -1) {
+            const downstream = allHexes[downstreamIndex];
+            downstream.properties.Qin += result.Qout;
+            downstream.properties.inflowCount--;
+            if (downstream.properties.inflowCount === 0) {
+                queue.push(downstream);
+            }
+        }
+    }
+}
+
+/**
+ * 水域面積算定 (ヘルパー関数)
+ */
+function calcWaterArea({
+    Qin, P, R, dH, flatness = 0.5, type, oceanicity, isRiverMouth, downstreamTerrain
+}) {
+    // --- 区間直線距離 ---
+    let L_straight = 10;
+    if (type === "second") L_straight = 8.66;
+    else if (type === "source") L_straight = 5;
+
+    // --- 蛇行度補正 ---
+    const meanderFactor = 1 + (dH / 1000) * (1 - flatness);
+    const L_actual = L_straight * meanderFactor; // km
+
+    // --- 流量計算 ---
+    // k = 0.0027: 物理的根拠に基づく設定
+    // 1 hex = 8660 ha = 86.6 km^2
+    // 降水量 P (mm/year) を 流量 Q (m^3/s) に換算する係数
+    // Q = P * Area * RunoffRatio / (seconds in year)
+    // 1000 mm/y * 86.6 km^2 = 8.66 * 10^7 m^3/y
+    // 1 year approx 3.15 * 10^7 sec
+    // Q approx 2.74 m^3/s (if RunoffRatio=1.0)
+    // dQ = k * P * R  =>  k * 1000 * 1.0 = 2.74  =>  k = 0.00274
+    const k = 0.0027;
+    const dQ = k * P * R; // 降水・保水寄与
+    const Qout = Qin + dQ;
+
+    // --- 水域面積算定 (新ロジック) ---
+    // 幅・深さの計算 (物理ベースの指数に戻す)
+    // w = a * Q^b, d = c * Q^f
+    // b=0.5, f=0.4 が標準的
+    const a = 2.0, b = 0.5;
+    const c = 0.2, f = 0.4;
+    const width = Math.max(2.0, a * Math.pow(Qout, b)); // 最小幅2m
+    const depth = Math.max(0.5, c * Math.pow(Qout, f)); // 最小水深0.5m
+    const A = width * depth;
+    const v = Qout / A;
+
+    const areaResult = waterAreasRiverMouthV2({
+        hexHa: config.HEX_AREA_HA,
+        L_km: L_actual,
+        Q: Qout,
+        flatness: flatness,
+        oceanicity: oceanicity || 0.2, // デフォルト
+        R: R,
+        tidalRange: 2.0,
+        isRiverMouth: isRiverMouth,
+        downstreamTerrain: downstreamTerrain
+    });
+
+    return {
+        L_actual_km: L_actual,
+        Qout,
+        v,
+        width,
+        depth,
+        WaterArea_ha: areaResult.waterTotalHa,
+        areaDetails: areaResult
+    };
+}
+
+/**
+ * 河口・デルタ向け水域面積算定（タイプ別に分離）
+ * 入力:
+ *  - hexHa: ヘックス面積[ha]
+ *  - L_km: 実流長[km]（河口でも8.66〜10を採用可）
+ *  - Q: 累積流量[m3/s]
+ *  - flatness[0..1], oceanicity[0..1], R[0..1] 保水力
+ *  - tidalRange[m] 潮汐レンジ（例：1〜4m）
+ *  - isRiverMouth: 河口フラグ
+ * 出力: { channelHa, deltaHa, marshHa, lagoonHa, waterTotalHa }
+ */
+export function waterAreasRiverMouthV2({
+    hexHa = 8660,
+    L_km = 8.66,
+    Q,
+    flatness,
+    oceanicity,
+    R,
+    tidalRange = 2.0,
+    isRiverMouth = false,
+    downstreamTerrain = null
+}) {
+    const clip01 = x => Math.max(0, Math.min(1, x));
+    const L_m = L_km * 1000;
+
+    // 幅・深さの経験式（初期係数）
+    // 幅・深さの経験式（物理ベース）
+    const a = 2.0, b = 0.5;     // w = a * Q^b
+    const c = 0.2, f = 0.4;    // d = c * Q^f
+    const w_m = Math.max(2.0, a * Math.pow(Q, b));
+    const d_m = Math.max(0.5, c * Math.pow(Q, f));
+
+    // 河道面積
+    const channelHa_raw = (L_m * w_m) / 1e4;
+
+    // 河口・デルタ拡張係数
+    const tideFactor = clip01(tidalRange / 3.0);               // 0〜1
+    const flatWet = clip01(0.6 * flatness + 0.4 * R);          // 0〜1
+    const coastFactor = clip01(oceanicity);                     // 0〜1
+
+    // デルタ・干潟面積（河道の数倍に拡張）
+    // 河口なら強化、内陸なら抑制
+    const deltaMultiplier = isRiverMouth
+        ? 1.0 + 4.0 * (0.5 * tideFactor + 0.3 * flatWet + 0.2 * coastFactor)
+        : 0.5 + 1.0 * flatWet;
+
+    const deltaHa_raw = channelHa_raw * deltaMultiplier;
+
+    // 湿地（塩湿地・感潮湿地）
+    const marshHa_raw = channelHa_raw * (0.8 + 2.5 * flatWet) * (0.5 + 0.5 * coastFactor);
+
+    // 潟湖（lagoon）：潮汐＋海洋性が高く、平坦で保水力が高いほど成立
+    // 修正: ヘックス面積依存ではなく、河川規模(channelHa)に依存させる
+    // 修正2: 湖への流入時はラグーンを小さくする
+    let baseLagoonMult = 2.0 + 6.0 * (0.4 * tideFactor + 0.4 * coastFactor + 0.2 * flatWet); // Max 8.0
+    if (downstreamTerrain === '湖沼') {
+        baseLagoonMult *= 0.3; // 湖の場合は30%に抑制
+    }
+
+    const lagoonMultiplier = isRiverMouth ? baseLagoonMult : 0;
+
+    // channelHaが小さい(小河川)ならラグーンも小さい。大河川なら大きくなる。
+    const lagoonHa_raw = channelHa_raw * lagoonMultiplier;
+
+    // 上限（cap）
+    const channelCapFrac = isRiverMouth ? 0.20 : 0.10;  // 河道の面積上限
+    const deltaCapFrac = isRiverMouth ? 0.60 : 0.20;  // デルタ・干潟の上限
+    const marshCapFrac = isRiverMouth ? 0.50 : 0.30;  // 湿地の上限
+    const lagoonCapFrac = isRiverMouth ? 0.50 : 0.10;  // 潟湖の上限
+
+    let channelHa = Math.min(channelHa_raw, hexHa * channelCapFrac);
+    let deltaHa = Math.min(deltaHa_raw, hexHa * deltaCapFrac);
+    let marshHa = Math.min(marshHa_raw, hexHa * marshCapFrac);
+    let lagoonHa = Math.min(lagoonHa_raw, hexHa * lagoonCapFrac);
+
+    // 総面積
+    let waterTotalHa = channelHa + deltaHa + marshHa + lagoonHa;
+
+    // [USER REQUEST] ソフトキャップを撤廃し、物理計算の結果をそのまま採用する
+
+    return {
+        channelHa: Math.round(channelHa),
+        deltaHa: Math.round(deltaHa),
+        marshHa: Math.round(marshHa),
+        lagoonHa: Math.round(lagoonHa),
+        waterTotalHa: Math.round(waterTotalHa)
+    };
 }
 
 /**
@@ -485,6 +823,7 @@ function adjustLandElevation(allHexes) {
         });
     }
 }
+
 /**
  * 稜線生成 (安定版ロジック + 描画用インデックス修正)
  */
@@ -543,8 +882,14 @@ function allocateVegetation({
     const s = {
         desert: 0, wasteland: 0, grassland: 0, wetland: 0,
         temperateForest: 0, subarcticForest: 0, tropicalRainforest: 0,
-        alpine: 0, tundra: 0, savanna: 0, steppe: 0, coastal: 0
+        alpine: 0, tundra: 0, savanna: 0, steppe: 0, coastal: 0,
+        iceSnow: 0
     };
+
+    // 氷雪帯: 高標高 or 極低温
+    if (T <= -5 || H >= 4000) {
+        s.iceSnow = 1.2;
+    }
 
     s.wasteland += 0.05;
     s.grassland += 0.05;
@@ -554,7 +899,7 @@ function allocateVegetation({
         if (H > 1500) s.alpine += 0.1;
     }
 
-    if (D < 0.5) {
+    if (D < 0.5 && s.iceSnow === 0) {
         s.desert += (0.5 - D) * (T >= 18 ? 2.0 : 1.5);
         s.wasteland += 0.2;
     }
@@ -585,12 +930,12 @@ function allocateVegetation({
         }
     }
 
-    if (H >= 2500) {
+    if (H >= 2500 && s.iceSnow === 0) {
         s.alpine += (H - 2500) / 1000;
         s.wasteland += 0.2;
     }
 
-    if (T < 2) {
+    if (T < 2 && s.iceSnow === 0) {
         s.tundra += (2 - T) * 0.2;
     }
 
@@ -666,7 +1011,10 @@ export function calculateFinalProperties(allHexes) {
 
             let waterHa = 0;
             if (properties.flow > 0) {
-                waterHa = Math.min(config.HEX_AREA_HA * 0.5, properties.flow * 10);
+                // 新しい計算結果を使用
+                waterHa = properties.waterArea || 0;
+                // 安全策: 極端な値のクリップ (ヘックス面積の80%まで)
+                waterHa = Math.min(config.HEX_AREA_HA * 0.8, waterHa);
             }
 
             // 平坦度 (flatness): 周囲との標高差から計算
@@ -736,7 +1084,11 @@ export function calculateFinalProperties(allHexes) {
                 tundra: 'ツンドラ',
                 savanna: 'サバンナ',
                 steppe: 'ステップ',
-                coastal: '沿岸植生'
+                tundra: 'ツンドラ',
+                savanna: 'サバンナ',
+                steppe: 'ステップ',
+                coastal: '沿岸植生',
+                iceSnow: '氷雪帯'
             };
 
             properties.vegetation = vegNameMap[dominantVeg] || dominantVeg;
@@ -747,7 +1099,7 @@ export function calculateFinalProperties(allHexes) {
             properties.landUse = {
                 river: waterHa / config.HEX_AREA_HA,
                 desert: (vegAreas.desert || 0) / safeTotal,
-                barren: ((vegAreas.wasteland || 0) + (vegAreas.alpine || 0) + (vegAreas.tundra || 0)) / safeTotal,
+                barren: ((vegAreas.wasteland || 0) + (vegAreas.alpine || 0) + (vegAreas.tundra || 0) + (vegAreas.iceSnow || 0)) / safeTotal,
                 grassland: ((vegAreas.grassland || 0) + (vegAreas.savanna || 0) + (vegAreas.steppe || 0) + (vegAreas.wetland || 0) + (vegAreas.coastal || 0)) / safeTotal,
                 forest: ((vegAreas.temperateForest || 0) + (vegAreas.subarcticForest || 0) + (vegAreas.tropicalRainforest || 0)) / safeTotal
             };

@@ -76,6 +76,12 @@ export class WorldMap {
         this.isAlluvial = new Uint8Array(this.size);
         this.hasSnow = new Uint8Array(this.size);
         this.ridgeFlow = new Int16Array(this.size);
+        this.riverWidth = new Float32Array(this.size);
+        this.riverDepth = new Float32Array(this.size);
+        this.riverVelocity = new Float32Array(this.size);
+        this.waterArea = new Float32Array(this.size);
+        this.Qin = new Float32Array(this.size);
+        this.inflowCount = new Uint8Array(this.size);
 
         // Enum IDs (Uint8)
         this.climateZoneId = new Uint8Array(this.size);
@@ -278,6 +284,24 @@ class Hex {
 
     get ridgeFlow() { return this._map.ridgeFlow[this._index]; }
     set ridgeFlow(v) { this._map.ridgeFlow[this._index] = v; }
+
+    get riverWidth() { return this._map.riverWidth[this._index]; }
+    set riverWidth(v) { this._map.riverWidth[this._index] = v; }
+
+    get riverDepth() { return this._map.riverDepth[this._index]; }
+    set riverDepth(v) { this._map.riverDepth[this._index] = v; }
+
+    get riverVelocity() { return this._map.riverVelocity[this._index]; }
+    set riverVelocity(v) { this._map.riverVelocity[this._index] = v; }
+
+    get waterArea() { return this._map.waterArea[this._index]; }
+    set waterArea(v) { this._map.waterArea[this._index] = v; }
+
+    get Qin() { return this._map.Qin[this._index]; }
+    set Qin(v) { this._map.Qin[this._index] = v; }
+
+    get inflowCount() { return this._map.inflowCount[this._index]; }
+    set inflowCount(v) { this._map.inflowCount[this._index] = v; }
 
     get manaValue() { return this._map.manaValue[this._index]; }
     set manaValue(v) { this._map.manaValue[this._index] = v; }

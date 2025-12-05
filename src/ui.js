@@ -433,17 +433,17 @@ function drawRoads(roadPaths) {
             1: '#800'  // その他
         }[d.level] || '#000'))
         .attr('stroke-width', d => ({
-            6: 8.0,
-            5: 6.0,
+            6: 6.0,
+            5: 5.0,
             4: 4.0,
-            3: 2.0,
-            2: 1.0,
+            3: 3.0,
+            2: 2.0,
             1: 1.0
         }[d.level] || 1))
         .attr('stroke-dasharray', d => ({
-            6: '8, 8',
-            5: '6, 6',
-            4: '4, 4',
+            6: '2, 2',
+            5: '2, 2',
+            4: '2, 2',
             3: '2, 2',
             2: '1, 1',
             1: '1, 2'
@@ -620,13 +620,13 @@ function drawRivers(visibleHexes) {
             if (upstreamNeighbors.length === 0) { // 水源の場合
                 const startPoint = [d.cx, d.cy];
                 const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                riverPathData.push({ path: path, flow: d.properties.flow });
+                riverPathData.push({ path: path, flow: d.properties.flow, riverWidth: d.properties.riverWidth });
             } else { // 中流の場合
                 upstreamNeighbors.forEach(upstreamHex => {
                     const startPoint = getSharedEdgeMidpoint(d, upstreamHex);
                     if (startPoint) {
                         const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                        riverPathData.push({ path: path, flow: upstreamHex.properties.flow });
+                        riverPathData.push({ path: path, flow: upstreamHex.properties.flow, riverWidth: upstreamHex.properties.riverWidth });
                     }
                 });
             }
@@ -640,7 +640,14 @@ function drawRivers(visibleHexes) {
         .attr('class', 'river-segment')
         .attr('d', d => d.path)
         .attr('stroke', config.TERRAIN_COLORS.河川)
-        .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
+        // 川幅(m)をピクセル幅に変換。10km(1ヘックス) = 2*config.r px と仮定
+        // width(m) / 10000 * (2 * config.r) だが、視認性のため少し強調する
+        .attr('stroke-width', d => {
+            // データから川幅を取得 (なければflowから推定する旧ロジックへのフォールバック)
+            const riverWidth = d.riverWidth || (Math.sqrt(d.flow) * 5);
+            // 最小1px, 最大 config.r * 0.8
+            return Math.max(1.5, Math.min(riverWidth / 15, config.r * 0.8));
+        })
         .attr('stroke-linecap', 'round')
         .style('pointer-events', 'none');
 }
@@ -1670,13 +1677,13 @@ function drawBlockRoads(block) {
                     .attr('class', 'road-segment')
                     .attr('d', d => d.path)
                     .attr('stroke', d => ({
-                        6: '#f0f', 5: '#f00', 4: '#f80', 3: '#ff0', 2: '#0f0', 1: '#800'
+                        6: '#f0f', 5: '#f00', 4: '#f80', 3: '#ff0', 2: '#0f0', 1: '#600'
                     }[d.level] || '#000'))
                     .attr('stroke-width', d => ({
-                        6: 8.0, 5: 6.0, 4: 4.0, 3: 2.0, 2: 1.0, 1: 1.0
+                        6: 6.0, 5: 5.0, 4: 4.0, 3: 3.0, 2: 2.0, 1: 1.0
                     }[d.level] || 1))
                     .attr('stroke-dasharray', d => ({
-                        6: '8, 8', 5: '6, 6', 4: '4, 4', 3: '2, 2', 2: '1, 1', 1: '1, 2'
+                        6: '2, 3', 5: '2, 3', 4: '2, 3', 3: '2, 3', 2: '2, 3', 1: '1, 2'
                     }[d.level] || '2, 2'))
                     .style('pointer-events', 'none')
                     .style('fill', 'none'),
@@ -1821,13 +1828,13 @@ function drawBlockRivers(block) {
             if (upstreamNeighbors.length === 0) { // 水源の場合
                 const startPoint = [d.cx, d.cy];
                 const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                riverPathData.push({ path: path, flow: d.properties.flow });
+                riverPathData.push({ path: path, flow: d.properties.flow, width: d.properties.riverWidth });
             } else { // 中流の場合
                 upstreamNeighbors.forEach(upstreamHex => {
                     const startPoint = getSharedEdgeMidpoint(d, upstreamHex);
                     if (startPoint) {
                         const path = `M ${startPoint[0]},${startPoint[1]} Q ${controlPoint[0]},${controlPoint[1]} ${endPoint[0]},${endPoint[1]}`;
-                        riverPathData.push({ path: path, flow: upstreamHex.properties.flow });
+                        riverPathData.push({ path: path, flow: upstreamHex.properties.flow, width: upstreamHex.properties.riverWidth });
                     }
                 });
             }
@@ -1852,7 +1859,18 @@ function drawBlockRivers(block) {
             enter => enter.append('path')
                 .attr('d', d => d.path)
                 .attr('stroke', riverColor)
-                .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 2, config.r))
+                .attr('stroke-width', d => {
+                    // [USER REQUEST] 1m:0.1px - 100m:10.0px のスケーリング
+                    // 線形補間: px = 0.05 * width_m + 0.05 (approx 0.05 * width_m)
+                    // 1m -> 0.1px, 100m -> 5.0px
+                    // 傾き a = (5.0 - 0.1) / (100 - 1) = 4.9 / 99 = 0.04949...
+                    // 切片 b = 0.1 - a * 1 = 0.1 - 0.04949 = 0.0505...
+                    // 簡易的に width * 0.05 をベースにしつつ、最小値を確保する
+                    const width_m = d.width || 1.0; // widthプロパティを使用 (データにない場合は1.0)
+                    const scale = 0.4;
+                    const px = 0.4 + width_m * scale;
+                    return Math.max(0.4, Math.min(px, config.r)); // 最小0.1px, 最大はヘックスサイズ
+                })
                 .attr('stroke-linecap', 'round')
                 .style('fill', 'none')
                 .style('pointer-events', 'none'),
@@ -2185,19 +2203,45 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             const elevationDifference = southElevation - northElevation;
 
             // 河川の流下方向を取得 (生成器で計算済みの値を使用)
+            // 河川の流下方向を取得 (生成器で計算済みの値を使用)
             let downstreamIndex = hexData.downstreamIndex;
+
+            // 保存されたデータがある場合はそれを優先し、再計算しない
             // 未設定の場合のみ再計算 (互換性のため)
             if ((downstreamIndex === undefined || downstreamIndex === -1) && hexData.properties.flow > 0 && !hexData.properties.isWater) {
-                let lowestNeighbor = null;
-                let minElevation = hexData.properties.elevation;
+                // [WARN] 保存されたdownstreamIndexがないため、簡易ロジックで再計算します。
+                // 1. 既存の川（flow > current.flow）への合流を優先
+                let bestNeighbor = null;
+                let maxFlow = hexData.properties.flow; // 自分より大きい流量を探す
+
                 hexData.neighbors.map(i => allHexes[i]).forEach(n => {
-                    if (n.properties.elevation < minElevation) {
-                        minElevation = n.properties.elevation;
-                        lowestNeighbor = n;
+                    // 自分より流量が大きく、かつ標高が低い（または同じ）場所へ
+                    // ※水域(isWater)も合流先として有効
+                    if ((n.properties.flow > maxFlow || n.properties.isWater) && n.properties.elevation <= hexData.properties.elevation) {
+                        // 流量が最大のものを優先したいが、ここでは最初に見つけた「より大きな川」を採用するだけでも効果あり
+                        // より厳密には、候補の中で最も標高が低い、あるいは流量が大きいものを選ぶべき
+                        if (!bestNeighbor || n.properties.flow > bestNeighbor.properties.flow) {
+                            bestNeighbor = n;
+                            maxFlow = n.properties.flow;
+                        }
                     }
                 });
-                if (lowestNeighbor) {
-                    downstreamIndex = getIndex(lowestNeighbor.col, lowestNeighbor.row);
+
+                // 2. 見つからなければ、最も低い場所へ (従来のロジック)
+                if (!bestNeighbor) {
+                    let minElevation = hexData.properties.elevation;
+                    hexData.neighbors.map(i => allHexes[i]).forEach(n => {
+                        if (n.properties.elevation < minElevation) {
+                            minElevation = n.properties.elevation;
+                            bestNeighbor = n;
+                        }
+                    });
+                }
+
+                if (bestNeighbor) {
+                    downstreamIndex = getIndex(bestNeighbor.col, bestNeighbor.row);
+                    // メモリ上のデータも更新しておく
+                    hexData.downstreamIndex = downstreamIndex;
                 }
             }
 
