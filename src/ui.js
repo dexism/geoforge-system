@@ -41,6 +41,7 @@ let minimapSvg;
 let minimapViewport;
 let minimapScaleX;
 let minimapScaleY;
+let currentSelectedHex = null;
 
 // ブロック分割レンダリング用定数・変数
 const BLOCK_COLS = 5;
@@ -646,7 +647,8 @@ function drawRivers(visibleHexes) {
             // データから川幅を取得 (なければflowから推定する旧ロジックへのフォールバック)
             const riverWidth = d.riverWidth || (Math.sqrt(d.flow) * 5);
             // 最小1px, 最大 config.r * 0.8
-            return Math.max(1.5, Math.min(riverWidth / 15, config.r * 0.8));
+            // return Math.max(1.5, Math.min(riverWidth / 15, config.r * 0.8));
+            return 0.1 + riverWidth / 50;
         })
         .attr('stroke-linecap', 'round')
         .style('pointer-events', 'none');
@@ -975,7 +977,7 @@ function initializeBlocks() {
  * @param {d3.ZoomTransform} transform - 現在のズーム情報
  */
 function updateVisibleBlocks(transform) {
-    console.log("updateVisibleBlocks: Called", transform);
+    // console.log("updateVisibleBlocks: Called", transform);
     if (!svg) {
         console.error("updateVisibleBlocks: svg is undefined");
         return;
@@ -1004,7 +1006,7 @@ function updateVisibleBlocks(transform) {
         block.bounds.xMin < viewBounds.xMax && block.bounds.xMax > viewBounds.xMin &&
         block.bounds.yMin < viewBounds.yMax && block.bounds.yMax > viewBounds.yMin
     );
-    console.log(`updateVisibleBlocks: ${visibleBlocks.length} blocks visible out of ${blocks.length}`);
+    // console.log(`updateVisibleBlocks: ${visibleBlocks.length} blocks visible out of ${blocks.length}`);
 
     blocks.forEach(block => {
         // ブロックがビューポートと交差しているか判定
@@ -1317,7 +1319,7 @@ function drawBlockInteraction(block) {
                     if (tooltipContainer.style('visibility') === 'visible') {
                         tooltipContainer
                             .style('top', (event.pageY - 10) + 'px')
-                            .style('left', (event.pageX + 10) + 'px');
+                            .style('left', (event.pageX + 20) + 'px');
                     }
                 })
                     .on('mouseover', (event, d) => {
@@ -1472,23 +1474,10 @@ function drawBlockInteraction(block) {
 
                     // 情報ウィンドウ表示
                     if (infoContent) {
+                        currentSelectedHex = d; // 選択されたヘックスを保存
                         infoContent.innerHTML = getInfoText(d);
                         infoWindow.classList.remove('hidden');
                         adjustSidebarHeight();
-                    }
-
-                    // コピーボタンのイベントリスナーを設定
-                    const copyBtn = document.getElementById('copy-info-json-btn');
-                    if (copyBtn) {
-                        copyBtn.addEventListener('click', () => {
-                            const jsonStr = generateHexJson(d);
-                            navigator.clipboard.writeText(jsonStr).then(() => {
-                                alert('JSONをクリップボードにコピーしました。');
-                            }).catch(err => {
-                                console.error('コピーに失敗しました:', err);
-                                alert('コピーに失敗しました。');
-                            });
-                        });
                     }
                 });
                 return newHexes;
@@ -1867,9 +1856,9 @@ function drawBlockRivers(block) {
                     // 切片 b = 0.1 - a * 1 = 0.1 - 0.04949 = 0.0505...
                     // 簡易的に width * 0.05 をベースにしつつ、最小値を確保する
                     const width_m = d.width || 1.0; // widthプロパティを使用 (データにない場合は1.0)
-                    const scale = 0.4;
-                    const px = 0.4 + width_m * scale;
-                    return Math.max(0.4, Math.min(px, config.r)); // 最小0.1px, 最大はヘックスサイズ
+                    const scale = 0.1;
+                    const px = 0.5 + width_m * scale;
+                    return Math.min(px, config.r); // 最小0.1px, 最大はヘックスサイズ
                 })
                 .attr('stroke-linecap', 'round')
                 .style('fill', 'none')
@@ -2174,6 +2163,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     infoWindow = document.getElementById('info-window');
     infoContent = document.getElementById('info-window-content');
     const infoCloseBtn = document.getElementById('info-close-btn');
+    const copyInfoBtn = document.getElementById('copy-info-btn');
 
     // infoWindowモジュールの初期化
     initInfoWindow(document.getElementById('legend-container'));
@@ -2202,7 +2192,6 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
             }
             const elevationDifference = southElevation - northElevation;
 
-            // 河川の流下方向を取得 (生成器で計算済みの値を使用)
             // 河川の流下方向を取得 (生成器で計算済みの値を使用)
             let downstreamIndex = hexData.downstreamIndex;
 
@@ -2358,8 +2347,6 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // await addLogMessage("等高線の補間計算を開始します...");
     // await drawContours(hexes);
 
-    // 4h. 河川と稜線
-
     // 4h. 河川と稜線 (初回描画)
     // drawRivers(hexes); // 初回は全ヘックスで描画（または空で呼んでupdateVisibleHexesに任せる）
     // drawRidges(hexes);
@@ -2416,6 +2403,20 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     };
     infoCloseBtn.addEventListener('click', closeInfoWindowAndHighlight);
     svg.on('click', closeInfoWindowAndHighlight);
+
+    if (copyInfoBtn) {
+        copyInfoBtn.addEventListener('click', () => {
+            if (currentSelectedHex) {
+                const jsonStr = generateHexJson(currentSelectedHex);
+                navigator.clipboard.writeText(jsonStr).then(() => {
+                    alert('JSONをクリップボードにコピーしました。');
+                }).catch(err => {
+                    console.error('コピーに失敗しました:', err);
+                    alert('コピーに失敗しました。');
+                });
+            }
+        });
+    }
 
     // --- 6. UIイベントハンドラの設定 ---
 

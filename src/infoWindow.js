@@ -278,12 +278,6 @@ export function getInfoText(d) {
     // 7. 降水量
     envInfoHtml += createRow('water_drop', '降水量', p.precipitation_mm.toFixed(0), 'mm');
 
-    // 8. 魔力ランク
-    envInfoHtml += createRow('auto_awesome', '魔力ランク', p.manaRank);
-
-    // 9. 資源
-    envInfoHtml += createRow('diamond', '資　源', p.resourceRank);
-
     // 10. 魔物ランク
     envInfoHtml += createRow('warning', '魔　物', p.monsterRank ? p.monsterRank + 'ランク' : '見かけない');
 
@@ -487,6 +481,30 @@ export function getInfoText(d) {
     const requiredFarmland = farmers * HA_PER_FARMER;
 
     // 4. 実効農地面積の決定 (最大ポテンシャルでキャップ)
+
+    // [New Logic] 主要な作物が魔力を必要とする場合、農地ポテンシャルを魔力で制限する
+    if (p.industry && p.industry.primary) {
+        // 最も生産量の多い作物を探す
+        let majorCrop = null;
+        let maxYield = -1;
+        Object.entries(p.industry.primary).forEach(([crop, amount]) => {
+            if (amount > maxYield) {
+                maxYield = amount;
+                majorCrop = crop;
+            }
+        });
+
+        if (majorCrop) {
+            const cropData = config.CROP_DATA[majorCrop];
+            if (cropData && cropData.requires_mana) {
+                // 魔力 (0.0 - 1.0) を係数として乗算
+                // p.manaValue (WorldMap定義) または p.mana (旧定義互換) を使用
+                const manaFactor = (p.manaValue !== undefined) ? p.manaValue : (p.mana !== undefined ? p.mana : 0.0);
+                maxPotentialFarmland *= manaFactor;
+            }
+        }
+    }
+
     // ただし、p.cultivatedArea (生成時計算値) がもし大きければそちらを優先しても良いが、
     // 今回の目的は「小さすぎる」のを直すことなので、計算値(required)とポテンシャルの小さい方をとる。
     // 生成時の値とも比較し、大きい方を採用する（既存データへの配慮）
@@ -666,6 +684,8 @@ export function getInfoText(d) {
     // --- 3. 資源カード ---
     let resourceInfoHtml = '';
     // ポテンシャル
+    resourceInfoHtml += createRow('diamond', '代表鉱物', p.resourceRank);
+    resourceInfoHtml += createRow('auto_awesome', '魔　力', p.manaRank);
     resourceInfoHtml += createRow('grass', '農　業', (p.agriPotential * 100).toFixed(0), '%');
     resourceInfoHtml += createRow('forest', '林　業', (p.forestPotential * 100).toFixed(0), '%');
     resourceInfoHtml += createRow('construction', '鉱　業', (p.miningPotential * 100).toFixed(0), '%');
@@ -1029,56 +1049,209 @@ export function getInfoText(d) {
     }
 
     // --- 結合してコンテナに入れる ---
-    // コピーボタンを追加
-    const copyBtnHtml = `<button id="copy-info-json-btn" class="copy-btn" title="JSONでコピー"><span class="material-icons-round" style="font-size: 18px; vertical-align: middle; margin-right: 4px;">content_copy</span></button>`;
-
-    return `<div class="info-scroll-container">${copyBtnHtml}${basicCard}${envCard}${resourceCard}${industryCard}${societyCard}${livingCard}${logisticsCard}${territoryCard}</div>`;
+    // info-scroll-container自体はスクロールさせる
+    // 以前のレイアウト構成を復元 (ボタンはindex.htmlの静的要素を使用するためここには含めない)
+    return `<div style="position: relative; height: 100%; width: 100%; overflow: hidden;">
+        <div class="info-scroll-container" style="height: 100%; overflow-y: auto; padding-top: 10px;">
+            ${basicCard}${envCard}${resourceCard}${industryCard}${societyCard}${livingCard}${logisticsCard}${territoryCard}
+        </div>
+    </div>`;
 }
 
 /**
- * ヘックスデータをJSON形式で返す
+ * ヘックスデータをJSON形式(日本語キー)で返す
+ * 情報ウィンドウの表示内容に準拠
  * @param {object} d - ヘックスデータ
  * @returns {string} - JSON文字列
  */
 export function generateHexJson(d) {
-    // 隣接ヘックスの情報を取得
+    const p = d.properties;
+    const json = {};
+
+    // 1. 基本情報
+    json['基本情報'] = {
+        'ID': d.index,
+        '所属': p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺境',
+        '座標': `E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}`,
+        '集落規模': p.settlement || null,
+        '上位集落ID': p.parentHexId,
+        '人口': p.population || 0,
+        '居住適性': (p.habitability || 0).toFixed(1)
+    };
+    if (p.characteristics && p.characteristics.length > 0) {
+        json['基本情報']['特徴'] = p.characteristics;
+    }
+
+    // 2. 環境
+    // 水域面積計算 (getInfoTextのロジック再利用)
+    let lakeNeighbors = 0;
+    let oceanNeighbors = 0;
+    if (d.neighbors) {
+        d.neighbors.forEach(nIdx => {
+            const nHex = allHexesData[nIdx];
+            if (nHex && nHex.properties.isWater) {
+                if (nHex.properties.vegetation === '湖沼') lakeNeighbors++;
+                else if (nHex.properties.vegetation === '海洋' || nHex.properties.vegetation === '深海') oceanNeighbors++;
+            }
+        });
+    }
+    const lakeArea = p.isWater && p.vegetation === '湖沼' ? config.HEX_AREA_HA : (!p.isWater ? lakeNeighbors * 100 : 0);
+    const oceanArea = p.isWater && p.vegetation !== '湖沼' ? config.HEX_AREA_HA : (!p.isWater ? oceanNeighbors * 100 : 0);
+
+    let riverArea = 0;
+    if (!p.isWater) {
+        if (p.waterArea > 0) {
+            riverArea = p.waterArea;
+        } else if (p.flow > 0) {
+            // 簡易計算 (詳細ロジックは複雑なため、単純化して対応)
+            riverArea = 0.2 * Math.sqrt(p.flow) * 6; // 平均的な長さと仮定
+        }
+    }
+
+    // 農地面積計算
+    const RECLAMATION_SUITABILITY = {
+        'grassland': 0.9, 'savanna': 0.8, 'steppe': 0.8, 'temperateForest': 0.6,
+        'subarcticForest': 0.4, 'tropicalRainforest': 0.3, 'wetland': 0.2,
+        'coastal': 0.3, 'beach': 0.1, 'desert': 0.1, 'wasteland': 0.2,
+        'tundra': 0.05, 'alpine': 0.05, 'iceSnow': 0.0
+    };
+    let maxPotentialFarmland = 0;
+    if (p.vegetationAreas) {
+        Object.entries(p.vegetationAreas).forEach(([vegType, area]) => {
+            maxPotentialFarmland += area * (RECLAMATION_SUITABILITY[vegType] || 0);
+        });
+    } else {
+        const landArea = config.HEX_AREA_HA - (oceanArea + lakeArea + riverArea);
+        maxPotentialFarmland = landArea * 0.5; // フォールバック
+    }
+    let actualFarmland = p.cultivatedArea || 0;
+    if (p.population > 0) {
+        let farmers = 0;
+        if (p.demographics && p.demographics['農民']) {
+            farmers = p.demographics['農民'];
+        } else {
+            farmers = p.population * 0.64; // Fallback
+        }
+        const required = farmers * 1.2;
+        actualFarmland = Math.min(required, maxPotentialFarmland);
+        if (actualFarmland < (p.cultivatedArea || 0)) actualFarmland = p.cultivatedArea;
+    }
+
+    // 住居・道路
+    const settlementArea = p.population > 0 ? 0.02 * Math.pow(p.population, 0.85) : 0;
+    const roadArea = p.roadEdges ? p.roadEdges.reduce((a, b) => a + b, 0) : 0;
+
+    json['環境'] = {
+        '地形': p.isWater ? p.vegetation : (p.terrainType || p.vegetation),
+        '代表植生': p.vegetation || 'なし',
+        '標高': Math.round(p.elevation) + 'm',
+        '気候帯': p.climateZone,
+        '気温': p.temperature.toFixed(1) + '℃',
+        '降水量': p.precipitation_mm.toFixed(0) + 'mm',
+        '魔物ランク': p.monsterRank,
+        '土地利用': {
+            '海洋': oceanArea > 1 ? Math.round(oceanArea) + 'ha' : undefined,
+            '湖沼': lakeArea > 1 ? Math.round(lakeArea) + 'ha' : undefined,
+            '河川': riverArea > 1 ? Math.round(riverArea) + 'ha' : undefined,
+            '農地': actualFarmland > 1 ? Math.round(actualFarmland) + 'ha' : undefined,
+            '集落': settlementArea > 1 ? Math.round(settlementArea) + 'ha' : undefined,
+            '道路': roadArea > 1 ? Math.round(roadArea) + 'ha' : undefined
+        }
+    };
+    // Clean up undefined land use
+    Object.keys(json['環境']['土地利用']).forEach(key => {
+        if (json['環境']['土地利用'][key] === undefined) delete json['環境']['土地利用'][key];
+    });
+
+    // 3. 資源
+    json['資源ポテンシャル'] = {
+        '魔力ランク': p.manaRank,
+        '代表鉱物': p.resourceRank,
+        '農業': (p.agriPotential * 100).toFixed(0) + '%',
+        '林業': (p.forestPotential * 100).toFixed(0) + '%',
+        '鉱業': (p.miningPotential * 100).toFixed(0) + '%',
+        '漁業': (p.fishingPotential * 100).toFixed(0) + '%',
+        '牧畜': (p.pastoralPotential * 100).toFixed(0) + '%',
+        '畜産': (p.livestockPotential * 100).toFixed(0) + '%',
+        '狩猟': (p.huntingPotential * 100).toFixed(0) + '%'
+    };
+
+    // 4. 産業 (人口がいる場合)
+    if (p.population > 0 && p.industry) {
+        json['産業'] = {};
+        const formatInd = (src) => {
+            const res = {};
+            Object.entries(src).forEach(([k, v]) => {
+                if (v > 0.1) res[k] = Math.round(v);
+            });
+            return Object.keys(res).length > 0 ? res : null;
+        };
+        const prim = formatInd(p.industry.primary);
+        if (prim) json['産業']['第一次産業'] = prim;
+        const sec = formatInd(p.industry.secondary);
+        if (sec) json['産業']['第二次産業'] = sec;
+        const tert = formatInd(p.industry.tertiary);
+        if (tert) json['産業']['第三次産業'] = tert;
+    }
+
+    // 5. 社会 (人口がいる場合)
+    if (p.population > 0 && p.demographics) {
+        json['社会'] = {
+            '人口構成': p.demographics
+        };
+        if (p.facilities && p.facilities.length > 0) {
+            json['社会']['施設'] = p.facilities.map(f => `${f.name}(Lv.${f.level}) x${f.count}`);
+        }
+    }
+
+    // 6. 生活 (Living conditions)
+    if (p.livingConditions) {
+        json['生活水準'] = {
+            '治安': p.livingConditions.security,
+            '幸福度': Math.round(p.livingConditions.happiness),
+            '自給率': (Math.min(1.0, p.selfSufficiencyRate || 0) * 100).toFixed(1) + '%',
+            '物価': p.livingConditions.prices
+        };
+        if (p.livingConditions.householdIncome) {
+            json['生活水準']['平均世帯年収'] = Math.round(p.livingConditions.householdIncome);
+        }
+    }
+
+    // 7. 物流
+    if (p.logistics) {
+        json['物流'] = {
+            '荷馬車': p.logistics.wagons,
+            '役畜': p.logistics.animals,
+            '輸送能力': p.logistics.transportCapacity ? Math.round(p.logistics.transportCapacity.total) + 't' : undefined
+        };
+        if (p.logistics.ships && Object.keys(p.logistics.ships).length > 0) {
+            json['物流']['船舶'] = p.logistics.ships;
+        }
+    }
+
+    // 8. 隣接情報
     const neighborsInfo = [];
+    const directMap = ['北東', '東', '南東', '南西', '西', '北西']; // 偶数行(even-r)の場合の方向など、六角形グリッドの方向定義に注意が必要だが、ここでは単純なインデックス順とする
+
     if (d.neighbors && d.neighbors.length > 0) {
-        d.neighbors.forEach(neighborIndex => {
+        d.neighbors.forEach((neighborIndex, i) => {
             const neighborHex = allHexesData[neighborIndex];
             if (neighborHex) {
-                const p = neighborHex.properties;
+                const np = neighborHex.properties;
                 neighborsInfo.push({
-                    index: neighborIndex,
-                    x: neighborHex.col, // allHexesData uses col/row
-                    y: neighborHex.row,
-                    isWater: p.isWater,
-                    elevation: p.elevation,
-                    terrainType: p.terrainType,
-                    vegetation: p.vegetation,
-                    isAlluvial: p.isAlluvial,
-                    hasSnow: p.hasSnow,
-                    beachNeighbors: p.beachNeighbors,
-                    settlement: p.settlement
+                    '方向': i, // 正確な方位はcol/rowの偶奇によるが、ここではインデックスのみ
+                    'ID': neighborIndex,
+                    '地形': np.isWater ? np.vegetation : (np.terrainType || np.vegetation),
+                    '標高': Math.round(np.elevation),
+                    '所属': np.nationId > 0 && config.NATION_NAMES[np.nationId - 1] ? config.NATION_NAMES[np.nationId - 1] : '辺境',
+                    '集落': np.settlement || 'なし'
                 });
             }
         });
     }
+    json['隣接情報'] = neighborsInfo;
 
-    const exportData = {
-        index: d.index,
-        x: d.x,
-        y: d.y,
-        properties: d.properties,
-        // ユーザー要望の地理フラグを明示的に追加
-        isCoastal: d.properties.isCoastal,
-        isLakeside: d.properties.isLakeside,
-        beachNeighbors: d.properties.beachNeighbors,
-        isRiver: d.properties.isRiver,
-        riverFlow: d.properties.riverFlow,
-        neighbors: neighborsInfo
-    };
-    return JSON.stringify(exportData, null, 2);
+    return JSON.stringify(json, null, 2);
 }
 
 // ================================================================

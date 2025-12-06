@@ -783,8 +783,8 @@ export function waterAreasRiverMouthV2({
 
     let channelHa = Math.min(channelHa_raw, hexHa * channelCapFrac);
     let deltaHa = Math.min(deltaHa_raw, hexHa * deltaCapFrac);
-    let marshHa = Math.min(marshHa_raw, hexHa * marshCapFrac);
-    let lagoonHa = Math.min(lagoonHa_raw, hexHa * lagoonCapFrac);
+    let marshHa = marshHa_raw;
+    let lagoonHa = lagoonHa_raw;
 
     // 総面積
     let waterTotalHa = channelHa + deltaHa + marshHa + lagoonHa;

@@ -534,32 +534,37 @@ button.active:hover {
    ================================================================ */
 #info-window {
     position: fixed;
-    bottom: 10px;
-    right: 10px;
-    width: auto;
     height: auto;
-    background-color: var(--sidebar-bg);
-    color: #eee;
-    border: 2px solid #fff;
-    border-radius: 8px;
+    width: 100%;
+    max-width: 100vw;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    background-color: #0007;
+    border: none;
+    box-shadow: none;
     z-index: 20;
-    /* UIボタンより手前に表示 */
-    box-shadow: 0 0 10px #000;
+    box-shadow: 0 0 20px #000;
     font-size: 14px;
-    overflow: hidden;
+    padding: 0;
 
-    /* 表示・非表示のアニメーション */
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
-    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
-    opacity: 1;
+    /* 修正後: visible にして枠外表示を許可します */
+    overflow: visible;
+    pointer-events: auto;
+
+    /* スライドイン・アウトのアニメーション設定 */
+    transition: transform 0.3s ease-out, opacity 0.3s ease-out, visibility 0.3s;
     transform: translateY(0);
+    /* 表示時は定位置 */
+    opacity: 1;
 }
 
 #info-window.hidden {
+    /* 下方向に100%（自身の高さ分）移動して隠す */
+    transform: translateY(100%);
     opacity: 0;
-    transform: translateY(20px);
+    visibility: hidden;
     pointer-events: none;
-    /* 非表示時はクリックイベントを受け付けない */
 }
 
 .info-window-header {
@@ -570,6 +575,7 @@ button.active:hover {
     background-color: #0008;
     border-bottom: 1px solid #999;
     font-weight: bold;
+    background-color: cyan;
 }
 
 #info-close-btn {
@@ -599,16 +605,30 @@ button.active:hover {
     background-color: #444;
 }
 
-#info-window-content {
-    padding: 12px;
-    overflow-y: auto;
-    /* (max-height - ヘッダーの高さ) で計算 */
-    max-height: calc(100dvh - 285px);
-    /* \n などの改行を正しく表示するための設定 */
-    white-space: pre-wrap;
-    line-height: 1.6;
-    box-sizing: border-box;
+#copy-info-btn {
+    position: absolute;
+    top: -18px;
+    left: 10px;
+    width: 36px;
+    height: 36px;
+    background-color: var(--sidebar-bg);
+    border: 2px solid #fff;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 20px; /* Slightly smaller icon size for copy */
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+    transition: background-color 0.2s;
     pointer-events: auto;
+    z-index: 30;
+}
+#copy-info-btn:hover {
+    background-color: #444;
 }
 
 /* ================================================================
@@ -801,70 +821,49 @@ button.active:hover {
    情報ウィンドウ (カードUI) - 追加スタイル
    ================================================================ */
 
-/* 既存の#info-windowを上書き */
-#info-window {
-    width: 100%;
-    max-width: 100vw;
-    bottom: 0;
-    right: 0;
-    left: 0;
-    background-color: #0007;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    z-index: 20;
-    box-shadow: 0 0 20px #000;
-    font-size: 14px;
+.info-window-content {
+    margin: 0;
     padding: 0;
-
-    /* 修正後: visible にして枠外表示を許可します */
-    overflow: visible;
+    overflow-y: auto;
+    /* (max-height - ヘッダーの高さ) で計算 */
+    max-height: calc(100dvh - 285px);
+    /* \n などの改行を正しく表示するための設定 */
+    white-space: pre-wrap;
+    line-height: 1.6;
+    box-sizing: border-box;
     pointer-events: auto;
-
-    /* スライドイン・アウトのアニメーション設定 */
-    transition: transform 0.3s ease-out, opacity 0.3s ease-out, visibility 0.3s;
-    transform: translateY(0);
-    /* 表示時は定位置 */
-    opacity: 1;
-}
-
-#info-window.hidden {
-    /* 下方向に100%（自身の高さ分）移動して隠す */
-    transform: translateY(100%);
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-}
-
-.info-window-header {
-    justify-content: flex-end;
-    /* 右寄せ */
-    background-color: transparent;
-    border-bottom: none;
-}
-
-#info-coord {
-    display: none;
-    /* 座標はカード内に表示するのでヘッダーからは消す */
 }
 
 .info-scroll-container {
     display: flex;
     overflow-x: auto;
     gap: 10px;
+    margin: 0;
     padding: 0;
     max-width: 100%;
-    max-height: 30vh;
+    max-height: 35vh;
 }
 
 .info-card {
     flex: 0 0 200px;
+    margin: 0;
+    padding: 0;
     background: #000e;
     border: 1px solid #445;
     border-radius: 10px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+}
+
+.info-scroll-container::before,
+.info-scroll-container::after {
+    content: ''; /* 疑似要素には必須 */
+    display: block;
+    flex-shrink: 0; /* ★重要：スペーサーが縮まないようにする */
+
+    width: 30px;
+    height: 1px; /* 高さはなくても良いが、念のため設定 */
 }
 
 .info-card.wide-card {
