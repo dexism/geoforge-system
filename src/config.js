@@ -12,6 +12,8 @@ export const ROWS = 100;
 export const HEX_SIZE_KM = 10;
 export const r = 20; // 1へクスのサイズ (px)
 export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
+export const HEX_SIDE_LENGTH_KM = 5.77; // ヘクス1辺の長さ (km)
+export const BEACH_WIDTH_M = 50; // 砂浜の幅 (m)
 
 // ================================================================
 // ■ 2. 地形生成パラメータ (v3.2 - 大陸生成パラメータ再調整版)

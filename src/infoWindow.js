@@ -458,7 +458,8 @@ export function getInfoText(d) {
             savanna: { label: 'サバンナ', icon: 'grass', color: '#dcb' }, // カーキ
             steppe: { label: 'ステップ', icon: 'grass', color: '#cda' }, // ダークカーキ
             coastal: { label: '沿岸植生', icon: 'waves', color: '#8db' }, // ターコイズ
-            iceSnow: { label: '氷雪帯', icon: 'ac_unit', color: '#eff' } // 氷雪
+            iceSnow: { label: '氷雪帯', icon: 'ac_unit', color: '#eff' }, // 氷雪
+            beach: { label: '砂浜', icon: 'beach_access', color: '#ffe4b5' } // モカシン (砂色)
         };
 
         // 人為的な土地利用面積の合計を計算

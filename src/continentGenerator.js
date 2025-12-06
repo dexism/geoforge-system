@@ -874,10 +874,11 @@ export function generateRidgeLines(allHexes) {
 function allocateVegetation({
     T, P, H, waterHa,
     flatness, soilFert, D,
-    coastalDist, oceanicity
+    coastalDist, oceanicity,
+    deductedHa = 0 // 水系以外に控除する面積 (砂浜、集落、道路など)
 }) {
     const hexAreaHa = config.HEX_AREA_HA || 8660;
-    const landHa = Math.max(0, hexAreaHa - waterHa);
+    const landHa = Math.max(0, hexAreaHa - waterHa - deductedHa);
 
     const s = {
         desert: 0, wasteland: 0, grassland: 0, wetland: 0,
@@ -1053,11 +1054,23 @@ export function calculateFinalProperties(allHexes) {
                 oceanicity = 0.8;
             }
 
+            const beachHa = properties.beachArea || 0;
+            // 集落や道路の面積があればここで取得 (現時点では生成前なので0を想定)
+            const settlementHa = properties.settlementArea || 0;
+            const roadHa = properties.roadArea || 0;
+            const totalDeduction = beachHa + settlementHa + roadHa;
+
             const vegAreas = allocateVegetation({
                 T, P, H, waterHa,
                 flatness, soilFert, D,
-                coastalDist, oceanicity
+                coastalDist, oceanicity,
+                deductedHa: totalDeduction
             });
+
+            // 砂浜面積をvegetationAreasに統合
+            if (beachHa > 0) {
+                vegAreas.beach = beachHa;
+            }
 
             properties.vegetationAreas = vegAreas;
 
@@ -1095,6 +1108,7 @@ export function calculateFinalProperties(allHexes) {
 
             properties.landUse = {
                 river: waterHa / config.HEX_AREA_HA,
+                beach: (vegAreas.beach || 0) / safeTotal,
                 desert: (vegAreas.desert || 0) / safeTotal,
                 barren: ((vegAreas.wasteland || 0) + (vegAreas.alpine || 0) + (vegAreas.tundra || 0) + (vegAreas.iceSnow || 0)) / safeTotal,
                 grassland: ((vegAreas.grassland || 0) + (vegAreas.savanna || 0) + (vegAreas.steppe || 0) + (vegAreas.wetland || 0) + (vegAreas.coastal || 0)) / safeTotal,
@@ -1240,10 +1254,14 @@ function generateBeaches(allHexes) {
     const landElevationScale = d3.scaleLinear().domain([50, 300]).range([1.0, 0.0]).clamp(true);
     const seaDepthScale = d3.scaleLinear().domain([0, -500]).range([1.0, 0.0]).clamp(true);
 
+    const sideLen = config.HEX_SIDE_LENGTH_KM || 5.77;
+    const widthM = config.BEACH_WIDTH_M || 50;
+
     allHexes.forEach(h => {
         const p = h.properties;
         if (p.isWater) return;
         p.beachNeighbors = [];
+        p.beachArea = 0; // 初期化
 
         const nx = h.col / config.COLS;
         const ny = h.row / config.ROWS;
@@ -1274,8 +1292,18 @@ function generateBeaches(allHexes) {
 
             if (beachScore > 0.8) {
                 p.beachNeighbors.push(neighborIndex);
+
+                // 面積計算: 確率(beachScore) * 1辺長さ(km) * 幅(m) / 10 = ha
+                // beachScoreは確率として扱う (上限1.0でクリップ推奨だが、ボーナスで超える可能性あり。ここでは確率というより係数として扱う)
+                const effectiveScore = Math.min(1.0, beachScore);
+                const area = effectiveScore * sideLen * widthM / 10;
+                p.beachArea += area;
             }
         });
+
+        // vegetationAreasにも入れておく（calculateFinalPropertiesで上書きされる可能性があるので注意だが、ループ内での累積用）
+        if (!p.vegetationAreas) p.vegetationAreas = {};
+        p.vegetationAreas.beach = p.beachArea;
     });
 }
 
@@ -1367,12 +1395,13 @@ export async function generateIntegratedMap(addLogMessage, redrawFn) {
     await addLogMessage("山系の稜線を計算しています...");
     generateRidgeLines(allHexes);
 
+    // Pass 5.5: Beaches (Moved before allocation)
+    await addLogMessage("海岸線の砂浜を形成しています...");
+    generateBeaches(allHexes);
+
     // Pass 6: Final Properties (Vegetation, etc.)
     await addLogMessage("植生と資源分布を決定しています...");
     calculateFinalProperties(allHexes);
-
-    await addLogMessage("海岸線の砂浜を形成しています...");
-    generateBeaches(allHexes);
 
     if (redrawFn) await redrawFn(allHexes);
 
