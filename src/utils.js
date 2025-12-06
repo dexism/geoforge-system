@@ -125,3 +125,79 @@ export function getSharedEdgeMidpoint(h1, h2) {
     }
     return null;
 }
+
+/**
+ * シード付き疑似乱数生成器 (Xorshift128+)
+ */
+export class SeededRandom {
+    constructor(seed) {
+        // シードが指定されない、または0の場合は現在時刻を使用
+        if (seed === undefined || seed === null || seed === 0) {
+            seed = Date.now();
+        }
+
+        // 文字列シード対応 (ハッシュ化して数値に変換)
+        if (typeof seed === 'string') {
+            let h = 0xdeadbeef;
+            for (let i = 0; i < seed.length; i++) {
+                h = Math.imul(h ^ seed.charCodeAt(i), 2654435761);
+            }
+            seed = (h ^ h >>> 16) >>> 0;
+        }
+
+        // 状態変数の初期化 (SplitMix64で初期状態を生成)
+        this.s0 = this._splitmix64(seed);
+        this.s1 = this._splitmix64(this.s0);
+        this.s2 = this._splitmix64(this.s1);
+        this.s3 = this._splitmix64(this.s2);
+
+        this.initialSeed = seed;
+    }
+
+    // 初期化用ヘルパー (SplitMix64)
+    _splitmix64(a) {
+        a |= 0; a = a + 0x9e3779b9 | 0;
+        let t = a ^ a >>> 16;
+        t = Math.imul(t, 0x21f0aaad);
+        t = t ^ t >>> 15;
+        t = Math.imul(t, 0x735a2d97);
+        return ((t = t ^ t >>> 15) >>> 0);
+    }
+
+    /**
+     * 0以上1未満の乱数を返す (Math.random() 互換)
+     */
+    next() {
+        // Xorshift128
+        let t = this.s3;
+        const s = this.s0;
+        this.s3 = this.s2;
+        this.s2 = this.s1;
+        this.s1 = s;
+
+        t ^= t << 11;
+        t ^= t >>> 8;
+        this.s0 = t ^ s ^ (s >>> 19);
+
+        return (this.s0 >>> 0) / 4294967296;
+    }
+
+    /**
+     * 指定された範囲の整数を返す (min以上 max以下)
+     */
+    nextInt(min, max) {
+        return Math.floor(this.next() * (max - min + 1)) + min;
+    }
+}
+
+// グローバルなPRNGインスタンス
+export let globalRandom = new SeededRandom();
+
+/**
+ * グローバルPRNGを初期化する
+ * @param {number|string} seed 
+ */
+export function initGlobalRandom(seed) {
+    globalRandom = new SeededRandom(seed);
+    console.log(`[PRNG] Initialized with seed: ${seed}`);
+}

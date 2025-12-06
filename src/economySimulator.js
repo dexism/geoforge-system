@@ -3,7 +3,7 @@
 // ================================================================
 
 import * as config from './config.js';
-import { getIndex } from './utils.js';
+import { getIndex, globalRandom } from './utils.js';
 import { findAStarPath } from './roadGenerator.js';
 
 /**
@@ -379,7 +379,7 @@ export function calculateShipOwnership(allHexes) {
         }
 
         // ランダムな基準値
-        let baseShips = minShips + Math.floor(Math.random() * (maxShips - minShips + 1));
+        let baseShips = minShips + Math.floor(globalRandom.next() * (maxShips - minShips + 1));
 
         // 2. スケーリング (人口・交易・水系)
         const popFactor = (p.population / 1000) * 0.8;

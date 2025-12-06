@@ -4,33 +4,14 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import {
-    generateCivilization,
-    determineTerritories,
-    defineNations,
-    assignTerritoriesByTradeRoutes,
-    generateMonsterDistribution,
-    generateHuntingPotential,
-    generateLivestockPotential
-} from './civilizationGenerator.js';
-import {
-    simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership
-} from './economySimulator.js';
-import {
-    setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap
-} from './ui.js';
-import {
-    generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes
-} from './roadGenerator.js';
-import { getIndex } from './utils.js';
-import {
-    generatePhysicalMap,
-    generateClimateAndVegetation,
-    generateRidgeLines,
-    recalculateGeographicFlags,
-    calculateFinalProperties,
-    initializeNoiseFunctions
-} from './continentGenerator.js';
+import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions, recalculateRiverProperties } from './continentGenerator.js';
+import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
+import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership } from './economySimulator.js';
+
+
+import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap } from './ui.js';
+import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
+import { getIndex, initGlobalRandom, globalRandom } from './utils.js';
 
 // GASのデプロイで取得したウェブアプリのURL
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyS8buNL8u2DK9L3UZRtQqLWgDLvuj0WE5ZrzzdXNXSWH3bnGo-JsiO9KSrHp6YOjmtvg/exec';
@@ -43,6 +24,7 @@ const progressBarContainer = document.getElementById('progress-bar-container');
 let worldData = {
     allHexes: null,
     roadPaths: null,
+    seed: 0
 };
 let uiInitialized = false;
 
@@ -85,8 +67,8 @@ async function addLogMessage(message, id = null) {
 // ボタンの有効/無効を管理する関数
 function updateButtonStates(currentStep) {
     step1Btn.disabled = false; // 大陸生成はいつでも可能
-    step2Btn.disabled = true; // 統合されたため無効化
-    step3Btn.disabled = currentStep < 1; // Step 1完了でStep 3へ
+    step2Btn.disabled = currentStep < 1;
+    step3Btn.disabled = currentStep < 2;
     step4Btn.disabled = currentStep < 3;
     step5Btn.disabled = currentStep < 4;
     downloadJsonBtn.disabled = currentStep < 4;
@@ -106,6 +88,7 @@ function resetWorld() {
     worldData = {
         allHexes: null,
         roadPaths: null,
+        seed: 0
     };
     uiInitialized = false;
 
@@ -117,14 +100,21 @@ function resetWorld() {
 // ■ 各生成ステップの関数
 // ================================================================
 
-// ステップ1: 大陸・気候・河川生成 (統合)
+// ステップ1: 大陸・河川生成
 async function runStep1_Continent() {
     resetWorld();
+
+    // シード生成とPRNG初期化
+    const seed = Date.now();
+    initGlobalRandom(seed);
+    worldData.seed = seed;
+    await addLogMessage(`新しい世界のためのシード値を生成しました: ${seed}`);
+
     loadingOverlay.style.display = 'flex';
     logContainer.innerHTML = '';
-    await addLogMessage("ステップ1: 大陸・気候・河川を統合生成しています...");
+    await addLogMessage("ステップ1: 大陸の土台を生成しています...");
 
-    // 統合マップ生成を呼び出す
+    // 物理マップ生成のみを呼び出す
     // 途中経過を描画するためのコールバック関数
     const redrawFn = async (currentHexes) => {
         if (!uiInitialized) {
@@ -143,19 +133,38 @@ async function runStep1_Continent() {
 
     if (!uiInitialized) {
         await addLogMessage("初回描画を準備しています...");
+        // この時点では植生データは不完全だが、エラーにはならない
         await setupUI(worldData.allHexes, [], addLogMessage);
         uiInitialized = true;
     }
 
-    updateButtonStates(1); // Step 1完了 (次はStep 3)
+    updateButtonStates(1);
     loadingOverlay.style.display = 'none';
 }
 
-// ステップ2: 気候・植生生成 (廃止/スキップ)
+// ステップ2: 気候・植生生成
 async function runStep2_Climate() {
-    // 統合されたため、何もしないか、ログだけ出す
-    await addLogMessage("気候・植生はステップ1で生成済みです。");
+    loadingOverlay.style.display = 'flex';
+    logContainer.innerHTML = '';
+    await addLogMessage("ステップ2: 気候と植生を計算しています...");
+
+    // ステップ1のデータに気候・植生情報を追加する
+    worldData.allHexes = await generateClimateAndVegetation(worldData.allHexes, addLogMessage);
+
+    await addLogMessage("気候と植生を再描画しています...");
+    await redrawClimate(worldData.allHexes);
+
+    // [DEBUG] 植生データの検証
+    const missingVeg = worldData.allHexes.filter(h => !h.properties.vegetation).length;
+    if (missingVeg > 0) {
+        console.error(`[ERROR] Step 2 finished but ${missingVeg} hexes have no vegetation!`);
+        await addLogMessage(`[警告] ${missingVeg} 個のヘックスで植生が設定されていません。`);
+    } else {
+        console.log("[INFO] Step 2 finished. All hexes have vegetation.");
+    }
+
     updateButtonStates(2);
+    loadingOverlay.style.display = 'none';
 }
 
 // ステップ3: 集落生成
@@ -438,24 +447,7 @@ const KEY_MAP = {
     facilities: 'fac',
     livingConditions: 'lc',
     logistics: 'log',
-    vegetationAreas: 'va',
-
-    // River & Water Data (Added for persistence)
-    downstreamIndex: 'di',
-    ridgeUpstreamIndex: 'rui',
-    waterArea: 'wa',
-    riverWidth: 'rw',
-    riverDepth: 'rd',
-    riverVelocity: 'rv',
-    beachArea: 'ba', // Added for beach persistence
-
-    // landUse (フラット化)
-    'landUse.river': 'lu_r',
-    'landUse.desert': 'lu_d',
-    'landUse.barren': 'lu_b',
-    'landUse.grassland': 'lu_g',
-    'landUse.forest': 'lu_f',
-    'landUse.beach': 'lu_be', // Added for beach persistence
+    vegetationAreas: 'va'
 };
 
 // 逆マッピング（解凍用）
@@ -580,11 +572,8 @@ function compressWorldData() {
                 if (value.barren > 0) cHex[KEY_MAP['landUse.barren']] = parseFloat(value.barren.toFixed(2));
                 if (value.grassland > 0) cHex[KEY_MAP['landUse.grassland']] = parseFloat(value.grassland.toFixed(2));
                 if (value.forest > 0) cHex[KEY_MAP['landUse.forest']] = parseFloat(value.forest.toFixed(2));
-                if (value.beach > 0) cHex[KEY_MAP['landUse.beach']] = parseFloat(value.beach.toFixed(2));
                 return;
             }
-
-            // industryの特別処理 (ネスト圧縮)
 
             // industryの特別処理 (ネスト圧縮)
             if (key === 'industry' && value) {
@@ -650,7 +639,12 @@ function compressWorldData() {
             if (value === null || value === undefined) return;
             if (key === 'roadLevel' && value === 0) return;
             if (key === 'nationId' && (value === 0 || isNaN(value))) return;
-            if (key === 'isWater' && value === false) return;
+            if (key === 'nationId' && (value === 0 || isNaN(value))) return;
+            // 海水域 (elevation <= 0) の場合は isWater フラグを保存しない (復元時に推定)
+            if (key === 'isWater') {
+                if (!value) return; // falseなら保存しない
+                if (h.properties.elevation <= 0) return; // 海域なら保存しない（湖沼のみ保存）
+            }
             if (key === 'flow' && value === 0) return;
             if (key === 'population' && value === 0) return;
 
@@ -689,6 +683,7 @@ function compressWorldData() {
 
     return {
         version: 2,
+        seed: worldData.seed || globalRandom.initialSeed || Date.now(), // シードを保存
         cols: config.COLS,
         rows: config.ROWS,
         dicts: dictionaries,
@@ -854,6 +849,16 @@ async function loadFromGAS() {
 }
 
 async function processLoadedData(loadedData) {
+    // シードの復元とPRNG初期化
+    if (loadedData.seed) {
+        worldData.seed = loadedData.seed;
+        initGlobalRandom(loadedData.seed);
+        await addLogMessage(`シード値を復元しました: ${loadedData.seed}`);
+    } else {
+        await addLogMessage(`[WARN] 保存データにシードが含まれていません。再現性が保証されません。`);
+        initGlobalRandom(Date.now());
+    }
+
     // V2フォーマット (圧縮版) の場合
     if (loadedData.version === 2) {
         await addLogMessage('圧縮データ(V2)を展開しています...');
@@ -975,15 +980,13 @@ async function processLoadedData(loadedData) {
                     desert: landUse.desert || 0,
                     barren: landUse.barren || 0,
                     grassland: landUse.grassland || 0,
-                    barren: landUse.barren || 0,
-                    grassland: landUse.grassland || 0,
-                    forest: landUse.forest || 0,
-                    beach: landUse.beach || 0 // Restore beach
+                    forest: landUse.forest || 0
                 };
             }
 
             // デフォルト値の復元
-            if (props.isWater === undefined) props.isWater = false;
+            // 海水域の推定: フラグがない場合、標高0以下なら水域とする
+            if (props.isWater === undefined) props.isWater = (props.elevation <= 0);
             if (props.roadLevel === undefined) props.roadLevel = 0;
             if (props.nationId === undefined || props.nationId === null || isNaN(props.nationId)) props.nationId = 0;
             if (props.flow === undefined) props.flow = 0;
@@ -997,10 +1000,7 @@ async function processLoadedData(loadedData) {
                     desert: 0,
                     barren: 0,
                     grassland: 0,
-                    barren: 0,
-                    grassland: 0,
-                    forest: 0,
-                    beach: 0 // Default beach
+                    forest: 0
                 };
             }
             if (!props.industry) props.industry = { primary: {}, secondary: {}, tertiary: {}, quaternary: {}, quinary: {} };
@@ -1123,6 +1123,9 @@ async function processLoadedData(loadedData) {
         }
         h.neighbors = neighbors.filter(n => n !== null);
     });
+
+    // データ補完: 河川プロパティの再計算 (保存されていないwidth/depthをflowから復元)
+    recalculateRiverProperties(worldData.allHexes);
 
     // 稜線データの再生成 (保存されていないため)
     generateRidgeLines(worldData.allHexes);

@@ -647,8 +647,8 @@ function drawRivers(visibleHexes) {
             // データから川幅を取得 (なければflowから推定する旧ロジックへのフォールバック)
             const riverWidth = d.riverWidth || (Math.sqrt(d.flow) * 5);
             // 最小1px, 最大 config.r * 0.8
-            // return Math.max(1.5, Math.min(riverWidth / 15, config.r * 0.8));
-            return 0.1 + riverWidth / 50;
+            return Math.max(1.5, Math.min(riverWidth / 15, config.r * 0.8));
+            // return 0.1 + riverWidth / 50;
         })
         .attr('stroke-linecap', 'round')
         .style('pointer-events', 'none');
