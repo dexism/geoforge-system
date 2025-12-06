@@ -318,7 +318,7 @@ export const TERRAIN_COLORS = {
     海洋: '#48d',
     湖沼: '#058',
     河川: '#37b',
-    砂浜: '#eeb',
+    砂浜: '#feb',
     砂漠: '#eca',
     荒れ地: '#ccb',
     草原: '#bda',

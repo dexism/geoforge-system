@@ -446,7 +446,16 @@ const KEY_MAP = {
     waterArea: 'wa',
     riverWidth: 'rw',
     riverDepth: 'rd',
-    riverVelocity: 'rv'
+    riverVelocity: 'rv',
+    beachArea: 'ba', // Added for beach persistence
+
+    // landUse (フラット化)
+    'landUse.river': 'lu_r',
+    'landUse.desert': 'lu_d',
+    'landUse.barren': 'lu_b',
+    'landUse.grassland': 'lu_g',
+    'landUse.forest': 'lu_f',
+    'landUse.beach': 'lu_be', // Added for beach persistence
 };
 
 // 逆マッピング（解凍用）
@@ -571,8 +580,11 @@ function compressWorldData() {
                 if (value.barren > 0) cHex[KEY_MAP['landUse.barren']] = parseFloat(value.barren.toFixed(2));
                 if (value.grassland > 0) cHex[KEY_MAP['landUse.grassland']] = parseFloat(value.grassland.toFixed(2));
                 if (value.forest > 0) cHex[KEY_MAP['landUse.forest']] = parseFloat(value.forest.toFixed(2));
+                if (value.beach > 0) cHex[KEY_MAP['landUse.beach']] = parseFloat(value.beach.toFixed(2));
                 return;
             }
+
+            // industryの特別処理 (ネスト圧縮)
 
             // industryの特別処理 (ネスト圧縮)
             if (key === 'industry' && value) {
@@ -963,7 +975,10 @@ async function processLoadedData(loadedData) {
                     desert: landUse.desert || 0,
                     barren: landUse.barren || 0,
                     grassland: landUse.grassland || 0,
-                    forest: landUse.forest || 0
+                    barren: landUse.barren || 0,
+                    grassland: landUse.grassland || 0,
+                    forest: landUse.forest || 0,
+                    beach: landUse.beach || 0 // Restore beach
                 };
             }
 
@@ -982,7 +997,10 @@ async function processLoadedData(loadedData) {
                     desert: 0,
                     barren: 0,
                     grassland: 0,
-                    forest: 0
+                    barren: 0,
+                    grassland: 0,
+                    forest: 0,
+                    beach: 0 // Default beach
                 };
             }
             if (!props.industry) props.industry = { primary: {}, secondary: {}, tertiary: {}, quaternary: {}, quinary: {} };

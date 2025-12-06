@@ -81,7 +81,9 @@ export class WorldMap {
         this.riverVelocity = new Float32Array(this.size);
         this.waterArea = new Float32Array(this.size);
         this.Qin = new Float32Array(this.size);
+        this.Qin = new Float32Array(this.size);
         this.inflowCount = new Uint8Array(this.size);
+        this.beachArea = new Float32Array(this.size); // Added for beach calculation
 
         // Enum IDs (Uint8)
         this.climateZoneId = new Uint8Array(this.size);
@@ -118,7 +120,10 @@ export class WorldMap {
         this.landUse_desert = new Float32Array(this.size);
         this.landUse_barren = new Float32Array(this.size);
         this.landUse_grassland = new Float32Array(this.size);
+        this.landUse_barren = new Float32Array(this.size);
+        this.landUse_grassland = new Float32Array(this.size);
         this.landUse_forest = new Float32Array(this.size);
+        this.landUse_beach = new Float32Array(this.size); // Added for beach ratio storage
 
         // Neighbors (Fixed size 6 per hex, Int32)
         this.neighborsBuffer = new Int32Array(this.size * 6).fill(-1);
@@ -301,7 +306,12 @@ class Hex {
     set Qin(v) { this._map.Qin[this._index] = v; }
 
     get inflowCount() { return this._map.inflowCount[this._index]; }
+    get inflowCount() { return this._map.inflowCount[this._index]; }
     set inflowCount(v) { this._map.inflowCount[this._index] = v; }
+
+    get beachArea() { return this._map.beachArea[this._index]; }
+    set beachArea(v) { this._map.beachArea[this._index] = v; }
+
 
     get manaValue() { return this._map.manaValue[this._index]; }
     set manaValue(v) { this._map.manaValue[this._index] = v; }
@@ -390,6 +400,7 @@ class Hex {
             barren: this._map.landUse_barren[this._index],
             grassland: this._map.landUse_grassland[this._index],
             forest: this._map.landUse_forest[this._index],
+            beach: this._map.landUse_beach[this._index],
         };
     }
     set landUse(v) {
@@ -399,6 +410,7 @@ class Hex {
         this._map.landUse_barren[this._index] = v.barren || 0;
         this._map.landUse_grassland[this._index] = v.grassland || 0;
         this._map.landUse_forest[this._index] = v.forest || 0;
+        this._map.landUse_beach[this._index] = v.beach || 0;
     }
 
     get industry() { return this._map.industry[this._index]; }

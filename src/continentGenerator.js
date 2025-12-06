@@ -1258,6 +1258,10 @@ function generateBeaches(allHexes) {
     const widthM = config.BEACH_WIDTH_M || 50;
 
     allHexes.forEach(h => {
+        if (!beachNoise) {
+            console.error("[ERROR] beachNoise is not initialized!");
+            return;
+        }
         const p = h.properties;
         if (p.isWater) return;
         p.beachNeighbors = [];
@@ -1285,23 +1289,20 @@ function generateBeaches(allHexes) {
 
             const landNeighborCount = neighbor.neighbors.filter(idx => !allHexes[idx].properties.isWater).length;
             const bayBonus = 1.0 + (landNeighborCount / 6) * 0.5;
-            beachScore *= bayBonus;
-
             const randomFactor = 0.7 + (beachNoise(nx * 15, ny * 15) + 1) / 2 * 0.6;
             beachScore *= randomFactor;
 
             if (beachScore > 0.8) {
                 p.beachNeighbors.push(neighborIndex);
 
-                // 面積計算: 確率(beachScore) * 1辺長さ(km) * 幅(m) / 10 = ha
-                // beachScoreは確率として扱う (上限1.0でクリップ推奨だが、ボーナスで超える可能性あり。ここでは確率というより係数として扱う)
+                // 面積計算
                 const effectiveScore = Math.min(1.0, beachScore);
                 const area = effectiveScore * sideLen * widthM / 10;
                 p.beachArea += area;
             }
         });
 
-        // vegetationAreasにも入れておく（calculateFinalPropertiesで上書きされる可能性があるので注意だが、ループ内での累積用）
+        // vegetationAreasにも入れておく
         if (!p.vegetationAreas) p.vegetationAreas = {};
         p.vegetationAreas.beach = p.beachArea;
     });
@@ -1398,6 +1399,18 @@ export async function generateIntegratedMap(addLogMessage, redrawFn) {
     // Pass 5.5: Beaches (Moved before allocation)
     await addLogMessage("海岸線の砂浜を形成しています...");
     generateBeaches(allHexes);
+
+    // Debug: Check beach generation
+    let beachCount = 0;
+    let totalBeachArea = 0;
+    allHexes.forEach(h => {
+        if (h.properties.beachArea > 0) {
+            beachCount++;
+            totalBeachArea += h.properties.beachArea;
+        }
+    });
+    console.log(`[DEBUG] Beaches generated: count=${beachCount}, totalArea=${totalBeachArea}ha`);
+    await addLogMessage(`砂浜生成完了: ${beachCount}箇所, 計${Math.round(totalBeachArea)}ha`);
 
     // Pass 6: Final Properties (Vegetation, etc.)
     await addLogMessage("植生と資源分布を決定しています...");

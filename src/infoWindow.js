@@ -459,7 +459,7 @@ export function getInfoText(d) {
             steppe: { label: 'ステップ', icon: 'grass', color: '#cda' }, // ダークカーキ
             coastal: { label: '沿岸植生', icon: 'waves', color: '#8db' }, // ターコイズ
             iceSnow: { label: '氷雪帯', icon: 'ac_unit', color: '#eff' }, // 氷雪
-            beach: { label: '砂浜', icon: 'beach_access', color: '#ffe4b5' } // モカシン (砂色)
+            beach: { label: '砂浜', icon: 'beach_access', color: '#feb' } // モカシン (砂色)
         };
 
         // 人為的な土地利用面積の合計を計算
@@ -497,12 +497,51 @@ export function getInfoText(d) {
                     landUseSegments.push({ label: key, area: area, color: '#ccc' });
                 }
             });
-    } else if (p.landUse && p.landUse.forest > 0) {
-        // 旧データ互換
-        const forestArea = p.landUse.forest * config.HEX_AREA_HA;
-        if (forestArea > 1) {
-            envInfoHtml += createRow('forest', '森林面積', Math.round(forestArea).toLocaleString(), ' ha', '#228b22');
-            landUseSegments.push({ label: '森林', area: forestArea, color: '#228b22' });
+    } else {
+        // フォールバック: landUse から復元 (vegetationAreasが永続化されていない場合)
+        // ここでは landUse の比率と残りの陸地面積から逆算して表示する
+        const humanUseArea = (settlementArea || 0) + (roadArea || 0) + (p.cultivatedArea || 0);
+        const landArea = config.HEX_AREA_HA - (oceanArea + lakeArea + riverArea);
+        const remainingNatureArea = Math.max(0, landArea - humanUseArea);
+
+        // landUse の各要素をリストアップ
+        // landUse は割合 (0.0-1.0) で保持されているが、totalLandAreaに対する比率である
+        // ここでは簡易的に remainingNatureArea を分配するのではなく、
+        // landUse の比率 * HEX_AREA_HA (ただし水域などは除く) で面積を出す必要があるが、
+        // 単純に landUse の比率の合計が 1.0 に近いはずなので、
+        // (landUse.vals * safeTotal) で計算済みの値に近いものが取れるはず。
+
+        // WorldMap.js の landUse 定義:
+        // river, desert, barren, grassland, forest, beach
+        if (p.landUse) {
+            const safeTotal = config.HEX_AREA_HA - (oceanArea + lakeArea + riverArea); // 近似的な陸地合計
+
+            const useMap = [
+                { key: 'beach', label: '砂浜', icon: 'beach_access', color: '#feb' },
+                { key: 'forest', label: '森林', icon: 'forest', color: '#228b22' },
+                { key: 'grassland', label: '草原', icon: 'grass', color: '#bda' },
+                { key: 'barren', label: '荒地', icon: 'terrain', color: '#ccb' },
+                { key: 'desert', label: '砂漠', icon: 'landscape', color: '#eca' }
+            ];
+
+            useMap.forEach(item => {
+                const ratio = p.landUse[item.key];
+                if (ratio > 0) {
+                    // 面積換算: 厳密には safeTotal * ratio だが、safeTotalの計算が難しい場合があるため
+                    // 簡易的に (HEX_AREA_HA - water) * ratio とする
+                    // ただし p.landUse.river もあるので注意
+
+                    // calculateFinalProperties での計算式:
+                    // beach: vegAreas.beach / safeTotal
+                    // safeTotal = HEX_AREA_HA - waterHa
+
+                    const area = ratio * safeTotal;
+                    if (area > 1) {
+                        envInfoHtml += createRow(item.icon, item.label, Math.round(area).toLocaleString(), ' ha', item.color);
+                        landUseSegments.push({ label: item.label, area: area, color: item.color });
+                    }
+                }
+            });
         }
     }
 
