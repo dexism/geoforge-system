@@ -409,66 +409,153 @@ export function getInfoText(d) {
     // 14. 河川水域
     if (riverArea > 1) envInfoHtml += createRow('water', '河川水域', Math.round(riverArea).toLocaleString(), ' ha', '#37b');
 
-    // 15. 農地面積
-    if (p.cultivatedArea > 1) {
-        envInfoHtml += createRow('agriculture', '農地等', Math.round(p.cultivatedArea).toLocaleString(), ' ha', '#fb7');
+    // --- 16.5. 農地面積の動的計算 (v3.5) ---
+    // p.cultivatedArea は生成時の値だが、人口が多い集落では過小評価されがち。
+    // ここで植生適性と人口に基づき、ローカルで再計算して表示する。
+
+    // 植生ごとの開墾適性 (0.0 - 1.0)
+    const RECLAMATION_SUITABILITY = {
+        'grassland': 0.9,  // 草原: 開墾容易
+        'savanna': 0.8,    // サバンナ: 比較的容易
+        'steppe': 0.8,     // ステップ: 比較的容易
+        'temperateForest': 0.6, // 温帯林: 伐採が必要
+        'subarcticForest': 0.4, // 亜寒帯林: 寒冷で手間
+        'tropicalRainforest': 0.3, // 熱帯雨林: 困難
+        'wetland': 0.2,    // 湿地: 排水が必要
+        'coastal': 0.3,    // 沿岸: 砂地など
+        'beach': 0.1,      // 砂浜: 不適
+        'desert': 0.1,     // 砂漠: 灌漑必須
+        'wasteland': 0.2,   // 荒地: 岩石除去など
+        'tundra': 0.05,    // ツンドラ: 極めて困難
+        'alpine': 0.05,    // アルパイン: ほぼ無理
+        'iceSnow': 0.0     // 氷雪: 無理
+    };
+
+    // 日本語名 -> 英語キーのマッピング (フォールバック用)
+    const VEG_JP_TO_EN = {
+        '草原': 'grassland', '草原帯': 'grassland',
+        'サバンナ': 'savanna',
+        'ステップ': 'steppe',
+        '温帯林': 'temperateForest', '森林': 'temperateForest',
+        '亜寒帯林': 'subarcticForest', '針葉樹林': 'subarcticForest',
+        '熱帯雨林': 'tropicalRainforest', '密林': 'tropicalRainforest',
+        '湿地': 'wetland', '湿地帯': 'wetland',
+        '沿岸': 'coastal', '沿岸植生': 'coastal',
+        '砂浜': 'beach',
+        '砂漠': 'desert', '砂漠帯': 'desert',
+        '荒地': 'wasteland', '荒地帯': 'wasteland',
+        'ツンドラ': 'tundra',
+        'アルパイン': 'alpine', '高山': 'alpine',
+        '氷雪': 'iceSnow', '氷雪帯': 'iceSnow'
+    };
+
+    // 1. 最大農地ポテンシャルの計算
+    let maxPotentialFarmland = 0;
+    if (p.vegetationAreas) {
+        Object.entries(p.vegetationAreas).forEach(([vegType, area]) => {
+            const suitability = RECLAMATION_SUITABILITY[vegType] || 0;
+            maxPotentialFarmland += area * suitability;
+        });
+    } else {
+        // vegetationAreasがない場合のフォールバック
+        const vegKey = VEG_JP_TO_EN[p.vegetation] || 'grassland';
+        const suitability = RECLAMATION_SUITABILITY[vegKey] || 0.5;
+        const landArea = config.HEX_AREA_HA - (oceanArea + lakeArea + riverArea);
+        maxPotentialFarmland = landArea * suitability;
     }
 
-    // 16. 集落面積
+    // 2. 農民人口の算出
+    let farmers = 0;
+    if (p.demographics && p.demographics['農民']) {
+        farmers = p.demographics['農民'];
+    } else {
+        // 人口構成データがない場合、集落タイプから推定
+        // 第一次産業比率のうち、8割程度が農民と仮定
+        let primaryRate = 0.8; // デフォルト (村など)
+        if (p.industry && p.industry.primary) {
+            // 産業データがあればそれを使う手もあるが、ここでは簡易的にConfigから
+            const limit = config.INDUSTRY_ALLOCATION[p.settlement] || config.INDUSTRY_ALLOCATION['散居'];
+            primaryRate = limit[1]; // 第一次産業比率
+        }
+        farmers = p.population * primaryRate * 0.8;
+    }
+
+    // 3. 必要農地面積の算出
+    // 1農民あたりに必要な農地面積 (ha)
+    // CROP_DATAの平均値 (1.5ha程度) を採用するが、生産性向上などで少し減じて1.2haとする
+    const HA_PER_FARMER = 1.2;
+    const requiredFarmland = farmers * HA_PER_FARMER;
+
+    // 4. 実効農地面積の決定 (最大ポテンシャルでキャップ)
+    // ただし、p.cultivatedArea (生成時計算値) がもし大きければそちらを優先しても良いが、
+    // 今回の目的は「小さすぎる」のを直すことなので、計算値(required)とポテンシャルの小さい方をとる。
+    // 生成時の値とも比較し、大きい方を採用する（既存データへの配慮）
+    let actualFarmland = Math.min(requiredFarmland, maxPotentialFarmland);
+    if (actualFarmland < (p.cultivatedArea || 0)) {
+        actualFarmland = p.cultivatedArea;
+    }
+
+    // --- 16. 集落面積・道路面積 (再掲) ---
+    // (上で計算済みだが、humanUseAreaの再計算のために変数として確保)
     let settlementArea = 0;
     if (p.population > 0) {
         settlementArea = 0.02 * Math.pow(p.population, 0.85);
     }
-    if (settlementArea > 1) {
-        envInfoHtml += createRow('location_city', '集落等', Math.round(settlementArea).toLocaleString(), ' ha', '#d33');
-    }
 
-    // 17. 道路面積
     let roadArea = 0;
     if (p.roadEdges) {
         roadArea = p.roadEdges.reduce((a, b) => a + b, 0);
     }
-    if (roadArea > 0) {
-        envInfoHtml += createRow('add_road', '道路等', Math.round(roadArea).toLocaleString(), ' ha', '#d3d');
-    }
 
-    // 18. 詳細植生面積 (v3.4)
+    // --- 18. 詳細植生面積 (v3.4 + v3.5改修) ---
     // バーグラフ用のデータ収集配列
     const landUseSegments = [];
 
     // 水域・人為的利用の追加
-    if (oceanArea > 1) landUseSegments.push({ label: '海洋', area: oceanArea, color: '#48d' }); // 濃い青
-    if (lakeArea > 1) landUseSegments.push({ label: '湖沼', area: lakeArea, color: '#058' }); // 薄い青
-    if (riverArea > 1) landUseSegments.push({ label: '河川', area: riverArea, color: '#37b' }); // 中間の青
-    if (p.cultivatedArea > 1) landUseSegments.push({ label: '農地', area: p.cultivatedArea, color: '#fb7' }); // 薄いオレンジ
-    if (settlementArea > 1) landUseSegments.push({ label: '集落', area: settlementArea, color: '#d33' }); // 赤
-    if (roadArea > 0) landUseSegments.push({ label: '道路', area: roadArea, color: '#d3d' }); // グレー
+    if (oceanArea > 1) landUseSegments.push({ label: '海洋', area: oceanArea, color: '#48d' });
+    if (lakeArea > 1) landUseSegments.push({ label: '湖沼', area: lakeArea, color: '#058' });
+    if (riverArea > 1) landUseSegments.push({ label: '河川', area: riverArea, color: '#37b' });
+
+    // 農地 (計算値を使用)
+    if (actualFarmland > 1) {
+        envInfoHtml += createRow('agriculture', '農地等', Math.round(actualFarmland).toLocaleString(), ' ha', '#fb7');
+        landUseSegments.push({ label: '農地', area: actualFarmland, color: '#fb7' });
+    }
+
+    // 集落
+    if (settlementArea > 1) {
+        envInfoHtml += createRow('location_city', '集落等', Math.round(settlementArea).toLocaleString(), ' ha', '#d33');
+        landUseSegments.push({ label: '集落', area: settlementArea, color: '#d33' });
+    }
+
+    // 道路
+    if (roadArea > 0) {
+        envInfoHtml += createRow('add_road', '道路等', Math.round(roadArea).toLocaleString(), ' ha', '#d3d');
+        landUseSegments.push({ label: '道路', area: roadArea, color: '#d3d' });
+    }
+
 
     if (p.vegetationAreas) {
         const vegLabelMap = {
-            desert: { label: '砂漠帯', icon: 'landscape', color: '#eca' }, // 砂色
-            wasteland: { label: '荒地帯', icon: 'terrain', color: '#ccb' }, // 灰色っぽい茶色
-            grassland: { label: '草原帯', icon: 'grass', color: '#bda' }, // 明るい緑
-            wetland: { label: '湿地帯', icon: 'water_drop', color: '#676' }, // ライトシーグリーン
-            temperateForest: { label: '温帯林', icon: 'forest', color: '#7a5' }, // フォレストグリーン
-            subarcticForest: { label: '亜寒帯林', icon: 'forest', color: '#475' }, // ダークグリーン
-            tropicalRainforest: { label: '熱帯雨林', icon: 'forest', color: '#262' }, // 非常に濃い緑
-            alpine: { label: 'アルパイン', icon: 'terrain', color: '#aaa' }, // ゲインズボロ (薄いグレー)
-            tundra: { label: 'ツンドラ', icon: 'ac_unit', color: '#bcd' }, // ライトシアン
-            savanna: { label: 'サバンナ', icon: 'grass', color: '#dcb' }, // カーキ
-            steppe: { label: 'ステップ', icon: 'grass', color: '#cda' }, // ダークカーキ
-            coastal: { label: '沿岸植生', icon: 'waves', color: '#8db' }, // ターコイズ
-            iceSnow: { label: '氷雪帯', icon: 'ac_unit', color: '#eff' }, // 氷雪
-            beach: { label: '砂浜', icon: 'beach_access', color: '#feb' } // モカシン (砂色)
+            desert: { label: '砂漠帯', icon: 'landscape', color: '#eca' },
+            wasteland: { label: '荒地帯', icon: 'terrain', color: '#ccb' },
+            grassland: { label: '草原帯', icon: 'grass', color: '#bda' },
+            wetland: { label: '湿地帯', icon: 'water_drop', color: '#676' },
+            temperateForest: { label: '温帯林', icon: 'forest', color: '#7a5' },
+            subarcticForest: { label: '亜寒帯林', icon: 'forest', color: '#475' },
+            tropicalRainforest: { label: '熱帯雨林', icon: 'forest', color: '#262' },
+            alpine: { label: 'アルパイン', icon: 'terrain', color: '#aaa' },
+            tundra: { label: 'ツンドラ', icon: 'ac_unit', color: '#bcd' },
+            savanna: { label: 'サバンナ', icon: 'grass', color: '#dcb' },
+            steppe: { label: 'ステップ', icon: 'grass', color: '#cda' },
+            coastal: { label: '沿岸植生', icon: 'waves', color: '#8db' },
+            iceSnow: { label: '氷雪帯', icon: 'ac_unit', color: '#eff' },
+            beach: { label: '砂浜', icon: 'beach_access', color: '#feb' }
         };
 
-        // 人為的な土地利用面積の合計を計算
-        const humanUseArea = (settlementArea || 0) + (roadArea || 0) + (p.cultivatedArea || 0);
-
-        // 水域以外の陸地面積
+        // 人為的な土地利用面積の合計を計算 (計算された農地を使用)
+        const humanUseArea = (settlementArea || 0) + (roadArea || 0) + (actualFarmland || 0);
         const landArea = config.HEX_AREA_HA - (oceanArea + lakeArea + riverArea);
-
-        // 残りの自然植生面積
         const remainingNatureArea = Math.max(0, landArea - humanUseArea);
 
         // 元の植生面積の合計（水域除く）
@@ -477,14 +564,12 @@ export function getInfoText(d) {
             if (k !== 'water') totalVegArea += v;
         });
 
-        // 縮小率の計算（人為的利用が増えた分、自然植生を圧縮する）
         const scaleFactor = totalVegArea > 0 ? remainingNatureArea / totalVegArea : 0;
 
-        // 面積の大きい順にソートして表示
         Object.entries(p.vegetationAreas)
             .filter(([key, area]) => key !== 'water')
-            .map(([key, area]) => [key, area * scaleFactor]) // 縮小率を適用
-            .filter(([, area]) => area > 1) // 1ha以下は非表示
+            .map(([key, area]) => [key, area * scaleFactor])
+            .filter(([, area]) => area > 1)
             .sort(([, a], [, b]) => b - a)
             .forEach(([key, area]) => {
                 const info = vegLabelMap[key];
@@ -492,15 +577,13 @@ export function getInfoText(d) {
                     envInfoHtml += createRow(info.icon, info.label, Math.round(area).toLocaleString(), ' ha', info.color);
                     landUseSegments.push({ label: info.label, area: area, color: info.color });
                 } else {
-                    // 未定義のキーがあればそのまま表示
                     envInfoHtml += createRow('help_outline', key, Math.round(area).toLocaleString(), ' ha', '#ccc');
                     landUseSegments.push({ label: key, area: area, color: '#ccc' });
                 }
             });
     } else {
         // フォールバック: landUse から復元 (vegetationAreasが永続化されていない場合)
-        // ここでは landUse の比率と残りの陸地面積から逆算して表示する
-        const humanUseArea = (settlementArea || 0) + (roadArea || 0) + (p.cultivatedArea || 0);
+        const humanUseArea = (settlementArea || 0) + (roadArea || 0) + (actualFarmland || 0);
         const landArea = config.HEX_AREA_HA - (oceanArea + lakeArea + riverArea);
         const remainingNatureArea = Math.max(0, landArea - humanUseArea);
 

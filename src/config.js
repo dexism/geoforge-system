@@ -147,6 +147,7 @@ export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面
     '大麦': { yield: 0.75, type: '畑作', cultivation_ha_per_person: 1.5 },
     '雑穀': { yield: 0.65, type: '畑作', cultivation_ha_per_person: 1.5 },
     '稲': { yield: 1.35, type: '水田', cultivation_ha_per_person: 0.8 },
+    '果物': { yield: 0.80, type: '樹園', cultivation_ha_per_person: 1.0 },
 };
 export const SETTLEMENT_PARAMS = { // 労働力率, 消費量, インフラ係数, 頭数制限, ボーナス, ★狩人率
     '首都': {
@@ -744,4 +745,50 @@ export const PORT_PARAMS = {
         'river_canoe': 0.5,
         'river_barge': 1.5
     }
+};
+export const SUITABILITY_FIELD = {
+    'grassland': 0.95, 'savanna': 0.9, 'steppe': 0.9,
+    'temperateForest': 0.7, 'subarcticForest': 0.5, 'tropicalRainforest': 0.4,
+    'wetland': 0.1, // 排水が必要
+    'coastal': 0.3, 'beach': 0.1, 'desert': 0.1, 'wasteland': 0.2,
+    'tundra': 0.1, 'alpine': 0.1, 'iceSnow': 0.0
+};
+export const SUITABILITY_PADDY = {
+    'grassland': 0.9, 'savanna': 0.8, 'steppe': 0.8,
+    'temperateForest': 0.6, 'subarcticForest': 0.4, 'tropicalRainforest': 0.5,
+    'wetland': 0.9, // 水田には最適
+    'coastal': 0.4, 'beach': 0.1, 'desert': 0.1, 'wasteland': 0.2,
+    'tundra': 0.0, 'alpine': 0.0, 'iceSnow': 0.0
+};
+export const SUITABILITY_ORCHARD = {
+    'temperateForest': 0.8, // 温帯林: 果樹栽培に適する
+    'subarcticForest': 0.4, // 寒冷だが一部可
+    'tropicalRainforest': 0.6, // 熱帯果樹
+    'grassland': 0.7,  // 平地も可
+    'savanna': 0.6,
+    'steppe': 0.6,
+    'coastal': 0.5, // 柑橘類など
+    'wetland': 0.1, // 根腐れ
+    'beach': 0.1,
+    'desert': 0.1, // 灌漑あれば
+    'wasteland': 0.3, // 傾斜地など
+    'tundra': 0.0, 'alpine': 0.1, 'iceSnow': 0.0
+};
+
+// 日本語名 -> 英語キーのマッピング
+export const VEG_JP_TO_EN = {
+    '草原': 'grassland', '草原帯': 'grassland',
+    'サバンナ': 'savanna',
+    'ステップ': 'steppe',
+    '温帯林': 'temperateForest', '森林': 'temperateForest',
+    '亜寒帯林': 'subarcticForest', '針葉樹林': 'subarcticForest',
+    '熱帯雨林': 'tropicalRainforest', '密林': 'tropicalRainforest',
+    '湿地': 'wetland', '湿地帯': 'wetland',
+    '沿岸': 'coastal', '沿岸植生': 'coastal',
+    '砂浜': 'beach',
+    '砂漠': 'desert', '砂漠帯': 'desert',
+    '荒地': 'wasteland', '荒地帯': 'wasteland',
+    'ツンドラ': 'tundra',
+    'アルパイン': 'alpine', '高山': 'alpine',
+    '氷雪': 'iceSnow', '氷雪帯': 'iceSnow'
 };
