@@ -790,7 +790,8 @@ async function drawBlockContours(block) {
                 const distSq = (h.cx - px) ** 2 + (h.cy - py) ** 2;
                 if (distSq < 1e-6) {
                     // 湖沼も実際の標高を使用する (ユーザー要望)
-                    weightedSum = h.properties.elevation;
+                    // [FIX] 標高を整数に丸めて整合性を確保 (生成時とロード時の微細な差異を吸収)
+                    weightedSum = Math.round(h.properties.elevation);
                     totalWeight = 1;
                     exactMatch = true;
                     break;
@@ -798,7 +799,8 @@ async function drawBlockContours(block) {
                 const weight = 1.0 / distSq;
                 totalWeight += weight;
                 // 湖沼も実際の標高を使用する
-                weightedSum += weight * h.properties.elevation;
+                // [FIX] 標高を整数に丸めて整合性を確保
+                weightedSum += weight * Math.round(h.properties.elevation);
             }
 
             if (exactMatch) {

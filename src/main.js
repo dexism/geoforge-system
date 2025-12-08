@@ -925,7 +925,12 @@ async function processLoadedData(loadedData) {
         worldData.allHexes = new WorldMap(loadedData.cols, loadedData.rows);
 
         loadedData.hexes.forEach((h, index) => {
-            const hex = worldData.allHexes[index];
+            const hex = worldData.allHexes.getHex(index);
+
+            // [FIX] col/rowをインデックスから復元 (WorldMapで初期化されていないため必須)
+            // これがないとgetNeighborIndices等の座標依存ロジックが全て(0,0)基準になり破綻する
+            hex.col = index % loadedData.cols;
+            hex.row = Math.floor(index / loadedData.cols);
 
             // プロパティの展開
             const props = {};
@@ -1138,6 +1143,12 @@ async function processLoadedData(loadedData) {
     // 簡易的なneighbors再構築ブロックは除去 (utils.jsのgetNeighborIndicesを用いた正確なロジックに置き換えたため)
     // 以前のコードがここで上書きしていたため、バグが再発していた。
 
+    // [MOVED] 水域植生の初期化 (沿岸判定の前に必須)
+    initializeWaterVegetation(worldData.allHexes);
+
+    // [MOVED] 地理的フラグ（沿岸・湖岸）の再計算
+    recalculateGeographicFlags(worldData.allHexes);
+
     // データ補完: 河川プロパティの再計算
     // downstreamIndexが保存されていない(V2初期)場合、または河川が表示されない場合は再構築が必要
     const riverHexes = worldData.allHexes.filter(h => h.properties.flow > 0);
@@ -1195,8 +1206,7 @@ async function processLoadedData(loadedData) {
 
     // [MOVED] generateRidgeLines called later after seed init
 
-    // 水域植生の初期化 (沿岸判定の前に必須)
-    initializeWaterVegetation(worldData.allHexes);
+
 
     // [DEBUG] Diagnosing why Coastal becomes 0
     let waterCount = 0;
@@ -1228,8 +1238,7 @@ async function processLoadedData(loadedData) {
         });
     }
 
-    // 地理的フラグ（沿岸・湖岸）の再計算
-    recalculateGeographicFlags(worldData.allHexes);
+
 
     // 植生エリアデータが欠落している場合の再計算
     const missingVegAreas = worldData.allHexes.filter(h => !h.properties.vegetationAreas && !h.properties.isWater).length;
@@ -1243,13 +1252,7 @@ async function processLoadedData(loadedData) {
 
     // ノイズ関数の再初期化
     // initGlobalRandomでシードを設定してからinitializeNoiseFunctionsを呼ぶ必要があります
-    if (worldData.seed) {
-        initGlobalRandom(worldData.seed);
-        initializeNoiseFunctions(); // 引数不要、グローバルなglobalRandomを使用
-        console.log(`[Restoration Debug] Global Random re-initialized with seed: ${worldData.seed}`);
-    } else {
-        console.warn(`[Restoration Warning] No seed found in worldData!`);
-    }
+
 
     // 稜線データの再生成 (シード初期化後に実行)
     // generateRidgeLines calls globalRandom, so it MUST be here

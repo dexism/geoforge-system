@@ -799,8 +799,6 @@ export function waterAreasRiverMouthV2({
     // 総面積
     let waterTotalHa = channelHa + deltaHa + marshHa + lagoonHa;
 
-    // [USER REQUEST] ソフトキャップを撤廃し、物理計算の結果をそのまま採用する
-
     return {
         channelHa: Math.round(channelHa),
         deltaHa: Math.round(deltaHa),
@@ -813,9 +811,39 @@ export function waterAreasRiverMouthV2({
 /**
  * 陸地標高補正 (既存ロジック)
  */
-function adjustLandElevation(allHexes) {
-    const MIN_ELEVATION_TARGET = 10;
-    const targetHexes = allHexes.filter(h => !h.properties.isWater || (h.properties.isWater && h.properties.elevation > 0));
+export function adjustLandElevation(allHexes) {
+    const MIN_ELEVATION_TARGET = 10; // 定数定義が見つからない場合のフォールバック
+
+    const landHexes = allHexes.filter(h => !h.properties.isWater);
+    if (landHexes.length === 0) return;
+
+    // 連結成分分解
+    const visited = new Set();
+    const clusters = [];
+
+    landHexes.forEach(h => {
+        if (!visited.has(h.index)) {
+            const cluster = [];
+            const queue = [h];
+            visited.add(h.index);
+            while (queue.length > 0) {
+                const current = queue.shift();
+                cluster.push(current);
+                current.neighbors.forEach(nIdx => {
+                    const nHex = allHexes[nIdx];
+                    if (!nHex.properties.isWater && !visited.has(nIdx)) {
+                        visited.add(nIdx);
+                        queue.push(nHex);
+                    }
+                });
+            }
+            clusters.push(cluster);
+        }
+    });
+
+    // 最大の島を見つける
+    clusters.sort((a, b) => b.length - a.length);
+    const targetHexes = clusters[0];
 
     if (targetHexes.length === 0) return;
 
@@ -829,7 +857,8 @@ function adjustLandElevation(allHexes) {
     if (minElevation < MIN_ELEVATION_TARGET) {
         const elevationToAdd = MIN_ELEVATION_TARGET - minElevation;
         targetHexes.forEach(h => {
-            h.properties.elevation += elevationToAdd;
+            // [FIX] 整数に丸めて整合性を確保
+            h.properties.elevation = Math.round(h.properties.elevation + elevationToAdd);
         });
     }
 }
@@ -1059,17 +1088,30 @@ export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRow
 
     allHexes.forEach(h => {
         const veg = h.properties.vegetation;
-        // ソースは海洋または深海のみ
-        // if (h.properties.isWater && (veg === '海洋' || veg === '深海')) {
-        // 深海は不要ではないか？
-        if (h.properties.isWater && (veg === '海洋')) {
+        // ソースは海洋または深海 (大陸棚の外縁も考慮)
+        // [FIX] ロード直後でvegが未設定の場合でも、標高とisWaterで判定してBFS起点に追加する
+        const isOceanOrDeep = (veg === '海洋' || veg === '深海') ||
+            (!veg && h.properties.isWater && h.properties.elevation <= 0);
+
+        if (isOceanOrDeep && h.properties.isWater) {
             distArray[h.index] = 0;
             queue.push(h.index);
         }
     });
 
-    // [DEBUG] Log BFS queue size
+    // [DEBUG] Log BFS queue size and sample check
     console.log(`[Geo Internal] BFS Queue initialized with ${queue.length} water hexes.`);
+    if (queue.length === 0) {
+        // 原因調査用: 最初の方のヘックスの状態をダンプ
+        const sample = allHexes.slice(0, 5).map(h => ({
+            id: h.index,
+            isWater: h.properties.isWater,
+            veg: h.properties.vegetation,
+            col: h.col,
+            row: h.row
+        }));
+        console.warn('[Geo Internal] BFS Queue is EMPTY! Sample hexes:', JSON.stringify(sample));
+    }
 
     let pointer = 0;
     while (pointer < queue.length) {
@@ -1256,7 +1298,10 @@ export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRow
         properties.forestPotential = properties.landUse.forest || 0;
 
         let miningPotential = 0;
-        if (!isWater) {
+        // [FIX] Preserve existing miningPotential if loading
+        if (options.preserveVegetation && typeof properties.miningPotential !== 'undefined') {
+            miningPotential = properties.miningPotential;
+        } else if (!isWater) {
             const rawMiningValue = miningPotentialNoise(nx * 2.0, ny * 2.0);
             const peakFactor = 8;
             let noisePotential = Math.pow(1.0 - Math.abs(rawMiningValue), peakFactor);
@@ -1289,7 +1334,10 @@ export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRow
         properties.isLakeside = isLakeside;
 
         let fishingPotential = 0;
-        if (!isWater) {
+        // [FIX] Preserve existing fishingPotential if loading
+        if (options.preserveVegetation && typeof properties.fishingPotential !== 'undefined') {
+            fishingPotential = properties.fishingPotential;
+        } else if (!isWater) {
             let waterBonus = 0;
             if (isCoastal) waterBonus = 0.4;
             h.neighbors.forEach(nIndex => {
@@ -1349,6 +1397,10 @@ export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRow
             }
             huntingPotential -= properties.agriPotential * 0.2;
         }
+        // [FIX] Preserve existing huntingPotential if loading
+        if (options.preserveVegetation && typeof properties.huntingPotential !== 'undefined') {
+            huntingPotential = properties.huntingPotential;
+        }
         properties.huntingPotential = Math.max(0.0, Math.min(1.0, huntingPotential));
 
         // その他のプロパティ
@@ -1357,15 +1409,20 @@ export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRow
             properties.hasSnow = true;
         }
 
-        const rawManaValue = manaNoise(nx * 2, ny * 2);
-        properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
-        if (properties.manaValue > 0.9) properties.manaRank = 'S';
-        else if (properties.manaValue > 0.7) properties.manaRank = 'A';
-        else if (properties.manaValue > 0.4) properties.manaRank = 'B';
-        else if (properties.manaValue > 0.1) properties.manaRank = 'C';
-        else properties.manaRank = 'D';
-        const resourceSymbols = ['石', '鉄', '金', '晶'];
-        properties.resourceRank = resourceSymbols[Math.floor(globalRandom.next() * resourceSymbols.length)];
+        // [FIX] Preserve existing manaValue/manaRank/resourceRank if loading
+        if (options.preserveVegetation && typeof properties.manaValue !== 'undefined') {
+            // Keep existing mana and resource values
+        } else {
+            const rawManaValue = manaNoise(nx * 2, ny * 2);
+            properties.manaValue = Math.pow(1.0 - Math.abs(rawManaValue), 8);
+            if (properties.manaValue > 0.9) properties.manaRank = 'S';
+            else if (properties.manaValue > 0.7) properties.manaRank = 'A';
+            else if (properties.manaValue > 0.4) properties.manaRank = 'B';
+            else if (properties.manaValue > 0.1) properties.manaRank = 'C';
+            else properties.manaRank = 'D';
+            const resourceSymbols = ['石', '鉄', '金', '晶'];
+            properties.resourceRank = resourceSymbols[Math.floor(globalRandom.next() * resourceSymbols.length)];
+        }
     });
 }
 

@@ -26,14 +26,14 @@ export const SEA_LEVEL = 0.02; // 陸地強度がこれより低いと海にな�
 
 // --- 地形バイアス (特定のエリアの傾向を緩やかに操作) ---
 export const EAST_SEA_BIAS_X_START = 0.7;  // マップの東側x%地点から海になりやすくなる
-export const EAST_SEA_BIAS_INTENSITY = 0.5;  // 東側を海にする力の強さ（弱めに設定）
+export const EAST_SEA_BIAS_INTENSITY = 0.6;  // 東側を海にする力の強さ（弱めに設定）
 export const NW_SEA_BIAS_RADIUS = 0.3;  // 北西の角からこの半径内を海になりやすくする
-export const NW_SEA_BIAS_INTENSITY = 0.5;  // 北西を海にする力の強さ（弱めに設定）
+export const NW_SEA_BIAS_INTENSITY = 0.6;  // 北西を海にする力の強さ（弱めに設定）
 
 // --- 山岳と起伏 ---
 export const MOUNTAIN_NOISE_FREQ = 5.0;  // 山脈の分布を決めるノイズの周波数
 export const MOUNTAIN_DISTRIBUTION_POWER = 3.0;  // 山脈を特定のエリアに集中させる度合い（下げて範囲を広げる）
-export const MOUNTAIN_SHAPE_POWER = 0.01;  // 山の鋭さ
+export const MOUNTAIN_SHAPE_POWER = 0.001;  // 山の鋭さ
 export const MOUNTAIN_HEIGHT_MAX = 4.5;  // 山の最大標高（スケーリング前の内部値）
 
 export const HILL_NOISE_FREQ = 1.0;  // 丘陵のノイズ周波数
