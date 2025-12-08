@@ -1325,20 +1325,48 @@ function drawBlockInteraction(block) {
                 newHexes.on('mousemove', (event) => {
                     if (window.innerWidth <= 600) return; // スマホでは表示しない
                     if (tooltipContainer.style('visibility') === 'visible') {
+                        const tooltipWidth = tooltipContainer.node().offsetWidth;
+                        const offset = 40;
+                        let leftPos = event.pageX + offset;
+
+                        // 画面右半分の場合は左側に表示
+                        if (event.pageX > window.innerWidth * 0.7) {
+                            leftPos = event.pageX - tooltipWidth - offset;
+                        }
+
                         tooltipContainer
                             .style('top', (event.pageY - 10) + 'px')
-                            .style('left', (event.pageX + 20) + 'px');
+                            .style('left', leftPos + 'px');
                     }
                 })
+
                     .on('mouseover', (event, d) => {
                         if (window.innerWidth <= 600) return; // スマホでは表示しない
                         if (d) {
                             tooltipContainer.text(getTooltipText(d));
                             tooltipContainer.style('visibility', 'visible');
+                            /*
+                            // カーソルハイライト (白枠)
+                            const cursorLayer = layers['cursor-highlight-overlay'].group;
+                            cursorLayer.selectAll('*').remove(); // 念のためクリア
+                            cursorLayer.append('polygon')
+                                .attr('points', d.points.map(p => `${p[0]},${p[1]}`).join(' ')) // translateなしの絶対座標
+                                //.attr('transform', `translate(0,0)`) // 不要
+                                .style('fill', 'none')
+                                .style('stroke', 'white')
+                                .style('stroke-width', '2px')
+                                .style('pointer-events', 'none')
+                            */
                         }
                     })
                     .on('mouseout', () => {
                         tooltipContainer.style('visibility', 'hidden');
+                        /*
+                        // ハイライト消去
+                        if (layers['cursor-highlight-overlay']) {
+                            layers['cursor-highlight-overlay'].group.selectAll('*').remove();
+                        }
+                        */
                     });
 
                 newHexes.on('click', (event, d) => {
@@ -2132,7 +2160,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .attr('class', 'tooltip')
         .style('position', 'absolute')
         .style('visibility', 'hidden')
-        .style('background-color', 'rgba(0, 0, 0, 0.8)')
+        .style('background-color', '#000c')
         .style('color', '#fff')
         .style('padding', '5px')
         .style('border-radius', '4px')
@@ -2349,6 +2377,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     const borderLayer = createLayer('border');                                  // 国境線
     const highlightOverlayLayer = createLayer('highlight-overlay');             // クリック時のハイライト
     const settlementLayer = createLayer('settlement');                          // 集落シンボル
+    // const cursorHighlightLayer = createLayer('cursor-highlight-overlay');       // カーソルホバー時のハイライト (白枠)
     // --- 情報オーバーレイ ---
     const monsterOverlayLayer = createLayer('monster-overlay', false);          // 魔物分布
     const populationOverlayLayer = createLayer('population-overlay', false);    // 人口分布
