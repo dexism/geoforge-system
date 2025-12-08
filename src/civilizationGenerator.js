@@ -4,7 +4,7 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { getDistance, getIndex } from './utils.js';
+import { getDistance, getIndex, globalRandom } from './utils.js';
 import { generateTradeRoutes, generateFeederRoads } from './roadGenerator.js';
 
 // ================================================================
@@ -112,7 +112,7 @@ function generatePopulation(allHexes) {
                 const populationFactor = Math.pow(effectiveHabitability, config.POPULATION_PARAMS.POPULATION_CURVE);
 
                 // 1.0前後のゆらぎを持たせる (0.85 ～ 1.15)
-                const randomVariation = 0.85 + Math.random() * 0.30;
+                const randomVariation = 0.85 + globalRandom.next() * 0.30;
 
                 const calculatedPopulation = Math.floor(populationFactor * config.POPULATION_PARAMS.MAX_POPULATION_PER_HEX * randomVariation);
 
@@ -434,7 +434,7 @@ export function generateMonsterDistribution(allHexes) {
             rankCandidates.sort(sortLogic);
         } else {
             // ソート指定がない場合はランダムにシャッフルして揺らぎを与える
-            rankCandidates.sort(() => Math.random() - 0.5);
+            rankCandidates.sort(() => globalRandom.next() - 0.5);
         }
 
         const assignedHexes = rankCandidates.slice(0, targetCount);
@@ -490,7 +490,7 @@ export function generateMonsterDistribution(allHexes) {
 
     assignLandRank('A', h => (h.properties.vegetation === '熱帯雨林' || h.properties.elevation > 3000) && h.properties.manaValue > 0.7, (a, b) => b.properties.manaValue - a.properties.manaValue, 0.10);
     assignLandRank('B', h => ['熱帯雨林', '亜寒帯林'].includes(h.properties.vegetation) || h.properties.elevation > 2000, (a, b) => b.properties.elevation - a.properties.elevation, 0.10);
-    assignLandRank('C', h => !civilizedHexIndexes.has(getIndex(h.col, h.row)), () => Math.random() - 0.5, 0.30);
+    assignLandRank('C', h => !civilizedHexIndexes.has(getIndex(h.col, h.row)), () => globalRandom.next() - 0.5, 0.30);
     landCandidates.forEach(h => { if (h.properties.population < 500) { h.properties.monsterRank = 'D'; } });
 
     return allHexes;

@@ -355,24 +355,28 @@ function interpolateColor(base, overlay) {
  * 全ヘックスの表示色を一括更新する関数
  */
 function updateAllHexColors() {
-    if (!hexes) return;
-    // console.time('updateAllHexColors');
-    hexes.forEach(d => {
-        d._displayColor = calculateCompositeColor(d);
-    });
+    if (!blocks || blocks.length === 0) return;
 
-    // 既存のDOM要素の色も更新する
-    if (blocks && blocks.length > 0) {
-        blocks.forEach(block => {
-            if (block.rendered) {
-                const blockGroup = layers['terrain'].group.select(`#terrain-${block.id}`);
-                if (!blockGroup.empty()) {
-                    blockGroup.selectAll('.hex')
-                        .attr('fill', d => d._displayColor || '#000');
-                }
+    // console.time('updateAllHexColors');
+
+    // 1. 各ブロックの保持するヘックスインスタンスに対して色を計算し、プロパティとしてキャッシュする
+    // (Flyweightパターン対応: WorldMapではなく、レンダリング用の永続インスタンスを更新する)
+    blocks.forEach(block => {
+        if (block.hexes) {
+            block.hexes.forEach(d => {
+                d._displayColor = calculateCompositeColor(d);
+            });
+        }
+
+        // 2. DOM要素の色を更新 (キャッシュされた_displayColorを使用)
+        if (block.rendered) {
+            const blockGroup = layers['terrain'].group.select(`#terrain-${block.id}`);
+            if (!blockGroup.empty()) {
+                blockGroup.selectAll('.hex') // D3のdatum(d)はblock.hexesの要素
+                    .attr('fill', d => d._displayColor || '#000');
             }
-        });
-    }
+        }
+    });
     // console.timeEnd('updateAllHexColors');
 }
 
@@ -595,6 +599,8 @@ async function drawBeaches(visibleHexes) {
         .attr('stroke-width', 6)   // 幅6px
         .attr('stroke-linecap', 'round') // 線の端を丸くする
         .style('pointer-events', 'none');
+
+    console.log(`[BeachDebug] Drawn ${beachSegments.length} beach segments. VisibleHexes: ${targetHexes.length}`);
 }
 
 /**
@@ -1072,7 +1078,7 @@ function updateVisibleBlocks(transform) {
  * @param {Object} block - ブロックオブジェクト
  */
 function renderBlock(block) {
-    console.log(`renderBlock: Rendering block ${block.id}`);
+    // console.log(`renderBlock: Rendering block ${block.id}`);
     // 各レイヤーの描画関数を呼び出す
     // 注意: ここで呼び出す描画関数は、ブロック内の要素のみを描画するように修正が必要
 
@@ -1334,6 +1340,12 @@ function drawBlockInteraction(block) {
                     });
 
                 newHexes.on('click', (event, d) => {
+                    // [DEBUG] プロパティ検査
+                    console.log('[Click Debug] Hex Index:', d.index);
+                    console.log('[Click Debug] Properties:', d.properties);
+                    console.log('[Click Debug] Logistics:', d.properties.logistics);
+                    console.log('[Click Debug] LivingConditions:', d.properties.livingConditions);
+
                     event.stopPropagation();
 
                     // ハイライト更新
@@ -1874,8 +1886,10 @@ function drawBlockBeaches(block) {
     if (blockGroup.empty()) return;
 
     const beachPathData = [];
+    let beachCount = 0;
     block.hexes.forEach(d => {
         if (d.properties.beachNeighbors && d.properties.beachNeighbors.length > 0) {
+            beachCount++;
             d.properties.beachNeighbors.forEach(neighborIndex => {
                 const neighbor = hexes[neighborIndex];
                 if (neighbor) {
@@ -1888,6 +1902,28 @@ function drawBlockBeaches(block) {
             });
         }
     });
+
+    // [DEBUG] Always log for beaches analysis
+    if (block.id === '0-0' || beachCount > 0) {
+        console.log(`[Beach Debug] Block ${block.id}: Found ${beachCount} hexes with beaches.`);
+        if (beachPathData.length > 0) {
+            console.log(`[Beach Debug] Generated ${beachPathData.length} paths. Sample: ${beachPathData[0].path}`);
+        } else {
+            console.log(`[Beach Debug] Found hexes but NO paths generated. getSharedEdgePoints failed?`);
+            // 詳細デバッグ: 最初の1件だけ検証
+            block.hexes.some(d => {
+                if (d.properties.beachNeighbors && d.properties.beachNeighbors.length > 0) {
+                    const neighborIndex = d.properties.beachNeighbors[0];
+                    const neighbor = hexes[neighborIndex];
+                    console.log(`[Beach Detail] Hex[${d.index}] (x:${d.x}, y:${d.y}) vs Neighbor[${neighborIndex}] (x:${neighbor.x}, y:${neighbor.y})`);
+                    console.log(`[Beach Detail] Hex points:`, d.points ? d.points[0] : 'undefined');
+                    console.log(`[Beach Detail] Neighbor points:`, neighbor.points ? neighbor.points[0] : 'undefined');
+                    return true;
+                }
+                return false;
+            });
+        }
+    }
 
     blockGroup.selectAll('path')
         .data(beachPathData)
@@ -2058,7 +2094,27 @@ function updateMinimapViewport(transform) {
 }
 
 export async function setupUI(allHexes, roadPaths, addLogMessage) {
+    // [FIX] WorldMapインスタンス(TypedArrayラッパー)が渡された場合、
+    // UI側の描画関数が配列アクセス(hexes[i])を前提としているため、標準配列に変換する。
+    // メモリ使用量は増えるが、UI操作の安定性を優先する。
+    if (typeof allHexes.getHex === 'function') {
+        const tempHexes = [];
+        const count = allHexes.size || (allHexes.cols * allHexes.rows);
+        for (let i = 0; i < count; i++) {
+            // [FIX] .toObject()を使うと properties プロパティ(互換性用)が失われるため、
+            // Hexインスタンスそのものを格納する。Hexインスタンスは軽量な参照オブジェクトなので問題ない。
+            tempHexes.push(allHexes.getHex(i));
+        }
+        // [FIX] cols/rowsプロパティをコピーする (重要: これがないとconfig.COLSが使われて座標がずれる)
+        tempHexes.cols = allHexes.cols;
+        tempHexes.rows = allHexes.rows;
+
+        allHexes = tempHexes;
+        // console.log(`[UI Setup] Converted WorldMap to Array(${allHexes.length}) for compatibility.`);
+    }
+
     allHexesData = allHexes;
+    hexes = allHexes; // [FIX] hexesグローバル変数も更新する (drawBlockRidgeLinesなどで使用)
     roadPathsData = roadPaths;
     // --- 1. 初期設定とDOM要素の取得 ---
     // グローバル変数を使用するように変更
@@ -2084,41 +2140,23 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
         .style('z-index', '9999');
 
     // ミニマップ用の地形レイヤーを追加
-    const minimapTerrain = minimapSvg.append('g');
+    const minimapTerrain = minimapSvg.append('g').attr('id', 'minimap-terrain');
 
     // メインマップ全体のサイズを計算
+    const mapCols = allHexes.cols || config.COLS;
+    const mapRows = allHexes.rows || config.ROWS;
     const hexWidth = 2 * config.r;
     const hexHeight = Math.sqrt(3) * config.r;
-    const mapTotalWidth = (config.COLS * hexWidth * 3 / 4 + hexWidth / 4);
-    const mapTotalHeight = (config.ROWS * hexHeight + hexHeight / 2);
+    const mapTotalWidth = (mapCols * hexWidth * 3 / 4 + hexWidth / 4);
+    const mapTotalHeight = (mapRows * hexHeight + hexHeight / 2);
 
     // スケールを設定 (マップ全体が200x200のSVGに収まるように)
     minimapScaleX = 200 / mapTotalWidth;
     minimapScaleY = 200 / mapTotalHeight;
     const scale = Math.min(minimapScaleX, minimapScaleY);
 
-    // ミニマップに簡易的な地形を描画
-    minimapTerrain.selectAll('.minimap-hex')
-        .data(allHexes)
-        .enter()
-        .append('rect')
-        .attr('x', d => (d.col * (hexWidth * 3 / 4)) * scale)
-        .attr('y', d => (d.row * hexHeight + (d.col % 2 === 0 ? 0 : hexHeight / 2)) * scale)
-        .attr('width', hexWidth * scale)
-        .attr('height', hexHeight * scale)
-        .attr('fill', d => {
-            if (d.properties.isWater) return '#004'; // 海洋
-            if (d.properties.settlement === '首都') return '#f0f'; // 首都
-            if (d.properties.settlement === '都市' || d.properties.settlement === '領都') return '#f00f'; // 領都
-            if (d.properties.settlement === '街') return '#f80f'; // 街
-            if (d.properties.settlement === '町') return '#ff0f'; // 町
-            if (d.properties.settlement === '村') return '#0f0f'; // 村
-            if (d.properties.elevation >= 4000) return '#000'; // 山岳
-            if (d.properties.elevation >= 3000) return '#111'; // 山岳
-            if (d.properties.elevation >= 2000) return '#222'; // 山岳
-            if (d.properties.elevation >= 1000) return '#333'; // 山岳
-            return '#444'; // 平地・森林
-        });
+    // 初回描画
+    updateMinimap(allHexes);
 
     // ビューポート矩形を初期状態で追加
     minimapViewport = minimapSvg.append('rect').attr('id', 'minimap-viewport');
@@ -2172,8 +2210,10 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     // --- 2. 描画用データの事前計算 ---
     hexes = []; // データをリセット (Use module-level variable)
 
-    for (let row = 0; row < config.ROWS; row++) {
-        for (let col = 0; col < config.COLS; col++) {
+    const iterRows = allHexes.rows || config.ROWS;
+    const iterCols = allHexes.cols || config.COLS;
+    for (let row = 0; row < iterRows; row++) {
+        for (let col = 0; col < iterCols; col++) {
             const hexData = allHexes[getIndex(col, row)];
             const offsetY = (col % 2 === 0) ? 0 : hexHeight / 2;
             const cx = col * (hexWidth * 3 / 4) + config.r;
@@ -2259,7 +2299,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
                 x: col, y: (config.ROWS - 1) - row,
                 cx: cx, cy: cy,
                 points: d3.range(6).map(i => [cx + config.r * Math.cos(Math.PI / 3 * i), cy + config.r * Math.sin(Math.PI / 3 * i)]),
-                properties: { ...hexData.properties, shadingValue: elevationDifference },
+                properties: { ...hexData.toObject(), shadingValue: elevationDifference },
                 downstreamIndex: downstreamIndex,
                 ridgeUpstreamIndex: ridgeUpstreamIndex,
                 neighbors: hexData.neighbors,
@@ -2739,16 +2779,6 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     }
 }
 
-// ================================================================
-// 分割生成のための再描画関数
-// ================================================================
-
-/**
- * 内部の描画用ヘックスデータを更新するヘルパー関数
- * @param {Array<object>} updatedAllHexes - 更新された全ヘックスデータ
- */
-
-
 /**
  * 気候・植生情報が更新されたときに呼び出される再描画関数
  * @param {Array<object>} allHexes - 更新された全ヘックスデータ
@@ -2799,10 +2829,15 @@ function updateHexesData(updatedAllHexes) {
             hexes[index].ridgeUpstreamIndex = h.ridgeUpstreamIndex;
 
             // 描画用のシェーディング値のみ、追加で計算する
-            hexes[index].properties.shadingValue = calculateShading(h, updatedAllHexes);
+            if (typeof h.toObject === 'function') {
+                hexes[index].properties = { ...h.toObject(), shadingValue: calculateShading(h, updatedAllHexes) };
+            } else {
+                hexes[index].properties = { ...h.properties, shadingValue: calculateShading(h, updatedAllHexes) };
+            }
 
             updatedCount++;
             if (h.properties.flow > 0) flowCount++;
+
         }
     });
     console.log(`updateHexesData: Updated ${updatedCount} hexes. Flow > 0 count: ${flowCount}`);
@@ -2820,6 +2855,8 @@ export async function redrawClimate(allHexes) {
 
     // updateVisibleBlocksを呼び出して、表示を更新する
     if (svg) updateVisibleBlocks(currentTransform);
+    // ミニマップも更新
+    updateMinimap(allHexes);
     console.log("気候・植生が更新され、再描画されました。");
 }
 
@@ -2838,6 +2875,8 @@ export async function redrawSettlements(allHexes) {
 
     // updateVisibleBlocksを呼び出して、表示を更新する
     if (svg) updateVisibleBlocks(currentTransform);
+    // ミニマップも更新
+    updateMinimap(allHexes);
     console.log("集落が更新され、再描画されました。");
 }
 
@@ -2858,6 +2897,8 @@ export async function redrawRoadsAndNations(allHexes, roadPaths) {
 
     // updateVisibleBlocksを呼び出して、表示を更新する
     if (svg) updateVisibleBlocks(currentTransform);
+    // ミニマップも更新
+    updateMinimap(allHexes);
     console.log("道路・国家が更新され、再描画されました。");
 }
 
@@ -2872,6 +2913,8 @@ export async function redrawMap(allHexes) {
     resetBlockRenderStatus();
 
     if (svg) updateVisibleBlocks(currentTransform);
+    // ミニマップも更新
+    updateMinimap(allHexes);
 }
 
 /**
@@ -2883,4 +2926,62 @@ export function resetUI() {
         minimapContainer = null;
     }
     d3.select('#minimap-icon').remove(); // アイコンも削除
+}
+
+/**
+ * ミニマップを更新する関数
+ * @param {Array<object>} allHexes - 全ヘックスデータ
+ */
+export function updateMinimap(allHexes) {
+    if (!minimapSvg) return;
+
+    const minimapTerrain = minimapSvg.select('#minimap-terrain');
+    if (minimapTerrain.empty()) return;
+
+    // メインマップ全体のサイズを計算 (setupUIと同様)
+    const mapCols = allHexes.cols || config.COLS;
+    const mapRows = allHexes.rows || config.ROWS;
+    const hexWidth = 2 * config.r;
+    const hexHeight = Math.sqrt(3) * config.r;
+    const mapTotalWidth = (mapCols * hexWidth * 3 / 4 + hexWidth / 4);
+    const mapTotalHeight = (mapRows * hexHeight + hexHeight / 2);
+
+    // スケールを設定 (マップ全体が200x200のSVGに収まるように)
+    const scale = Math.min(200 / mapTotalWidth, 200 / mapTotalHeight);
+
+    const minimapData = Array.isArray(allHexes) ? allHexes : Array.from(allHexes);
+    console.log(`[Minimap] Updating minimap for ${minimapData.length} hexes. Scale: ${scale}. Container present: ${!minimapTerrain.empty()}`);
+    // [DEBUG] Inspect first 3 hexes
+    for (let i = 0; i < 3; i++) {
+        const d = minimapData[i];
+        console.log(`[Minimap Debug] Hex[${i}] (x:${d.col},y:${d.row}): isWater=${d.properties.isWater}, elev=${d.properties.elevation}, veg=${d.properties.vegetation}, color=${d.properties.isWater ? '#004' : '#444'}`);
+    }
+
+    minimapTerrain.selectAll('.minimap-hex')
+        .data(minimapData)
+        .join(
+            enter => enter.append('rect')
+                .attr('class', 'minimap-hex')
+                .attr('x', d => (d.cx || (d.col * (hexWidth * 3 / 4))) * scale)
+                .attr('y', d => (d.cy || (d.row * hexHeight + (d.col % 2 === 0 ? 0 : hexHeight / 2))) * scale)
+                .attr('width', hexWidth * scale)
+                .attr('height', hexHeight * scale),
+            update => update,
+            exit => exit.remove()
+        )
+        // 色については更新時も再評価する
+        .attr('fill', d => {
+            if (d.properties.isWater) return '#004'; // 海洋
+            if (d.properties.settlement === '首都') return '#f0f'; // 首都
+            if (d.properties.settlement === '都市' || d.properties.settlement === '領都') return '#f00f'; // 領都
+            if (d.properties.settlement === '街') return '#f80f'; // 街
+            if (d.properties.settlement === '町') return '#ff0f'; // 町
+            if (d.properties.settlement === '村') return '#0f0f'; // 村
+            if (d.properties.elevation >= 4000) return '#000'; // 山岳
+            if (d.properties.elevation >= 3000) return '#111'; // 山岳
+            if (d.properties.elevation >= 2000) return '#222'; // 山岳
+            if (d.properties.elevation >= 1000) return '#333'; // 山岳
+            return '#444'; // 平地・森林
+        });
+    console.log("[Minimap] Update complete.");
 }

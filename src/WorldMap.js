@@ -13,7 +13,7 @@ export const CLIMATE_ZONES = [
 
 export const VEGETATIONS = [
     "荒れ地", "針葉樹林", "砂漠", "草原", "森林", "密林", "湿地", "アルパイン", "深海", "海洋", "湖沼",
-    "温帯林", "熱帯雨林", "亜寒帯林", "サバンナ", "ステップ", "ツンドラ", "沿岸植生"
+    "温帯林", "熱帯雨林", "亜寒帯林", "サバンナ", "ステップ", "ツンドラ", "沿岸植生", "氷雪帯"
 ];
 
 export const TERRAIN_TYPES = [
@@ -75,6 +75,8 @@ export class WorldMap {
         this.flow = new Float32Array(this.size);
         this.isAlluvial = new Uint8Array(this.size);
         this.hasSnow = new Uint8Array(this.size);
+        this.isCoastal = new Uint8Array(this.size); // Added
+        this.isLakeside = new Uint8Array(this.size); // Added
         this.ridgeFlow = new Int16Array(this.size);
         this.riverWidth = new Float32Array(this.size);
         this.riverDepth = new Float32Array(this.size);
@@ -137,6 +139,10 @@ export class WorldMap {
         this.shortage = new Array(this.size).fill(null);
         this.territoryData = new Array(this.size).fill(null);
         this.beachNeighbors = new Array(this.size).fill(null);
+        this.vegetationAreas = new Array(this.size).fill(null);
+        this.logistics = new Array(this.size).fill(null); // Added
+        this.livingConditions = new Array(this.size).fill(null); // Added
+        this.ships = new Array(this.size).fill(null); // Added
 
         this.roadUsage = new Float32Array(this.size);
         this.roadLoss = new Float32Array(this.size);
@@ -213,6 +219,21 @@ export class WorldMap {
         return undefined;
     }
 
+    some(callback) {
+        for (let i = 0; i < this.size; i++) {
+            if (callback(this.getHex(i), i, this)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    forEach(callback) {
+        for (let i = 0; i < this.size; i++) {
+            callback(this.getHex(i), i, this);
+        }
+    }
+
     get length() {
         return this.size;
     }
@@ -231,6 +252,43 @@ class Hex {
     }
 
     get index() { return this._index; }
+
+    get cx() {
+        // v3.2: Flat-Top Geometry (matches ui.js and neighbor logic)
+        // width = 2 * r (but ui.js implies sqrt(3)*r?? No, let's trust neighbor logic which is Flat Top)
+        // If Flat Top: x spacing is 3/4 * width.
+        // ui.js uses x = col * (hexWidth * 3/4).
+        // Let's assume hexWidth in ui.js IS Flat Top Width (2*r) even if it says sqrt(3).
+        // OR ui.js is Pointy Top but oriented weirdly?
+        // User said "Minimap internal not drawn... Regenerated display shows weird aspect ratio" when I used Pointy Top logic.
+        // So I must use Flat Top logic.
+        const r = config.r;
+        const width = 2 * r; // Flat Top Width
+        return this.col * (width * 0.75);
+    }
+
+    get cy() {
+        const r = config.r;
+        const height = Math.sqrt(3) * r; // Flat Top Height
+        const offset = (this.col % 2 !== 0) ? height / 2 : 0; // Odd-Q offset (col parity)
+        return this.row * height + offset;
+    }
+
+    get points() {
+        const r = config.r;
+        const cx = this.cx;
+        const cy = this.cy;
+        const points = [];
+        for (let i = 0; i < 6; i++) {
+            const angle_deg = 60 * i; // Flat Top: 0, 60, 120...
+            const angle_rad = Math.PI / 180 * angle_deg;
+            points.push([
+                cx + r * Math.cos(angle_rad),
+                cy + r * Math.sin(angle_rad)
+            ]);
+        }
+        return points;
+    }
 
     get col() { return this._map.col[this._index]; }
     set col(v) { this._map.col[this._index] = v; }
@@ -267,6 +325,12 @@ class Hex {
 
     get hasSnow() { return !!this._map.hasSnow[this._index]; }
     set hasSnow(v) { this._map.hasSnow[this._index] = v ? 1 : 0; }
+
+    get isCoastal() { return !!this._map.isCoastal[this._index]; }
+    set isCoastal(v) { this._map.isCoastal[this._index] = v ? 1 : 0; }
+
+    get isLakeside() { return !!this._map.isLakeside[this._index]; }
+    set isLakeside(v) { this._map.isLakeside[this._index] = v ? 1 : 0; }
 
     // --- Numeric ---
     get elevation() { return this._map.elevation[this._index]; }
@@ -437,6 +501,19 @@ class Hex {
     get beachNeighbors() { return this._map.beachNeighbors[this._index]; }
     set beachNeighbors(v) { this._map.beachNeighbors[this._index] = v; }
 
+    get vegetationAreas() { return this._map.vegetationAreas[this._index]; }
+    set vegetationAreas(v) { this._map.vegetationAreas[this._index] = v; }
+
+    get logistics() { return this._map.logistics[this._index]; }
+    set logistics(v) { this._map.logistics[this._index] = v; }
+
+    get livingConditions() { return this._map.livingConditions[this._index]; }
+    set livingConditions(v) { this._map.livingConditions[this._index] = v; }
+
+    get ships() { return this._map.ships[this._index]; }
+    set ships(v) { this._map.ships[this._index] = v; }
+
+
     get roadUsage() { return this._map.roadUsage[this._index]; }
     set roadUsage(v) { this._map.roadUsage[this._index] = v; }
 
@@ -448,4 +525,93 @@ class Hex {
 
     get ridgeUpstreamIndex() { return this._map.ridgeUpstreamIndex[this._index]; }
     set ridgeUpstreamIndex(v) { this._map.ridgeUpstreamIndex[this._index] = v; }
+
+    /**
+     * プロパティをプレーンオブジェクトとしてエクスポートする
+     * (スプレッド構文などでのコピー用)
+     */
+    toObject() {
+        return {
+            index: this.index,
+            col: this.col,
+            row: this.row,
+
+            isWater: this.isWater,
+            isAlluvial: this.isAlluvial,
+            hasSnow: this.hasSnow,
+            isCoastal: this.isCoastal,
+            isLakeside: this.isLakeside,
+
+            elevation: this.elevation,
+            temperature: this.temperature,
+            precipitation_mm: this.precipitation_mm,
+            precipitation: this.precipitation,
+            climate: this.climate,
+            flow: this.flow,
+            ridgeFlow: this.ridgeFlow,
+            riverWidth: this.riverWidth,
+            riverDepth: this.riverDepth,
+            riverVelocity: this.riverVelocity,
+            waterArea: this.waterArea,
+            beachArea: this.beachArea,
+            inflowCount: this.inflowCount,
+            Qin: this.Qin,
+
+            climateZone: this.climateZone,
+            vegetation: this.vegetation,
+            terrainType: this.terrainType,
+            settlement: this.settlement,
+            manaRank: this.manaRank,
+            resourceRank: this.resourceRank,
+            monsterRank: this.monsterRank,
+
+            landUse: this.landUse, // getter returns new object
+            industry: this.industry,
+            demographics: this.demographics,
+            facilities: this.facilities,
+            production: this.production,
+            surplus: this.surplus,
+            shortage: this.shortage,
+
+            nationId: this.nationId,
+            territoryId: this.territoryId,
+            parentHexId: this.parentHexId,
+            distanceToParent: this.distanceToParent,
+            travelDaysToParent: this.travelDaysToParent,
+            roadLevel: this.roadLevel,
+            roadUsage: this.roadUsage,
+            roadLoss: this.roadLoss,
+
+            territoryData: this.territoryData,
+            beachNeighbors: this.beachNeighbors,
+            vegetationAreas: this.vegetationAreas,
+
+            downstreamIndex: this.downstreamIndex,
+            ridgeUpstreamIndex: this.ridgeUpstreamIndex,
+
+            manaValue: this.manaValue,
+            agriPotential: this.agriPotential,
+            forestPotential: this.forestPotential,
+            miningPotential: this.miningPotential,
+            fishingPotential: this.fishingPotential,
+            huntingPotential: this.huntingPotential,
+            pastoralPotential: this.pastoralPotential,
+            livestockPotential: this.livestockPotential,
+            cultivatedArea: this.cultivatedArea,
+            habitability: this.habitability,
+            population: this.population,
+
+            // Added for Info Window display
+            logistics: this.logistics,
+            livingConditions: this.livingConditions,
+            ships: this.ships
+        };
+    }
 }
+
+// Iterator implementation for WorldMap
+WorldMap.prototype[Symbol.iterator] = function* () {
+    for (let i = 0; i < this.size; i++) {
+        yield this.getHex(i);
+    }
+};

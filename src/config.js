@@ -19,10 +19,10 @@ export const BEACH_WIDTH_M = 50; // 砂浜の幅 (m)
 // ■ 2. 地形生成パラメータ (v3.2 - 大陸生成パラメータ再調整版)
 // ================================================================
 // --- 大陸の形状と配置 ---
-export const CONTINENT_NOISE_FREQ = 3.0;  // 大陸形状の複雑さ。2.0-3.0が推奨
+export const CONTINENT_NOISE_FREQ = 9.0;  // 大陸形状の複雑さ。2.0-3.0が推奨
 export const CONTINENT_FALLOFF_START = 1.40; // マップ中央からx%の距離までは大陸が一切削られない
 export const CONTINENT_FALLOFF_RANGE = 0.20; // そこからx%の距離をかけて海になる
-export const SEA_LEVEL = 0.05; // 陸地強度がこれより低いと海になる。0.3-0.4が推奨
+export const SEA_LEVEL = 0.02; // 陸地強度がこれより低いと海になる。0.3-0.4が推奨
 
 // --- 地形バイアス (特定のエリアの傾向を緩やかに操作) ---
 export const EAST_SEA_BIAS_X_START = 0.7;  // マップの東側x%地点から海になりやすくなる
@@ -31,16 +31,16 @@ export const NW_SEA_BIAS_RADIUS = 0.3;  // 北西の角からこの半径内を�
 export const NW_SEA_BIAS_INTENSITY = 0.5;  // 北西を海にする力の強さ（弱めに設定）
 
 // --- 山岳と起伏 ---
-export const MOUNTAIN_NOISE_FREQ = 9.0;  // 山脈の分布を決めるノイズの周波数
-export const MOUNTAIN_DISTRIBUTION_POWER = 2.0;  // 山脈を特定のエリアに集中させる度合い（下げて範囲を広げる）
-export const MOUNTAIN_SHAPE_POWER = 1.0;  // 山の鋭さ
-export const MOUNTAIN_HEIGHT_MAX = 5.0;  // 山の最大標高（スケーリング前の内部値）
+export const MOUNTAIN_NOISE_FREQ = 5.0;  // 山脈の分布を決めるノイズの周波数
+export const MOUNTAIN_DISTRIBUTION_POWER = 3.0;  // 山脈を特定のエリアに集中させる度合い（下げて範囲を広げる）
+export const MOUNTAIN_SHAPE_POWER = 0.01;  // 山の鋭さ
+export const MOUNTAIN_HEIGHT_MAX = 4.5;  // 山の最大標高（スケーリング前の内部値）
 
-export const HILL_NOISE_FREQ = 3.0;  // 丘陵のノイズ周波数
+export const HILL_NOISE_FREQ = 1.0;  // 丘陵のノイズ周波数
 export const HILL_HEIGHT_MAX = 1.0;  // 丘陵の最大標高（内部値）
 
-export const DETAIL_NOISE_FREQ = 1.0;  // 細かい起伏のノイズ周波数
-export const DETAIL_HEIGHT_MAX = 0.1;  // 細かい起伏の最大標高（内部値）
+export const DETAIL_NOISE_FREQ = 9.0;  // 細かい起伏のノイズ周波数
+export const DETAIL_HEIGHT_MAX = 0.5;  // 細かい起伏の最大標高（内部値）
 
 // --- 標高スケーリング ---
 // 内部計算された標高値を、最終的なメートル表記に変換する。
@@ -398,11 +398,11 @@ export const TERRAIN_COLORS = {
     亜寒帯林: '#475',
     熱帯雨林: '#262',
     アルパイン: '#aaa',
-    ツンドラ: '#bcd',
+    ツンドラ: '#acc',
     サバンナ: '#dcb',
     ステップ: '#cda',
     沿岸植生: '#8db',
-    氷雪帯: '#eff'
+    氷雪帯: '#dee'
 };
 // 稜線・水系図の配色
 export const RIDGE_WATER_SYSTEM_COLORS = {
@@ -447,7 +447,7 @@ export const huntingColor = d3.scaleSequential(d3.interpolateYlOrBr).domain([0, 
 export const populationColor = d3.scaleLog().domain([1, POPULATION_PARAMS.MAX_POPULATION_PER_HEX]).range(["black", "red"]).clamp(true);
 
 // 白地図の配色
-export const WHITE_MAP_COLORS = { WATER: '#aaa' };
+export const WHITE_MAP_COLORS = { WATER: '#777' };
 export const whiteMapElevationColor = d3.scaleLinear()
     .domain([0, 1000, 2000, 4000, 7000])
     .range(['#fff', '#fff', '#fee', '#edd', '#cbb']).clamp(true);

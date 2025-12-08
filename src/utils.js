@@ -15,6 +15,35 @@ export function getIndex(col, row) {
 }
 
 /**
+ * 指定された座標の隣接ヘックスのインデックス配列を取得する
+ * (Flat-Top / Odd-Q 垂直列オフセット)
+ * @param {number} col - 中心ヘックスの列
+ * @param {number} row - 中心ヘックスの行
+ * @param {number} maxCols - グリッドの最大列数 (config.COLS)
+ * @param {number} maxRows - グリッドの最大行数 (config.ROWS)
+ * @returns {Array<number>} 隣接ヘックスのインデックス配列 (範囲外は含まない)
+ */
+export function getNeighborIndices(col, row, maxCols, maxRows) {
+    const isOddCol = col % 2 !== 0;
+    const candidates = [
+        { col: col, row: row - 1 },     // N (North)
+        { col: col, row: row + 1 },     // S (South)
+        { col: col - 1, row: row },     // NW (North West)
+        { col: col + 1, row: row },     // NE (North East)
+        { col: col - 1, row: isOddCol ? row + 1 : row - 1 }, // SW (South West)
+        { col: col + 1, row: isOddCol ? row + 1 : row - 1 }, // SE (South East)
+    ];
+
+    const neighbors = [];
+    candidates.forEach(n => {
+        if (n.col >= 0 && n.col < maxCols && n.row >= 0 && n.row < maxRows) {
+            neighbors.push(n.row * maxCols + n.col); // getIndexと同様のRow-Major順
+        }
+    });
+    return neighbors;
+}
+
+/**
  * 2つのヘックス間の簡易的な距離を計算する (マンハッタン距離のヘックス版)
  * @param {object} h1 - 1つ目のヘックスオブジェクト ({ col, row })
  * @param {object} h2 - 2つ目のヘックスオブジェクト ({ col, row })

@@ -4,15 +4,13 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions, recalculateRiverProperties } from './continentGenerator.js';
+import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions, recalculateRiverProperties, generateWaterSystems, generateBeaches, initializeWaterVegetation } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
 import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership } from './economySimulator.js';
-
-
-import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap } from './ui.js';
+import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap, updateMinimap } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
-import { getIndex, initGlobalRandom, globalRandom } from './utils.js';
-
+import { getIndex, initGlobalRandom, globalRandom, getNeighborIndices } from './utils.js';
+import { WorldMap } from './WorldMap.js';
 // GASのデプロイで取得したウェブアプリのURL
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyS8buNL8u2DK9L3UZRtQqLWgDLvuj0WE5ZrzzdXNXSWH3bnGo-JsiO9KSrHp6YOjmtvg/exec';
 
@@ -333,8 +331,11 @@ async function runStep4_Nations() {
     // roadPaths を worldData に保存
     worldData.roadPaths = allRoadPaths;
 
-    // ④ 領土の最終決定、経済シミュレーションを実行
+    // ④ 領都の最終決定、経済シミュレーションを実行
     worldData.allHexes = await determineTerritories(worldData.allHexes, addLogMessage);
+
+    // [CRITICAL] 経済シミュレーションの前に必ずシードをリセットし、再現性を保証する
+    initGlobalRandom(worldData.seed);
     worldData.allHexes = await simulateEconomy(worldData.allHexes, addLogMessage);
     worldData.allHexes = await calculateTerritoryAggregates(worldData.allHexes, addLogMessage);
     worldData.allHexes = await calculateRoadTraffic(worldData.allHexes, worldData.roadPaths, addLogMessage);
@@ -575,6 +576,12 @@ function compressWorldData() {
                 return;
             }
 
+            // 容量削減: ロード時に再計算可能なデータは保存しない (v3.0.1: 強力なサイズ最適化)
+            // industryも含めることでファイルサイズを劇的に削減 (ロード時に simulateEconomy で再構築されるため不要)
+            // 容量削減: ロード時に再計算可能なデータは保存しない (v3.0.1: 強力なサイズ最適化)
+            // industryも含めることでファイルサイズを劇的に削減 (ロード時に simulateEconomy で再構築されるため不要)
+            if (key === 'industry' || key === 'livingConditions' || key === 'demographics' || key === 'facilities' || key === 'logistics' || key === 'vegetationAreas' || key === 'ships' || key === 'isCoastal' || key === 'isLakeside') return;
+
             // industryの特別処理 (ネスト圧縮)
             if (key === 'industry' && value) {
                 const cInd = {};
@@ -648,12 +655,7 @@ function compressWorldData() {
             if (key === 'flow' && value === 0) return;
             if (key === 'population' && value === 0) return;
 
-            // 容量削減: ロード時に再計算可能なデータは保存しない
-            if (key === 'livingConditions' || key === 'demographics' || key === 'facilities' || key === 'logistics' || key === 'vegetationAreas') return;
-
-            // 空のオブジェクトは保存しない
-            if (typeof value === 'object' && Object.keys(value).length === 0) return;
-
+            // 容量削減: ロード時に再計算可能なデータは保存しない (v3.0.1: サイズ最適化)
             // 値の変換・圧縮
             if (DICTIONARY_KEYS.includes(shortKey)) {
                 cHex[shortKey] = getDictIndex(shortKey, value);
@@ -667,6 +669,11 @@ function compressWorldData() {
                 cHex[shortKey] = value;
             }
         });
+
+        // downstreamIndexの保存
+        if (h.downstreamIndex !== undefined && h.downstreamIndex !== -1) {
+            cHex[KEY_MAP['downstreamIndex']] = h.downstreamIndex;
+        }
 
         return cHex;
     });
@@ -778,17 +785,39 @@ async function recalculateDistances(worldData) {
  */
 async function recalculateEconomyMetrics(worldData) {
     await addLogMessage("経済指標を再計算しています...");
-    const { allHexes } = worldData;
+    const { allHexes, roadPaths } = worldData;
     if (!allHexes) return;
 
-    // 一括計算関数を呼び出し (順序重要)
-    calculateShipOwnership(allHexes); // 船舶保有数の再計算 (v2.7.4)
+    // 1. 産業構造・人口内訳・施設などを再シミュレーション (Industry, Logistics base)
+    // warn: simulateEconomy initializes p.industry={}, so it requires p.population > 0
+    try {
+        console.log("[Econ] Starting simulateEconomy...");
+        // [CRITICAL] 再計算時も生成時と同じシード状態で開始する
+        if (worldData.seed) initGlobalRandom(worldData.seed);
+        await simulateEconomy(allHexes, addLogMessage);
+        console.log("[Econ] simulateEconomy finished.");
+    } catch (e) {
+        console.error("[Econ] Error in simulateEconomy:", e);
+        await addLogMessage(`シミュレーションエラー: ${e.message}`);
+    }
+
+    // [FIX] 削除してしまった重要計算ロジックを復元
+    calculateShipOwnership(allHexes);
     generateCityCharacteristics(allHexes);
     calculateDemographics(allHexes);
     calculateFacilities(allHexes);
     calculateTerritoryAggregates(allHexes);
-    await calculateRoadTraffic(allHexes, worldData.roadPaths, addLogMessage);
+
+    // 2. 交通量の再計算 (simulateEconomy内ではスキップされているためここで行う)
+    if (roadPaths) {
+        await calculateRoadTraffic(allHexes, roadPaths, addLogMessage);
+    }
+
+    // 3. 生活水準の再計算 (交通量や物価変動を反映するため、最後にもう一度実行)
+    // simulateEconomy内でも呼ばれるが、RoadTrafficの後に行うのが確実
     calculateLivingConditions(allHexes);
+
+    return allHexes;
 }
 
 async function loadExistingWorld() {
@@ -853,10 +882,13 @@ async function processLoadedData(loadedData) {
     if (loadedData.seed) {
         worldData.seed = loadedData.seed;
         initGlobalRandom(loadedData.seed);
+        // [FIX] ノイズ関数も初期化する (砂浜生成などに必要)
+        initializeNoiseFunctions(worldData.seed);
         await addLogMessage(`シード値を復元しました: ${loadedData.seed}`);
     } else {
         await addLogMessage(`[WARN] 保存データにシードが含まれていません。再現性が保証されません。`);
         initGlobalRandom(Date.now());
+        initializeNoiseFunctions(Date.now());
     }
 
     // V2フォーマット (圧縮版) の場合
@@ -889,10 +921,11 @@ async function processLoadedData(loadedData) {
         };
 
         // ヘックスデータの展開
-        worldData.allHexes = loadedData.hexes.map((h, index) => {
-            // 座標の復元
-            const col = index % loadedData.cols;
-            const row = Math.floor(index / loadedData.cols);
+        // [FIX] 配列ではなくWorldMapインスタンスとして初期化
+        worldData.allHexes = new WorldMap(loadedData.cols, loadedData.rows);
+
+        loadedData.hexes.forEach((h, index) => {
+            const hex = worldData.allHexes[index];
 
             // プロパティの展開
             const props = {};
@@ -1008,45 +1041,16 @@ async function processLoadedData(loadedData) {
             if (!props.surplus) props.surplus = {};
             if (!props.shortage) props.shortage = {};
 
-            return {
-                col: col,
-                row: row,
-                x: col, // 互換性のため
-                y: row, // 互換性のため
-                properties: props,
-                index: index,
-                neighbors: [] // 後で再計算
-            };
+            // Hexオブジェクトにプロパティを適用
+            Object.assign(hex.properties, props);
+
+            // downstreamIndexの復元
+            if (h[KEY_MAP['downstreamIndex']] !== undefined) {
+                hex.downstreamIndex = h[KEY_MAP['downstreamIndex']];
+            } else {
+                hex.downstreamIndex = -1;
+            }
         });
-
-        // neighborsの再計算
-        const COLS = loadedData.cols;
-        const ROWS = loadedData.rows;
-        worldData.allHexes.forEach(h => {
-            const neighbors = [];
-            const directions = [
-                [0, -1], [1, -1], [1, 0], [0, 1], [-1, 1], [-1, 0]
-            ];
-            const isEvenCol = h.col % 2 === 0;
-
-            directions.forEach((d, i) => {
-                let neighborCol = h.col + d[0];
-                let neighborRow = h.row + d[1];
-
-                // 六角形グリッドの隣接補正
-                if (d[0] !== 0) {
-                    if (isEvenCol) {
-                        if (d[1] === -1) neighborRow = h.row - 1; // 上
-                        if (d[1] === 1) neighborRow = h.row;      // 下
-                    } else {
-                        if (d[1] === -1) neighborRow = h.row;
-                        if (d[1] === 1) neighborRow = h.row + 1;
-                    }
-                }
-            });
-        });
-
-        // 道路データの復元
         worldData.roadPaths = loadedData.roads.map(r => {
             const path = [];
             for (let i = 0; i < r.p.length; i += 2) {
@@ -1059,93 +1063,263 @@ async function processLoadedData(loadedData) {
             };
         });
 
+        // [CRITICAL] 配列にcols/rowsプロパティを付与 (UI等で使用)
+        worldData.allHexes.cols = loadedData.cols;
+        worldData.allHexes.rows = loadedData.rows;
+
     } else {
         // V1 (旧形式)
         worldData = loadedData;
+        // V1でもプロパティがない場合はconfigから補完（サイズ不一致リスクあり）
+        if (!worldData.allHexes.cols) worldData.allHexes.cols = loadedData.cols || config.COLS;
+        if (!worldData.allHexes.rows) worldData.allHexes.rows = loadedData.rows || config.ROWS;
+
         await addLogMessage('旧形式のデータを読み込みました。');
     }
 
     // コンフィグ更新 (必要なら)
-    // config.COLS = loadedData.cols || config.COLS; 
+    // neighborsの完全再計算
+    const mapCols = worldData.allHexes.cols;
+    const mapRows = worldData.allHexes.rows;
+    worldData.allHexes.forEach(h => {
+        h.neighbors = getNeighborIndices(h.col, h.row, mapCols, mapRows);
+    });
 
-    // neighborsの完全再計算 (utils.jsの機能を利用したいが、ここでは直接計算)
     // 既存のgetIndex関数を利用
     worldData.allHexes.forEach(h => {
-        h.neighbors = [];
-        const directions = [
-            [0, -1], [1, -1], [1, 0], [0, 1], [-1, 1], [-1, 0]
-        ];
-        const isEvenCol = h.col % 2 === 0;
-        directions.forEach(d => {
-            let nc = h.col + d[0];
-            let nr = h.row + d[1];
-            if (d[0] !== 0) {
-                if (isEvenCol) {
-                    if (d[1] === -1) nr = h.row - 1; // 右上・左上
-                    if (d[1] === 0) nr = h.row;      // 右下・左下
-                    if (d[1] === 1) nr = h.row;      // 補正
-                } else {
-                    if (d[1] === -1) nr = h.row;
-                    if (d[1] === 0) nr = h.row + 1;
-                    if (d[1] === 1) nr = h.row + 1;
+        // [CRITICAL] isWaterフラグの復元
+        // ユーザー要件: "w"は湖沼のみ保存。標高がマイナスなら海洋。
+
+        // 英語→日本語マッピング (Legacy data support)
+        const LEGACY_VEG_MAP = {
+            'grassland': '草原',
+            'forest': '森林',
+            'temperateForest': '温帯林',
+            'subarcticForest': '亜寒帯林',
+            'tropicalRainforest': '熱帯雨林',
+            'desert': '砂漠',
+            'wetland': '湿地',
+            'tundra': 'ツンドラ',
+            'ice': '氷雪帯',
+            'savanna': 'サバンナ',
+            'steppe': 'ステップ',
+            'alpine': 'アルパイン',
+            'wasteland': '荒れ地',
+            'coastal': '沿岸植生',
+            'ocean': '海洋',
+            'deep_ocean': '深海',
+            'lake': '湖沼'
+        };
+
+        if (LEGACY_VEG_MAP[h.properties.vegetation]) {
+            h.properties.vegetation = LEGACY_VEG_MAP[h.properties.vegetation];
+        }
+
+        const veg = h.properties.vegetation;
+        const w = h.properties.w || h.properties.isWater;
+
+        if (h.properties.elevation <= 0) {
+            h.properties.isWater = true;
+            // 植生が未設定または不整合なら補正
+            // v3.2: '湖沼'はelevation <= 0でもあり得るので上書きしない
+            if (!veg || (veg !== '海洋' && veg !== '深海' && veg !== '湖沼')) {
+                if (h.properties.elevation < -500) h.properties.vegetation = '深海';
+                else h.properties.vegetation = '海洋';
+            }
+        } else if (w === true || veg === '湖沼') {
+            h.properties.isWater = true;
+            if (!veg) h.properties.vegetation = '湖沼';
+        } else {
+            h.properties.isWater = false;
+        }
+
+    });
+
+    // 簡易的なneighbors再構築ブロックは除去 (utils.jsのgetNeighborIndicesを用いた正確なロジックに置き換えたため)
+    // 以前のコードがここで上書きしていたため、バグが再発していた。
+
+    // データ補完: 河川プロパティの再計算
+    // downstreamIndexが保存されていない(V2初期)場合、または河川が表示されない場合は再構築が必要
+    const riverHexes = worldData.allHexes.filter(h => h.properties.flow > 0);
+    const missingRivers = riverHexes.some(h => h.downstreamIndex === -1);
+
+    // [DEBUG] 河川データの状態確認
+    console.log(`[River Debug] Flow > 0 hexes: ${riverHexes.length}`);
+    console.log(`[River Debug] Missing downstreamIndex: ${riverHexes.filter(h => h.downstreamIndex === -1).length}`);
+
+    // データ救済措置: flowデータが全くない場合は再生成する (v3.Xデータ消失対応)
+    if (riverHexes.length === 0) {
+        await addLogMessage("河川データが検出されません。河川システムを再生成します...");
+        initializeNoiseFunctions();
+        generateWaterSystems(worldData.allHexes);
+
+        // 再生成後のステータス更新
+        recalculateRiverProperties(worldData.allHexes);
+
+    } else if (missingRivers) {
+        await addLogMessage(`河川接続データ欠損を検出: ${riverHexes.filter(h => h.downstreamIndex === -1).length}箇所`);
+
+        // 簡易復元: flowがある全ヘックスについて、最も標高が低い隣接ヘックスを下流とみなす
+        let restoredCount = 0;
+        worldData.allHexes.forEach(h => {
+            if (h.properties.flow > 0 && h.downstreamIndex === -1 && !h.properties.isWater) {
+                let minElev = h.properties.elevation;
+                let targetIndex = -1;
+
+                // 隣接ヘックスを走査
+                h.neighbors.forEach(nIndex => {
+                    const n = worldData.allHexes[nIndex];
+                    if (n.properties.elevation < minElev) {
+                        minElev = n.properties.elevation;
+                        targetIndex = nIndex;
+                    }
+                });
+
+                // 下流が見つかれば接続
+                if (targetIndex !== -1) {
+                    h.downstreamIndex = targetIndex;
+                    restoredCount++;
                 }
             }
         });
-    });
 
-    // 簡易的なneighbors再構築 (utils.jsのロジックを模倣)
-    const getN = (c, r) => {
-        if (c < 0 || c >= config.COLS || r < 0 || r >= config.ROWS) return null;
-        return getIndex(c, r);
-    };
+        console.log(`[River Debug] Restored connections: ${restoredCount}`);
+        if (restoredCount > 0) {
+            await addLogMessage(`${restoredCount}箇所の河川接続を復元しました`);
+        }
+
+        recalculateRiverProperties(worldData.allHexes);
+    } else {
+        recalculateRiverProperties(worldData.allHexes);
+    }
+
+    // [MOVED] generateRidgeLines called later after seed init
+
+    // 水域植生の初期化 (沿岸判定の前に必須)
+    initializeWaterVegetation(worldData.allHexes);
+
+    // [DEBUG] Diagnosing why Coastal becomes 0
+    let waterCount = 0;
+    let oceanCount = 0;
+    let lakeCount = 0;
+    let deepSeaCount = 0;
+    let validNeighborCount = 0;
 
     worldData.allHexes.forEach(h => {
-        const c = h.col;
-        const r = h.row;
-        const neighbors = [];
-        const isEven = c % 2 === 0;
-
-        // 上
-        neighbors.push(getN(c, r - 1));
-        // 下
-        neighbors.push(getN(c, r + 1));
-
-        if (isEven) {
-            neighbors.push(getN(c + 1, r - 1)); // 右上
-            neighbors.push(getN(c + 1, r));     // 右下
-            neighbors.push(getN(c - 1, r));     // 左下
-            neighbors.push(getN(c - 1, r - 1)); // 左上
+        if (h.properties.isWater) {
+            waterCount++;
+            if (h.properties.vegetation === '海洋') oceanCount++;
+            if (h.properties.vegetation === '湖沼') lakeCount++;
+            if (h.properties.vegetation === '深海') deepSeaCount++;
         } else {
-            neighbors.push(getN(c + 1, r));     // 右上
-            neighbors.push(getN(c + 1, r + 1)); // 右下
-            neighbors.push(getN(c - 1, r + 1)); // 左下
-            neighbors.push(getN(c - 1, r));     // 左上
+            // Check neighbors for land hexes
+            if (h.neighbors && h.neighbors.length > 0) validNeighborCount++;
         }
-        h.neighbors = neighbors.filter(n => n !== null);
     });
+    console.log(`[Geo Flag Debug] Water: ${waterCount} (Ocean: ${oceanCount}, Lake: ${lakeCount}, DeepSea: ${deepSeaCount}), Land with Neighbors: ${validNeighborCount}`);
 
-    // データ補完: 河川プロパティの再計算 (保存されていないwidth/depthをflowから復元)
-    recalculateRiverProperties(worldData.allHexes);
-
-    // 稜線データの再生成 (保存されていないため)
-    generateRidgeLines(worldData.allHexes);
+    // Check a sample land hex
+    const sampleLand = worldData.allHexes.find(h => !h.properties.isWater && h.properties.elevation > 0);
+    if (sampleLand) {
+        console.log(`[Geo Flag Debug] Sample Land Hex [${sampleLand.col},${sampleLand.row}] Neighbors:`, sampleLand.neighbors);
+        sampleLand.neighbors.forEach(ni => {
+            const n = worldData.allHexes[ni];
+            console.log(`  - Neighbor ${ni}: isWater=${n.properties.isWater}, Veg=${n.properties.vegetation}`);
+        });
+    }
 
     // 地理的フラグ（沿岸・湖岸）の再計算
     recalculateGeographicFlags(worldData.allHexes);
 
-    // 植生エリアデータが欠落している場合の再計算 (v3.4互換性)
+    // 植生エリアデータが欠落している場合の再計算
     const missingVegAreas = worldData.allHexes.filter(h => !h.properties.vegetationAreas && !h.properties.isWater).length;
+
+    // データが欠落しているか、あるいは念のため常に再計算/復元する
     if (missingVegAreas > 0) {
         await addLogMessage(`植生詳細データ(${missingVegAreas}件)を再計算しています...`);
-        // ノイズ関数を初期化してから計算を実行
-        initializeNoiseFunctions();
-        calculateFinalProperties(worldData.allHexes);
+    } else {
+        await addLogMessage(`地形特性を復元しています...`);
     }
+
+    // ノイズ関数の再初期化
+    // initGlobalRandomでシードを設定してからinitializeNoiseFunctionsを呼ぶ必要があります
+    if (worldData.seed) {
+        initGlobalRandom(worldData.seed);
+        initializeNoiseFunctions(); // 引数不要、グローバルなglobalRandomを使用
+        console.log(`[Restoration Debug] Global Random re-initialized with seed: ${worldData.seed}`);
+    } else {
+        console.warn(`[Restoration Warning] No seed found in worldData!`);
+    }
+
+    // 稜線データの再生成 (シード初期化後に実行)
+    // generateRidgeLines calls globalRandom, so it MUST be here
+    generateRidgeLines(worldData.allHexes);
+
+    // 地理的フラグ（沿岸・湖岸）の再計算 (念のため再実行 - 正確なvegetationが必要)
+    recalculateGeographicFlags(worldData.allHexes);
+
+    // 砂浜の形成 (再計算)
+    generateBeaches(worldData.allHexes, loadedData.cols, loadedData.rows);
+
+    // [DEBUG] Check beach generation
+    let totalBeachHexes = 0;
+    let coastalHexes = 0;
+    worldData.allHexes.forEach(h => {
+        if (h.properties.isCoastal) coastalHexes++;
+        if (h.properties.beachNeighbors && h.properties.beachNeighbors.length > 0) totalBeachHexes++;
+    });
+    console.log(`[Beach Debug] Coastal: ${coastalHexes}, Beaches: ${totalBeachHexes}`);
+    if (totalBeachHexes === 0 && coastalHexes > 0) {
+        console.warn("[Beach Debug] Beaches not generated likely due to missing beachNoise initialization.");
+    }
+
+    // 最終プロパティ計算 (植生、産業ポテンシャル)
+    // ノイズ関数が正しく初期化されているので、ここで正しい値になるはず
+    // [FIX] 既存の植生(vegetation)を維持しつつ、vegetationAreasなどの詳細データのみ再計算する
+    calculateFinalProperties(worldData.allHexes, loadedData.cols, loadedData.rows, { preserveVegetation: true });
 
     // 距離の再計算
     await recalculateDistances(worldData);
 
-    // 経済指標の再計算 (不足データの補完)
+    // 人口データの復元チェック (散居対応)
+    // 保存データを使用し、未設定(0またはnull)のもののみ補完する。
+    // ただし、意図的に0の荒野などは上書きしないよう注意が必要だが、
+    // ここでは settlement が '散居' と定義されているが人口がないケースなどを救済する
+    let popRestored = 0;
+    worldData.allHexes.forEach(h => {
+        const p = h.properties;
+        if (p.isWater) return; // 水域には人口なし
+
+        // 人口が正しくロードされている場合はスキップ
+        if (p.population > 0) return;
+
+        // settlementタイプがあり、かつ人口がない場合のみ復元
+        // (本来は保存されるべきだが、圧縮で消えている場合など)
+        if (p.settlement && p.settlement !== 'none') {
+            let basePop = 0;
+            const sType = p.settlement;
+
+            if (sType === '首都') basePop = 15000 + Math.floor(globalRandom.next() * 10000);
+            else if (sType === '都市' || sType === '領都') basePop = 8000 + Math.floor(globalRandom.next() * 5000);
+            else if (sType === '街') basePop = 3000 + Math.floor(globalRandom.next() * 2000);
+            else if (sType === '町') basePop = 1000 + Math.floor(globalRandom.next() * 1000);
+            else if (sType === '村') basePop = 200 + Math.floor(globalRandom.next() * 300);
+            else if (sType === '散居') {
+                basePop = 20 + Math.floor(globalRandom.next() * 50);
+            }
+
+            if (basePop > 0) {
+                p.population = basePop;
+                popRestored++;
+            }
+        }
+    });
+
+    if (popRestored > 0) {
+        await addLogMessage(`${popRestored}箇所の集落人口を復元しました`);
+    }
+
+    // 経済指標の再計算 (不足データの補完 - 船舶数などもここ)
     await recalculateEconomyMetrics(worldData);
 
     // UI初期化・再描画
@@ -1156,9 +1330,18 @@ async function processLoadedData(loadedData) {
         await redrawRoadsAndNations(worldData.allHexes, worldData.roadPaths);
     }
 
+    // ミニマップの強制更新 (UI初期化後に実行)
+    // 色分けデータが正しく反映されているか確認
+    setTimeout(() => {
+        updateMinimap(worldData.allHexes);
+        console.log("[Minimap] Forced update triggered.");
+    }, 500);
+
     updateButtonStates(4);
     loadingOverlay.style.display = 'none';
 }
+
+
 
 async function main() {
     loadingOverlay.style.display = 'flex';
@@ -1212,3 +1395,5 @@ async function notifyRegenerationAttempt() {
         console.warn("通知送信に失敗しましたが、処理は続行します。", e);
     }
 }
+
+

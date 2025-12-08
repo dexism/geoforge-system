@@ -4,7 +4,7 @@
 
 import { createNoise2D } from 'simplex-noise';
 import * as config from './config.js';
-import { getIndex, globalRandom } from './utils.js';
+import { getIndex, globalRandom, getNeighborIndices, initGlobalRandom } from './utils.js';
 import * as d3 from 'd3';
 import { WorldMap } from './WorldMap.js';
 
@@ -26,7 +26,10 @@ let continentNoise,
 /**
  * 全てのノイズ関数を新しいシードで再初期化する関数
  */
-export function initializeNoiseFunctions() {
+export function initializeNoiseFunctions(seed) {
+    if (seed) {
+        initGlobalRandom(seed);
+    }
     const seedFn = () => globalRandom.next();
 
     continentNoise = createNoise2D(seedFn);
@@ -42,6 +45,8 @@ export function initializeNoiseFunctions() {
     seasonalityNoise = createNoise2D(seedFn);
     beachNoise = createNoise2D(seedFn);
     shelfNoise = createNoise2D(seedFn);
+
+    console.log(`[Noise Init] Noise functions initialized (seed: ${seed})`);
 }
 
 // ================================================================
@@ -218,7 +223,7 @@ function generateBaseProperties(col, row) {
     const climateVal = baseTemp + climateNoise(nx, ny) * 5;
     let elevationCorrection = 0;
     if (elevation > 0) {
-        elevationCorrection = (elevation / 100) * 0.6;
+        elevationCorrection = elevation * 0.0065;
     }
     const temperature = climateVal - elevationCorrection;
 
@@ -255,7 +260,7 @@ function generateBaseProperties(col, row) {
 /**
  * 大陸棚生成 (既存ロジック)
  */
-function generateContinentalShelves(allHexes) {
+export function generateContinentalShelves(allHexes) {
     const distanceFromLand = new Map();
     const queue = allHexes.filter(h =>
         h.properties.isWater && h.neighbors.some(n => !allHexes[n].properties.isWater)
@@ -396,7 +401,7 @@ export function generateWaterSystems(allHexes) {
         // 水源発生確率
         const prob = waterSourceProbability(p.elevation, p.precipitation_mm, retention);
 
-        if (Math.random() < prob) {
+        if (globalRandom.next() < prob) {
             riverSources.push(h);
         }
     });
@@ -958,11 +963,12 @@ function allocateVegetation({
         s.coastal += 0.3;
     }
 
-    Object.keys(s).forEach(k => {
-        if (s[k] > 0) {
-            s[k] *= (0.8 + Math.random() * 0.4);
-        }
-    });
+    // Random noise removed per specification (no noise in vegetation distribution as it's recalculated on startup)
+    // Object.keys(s).forEach(k => {
+    //     if (s[k] > 0) {
+    //         s[k] *= (0.8 + globalRandom.next() * 0.4);
+    //     }
+    // });
 
     const sum = Object.values(s).reduce((a, b) => a + b, 0);
     const areas = {};
@@ -984,15 +990,107 @@ function allocateVegetation({
     return areas;
 }
 
+export function generateBeaches(allHexes, mapCols = config.COLS, mapRows = config.ROWS) {
+    const landElevationScale = d3.scaleLinear().domain([50, 300]).range([1.0, 0.0]).clamp(true);
+    const seaDepthScale = d3.scaleLinear().domain([0, -500]).range([1.0, 0.0]).clamp(true);
+
+    const sideLen = config.HEX_SIDE_LENGTH_KM || 5.77;
+    const widthM = config.BEACH_WIDTH_M || 50;
+
+    allHexes.forEach(h => {
+        if (!beachNoise) {
+            console.error("[ERROR] beachNoise is not initialized!");
+            return;
+        }
+        const p = h.properties;
+        if (p.isWater) return;
+        p.beachNeighbors = [];
+        p.beachArea = 0; // 初期化
+
+        const nx = h.col / mapCols;
+        const ny = h.row / mapRows;
+
+        h.neighbors.forEach(neighborIndex => {
+            const neighbor = allHexes[neighborIndex];
+            const n_p = neighbor.properties;
+            if (!n_p.isWater) return;
+
+            if (p.vegetation === '湿地') {
+                if (p.flow < 20) return;
+            }
+
+            const landScore = landElevationScale(p.elevation);
+            const seaScore = seaDepthScale(n_p.elevation);
+            let beachScore = landScore * seaScore;
+            if (beachScore < 0.1) return;
+
+            const riverBonus = 1.0 + Math.min(0.5, Math.sqrt(p.flow / 10) * 0.5);
+            beachScore *= riverBonus;
+
+            const landNeighborCount = neighbor.neighbors.filter(idx => !allHexes[idx].properties.isWater).length;
+            const bayBonus = 1.0 + (landNeighborCount / 6) * 0.5;
+            const randomFactor = 0.7 + (beachNoise(nx * 15, ny * 15) + 1) / 2 * 0.6;
+            beachScore *= randomFactor;
+
+            if (beachScore > 0.8) {
+                p.beachNeighbors.push(neighborIndex);
+
+                // 面積計算
+                const effectiveScore = Math.min(1.0, beachScore);
+                const area = effectiveScore * sideLen * widthM / 10;
+                p.beachArea += area;
+            }
+        });
+
+        // vegetationAreasにも入れておく
+        if (!p.vegetationAreas) p.vegetationAreas = {};
+        p.vegetationAreas.beach = p.beachArea;
+    });
+}
+
 /**
  * 最終プロパティ計算 (植生、産業ポテンシャル)
  */
-export function calculateFinalProperties(allHexes) {
+export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRows = config.ROWS, options = {}) {
+    // 事前に海岸からの距離をBFSで全計算
+    // 事前に海岸からの距離をBFSで全計算 (Flyweightパターン対応のため、TypedArrayを使用)
+    const distArray = new Float32Array(allHexes.length).fill(Infinity);
+    const queue = []; // Store indices
+
+    allHexes.forEach(h => {
+        const veg = h.properties.vegetation;
+        // ソースは海洋または深海のみ
+        // if (h.properties.isWater && (veg === '海洋' || veg === '深海')) {
+        // 深海は不要ではないか？
+        if (h.properties.isWater && (veg === '海洋')) {
+            distArray[h.index] = 0;
+            queue.push(h.index);
+        }
+    });
+
+    // [DEBUG] Log BFS queue size
+    console.log(`[Geo Internal] BFS Queue initialized with ${queue.length} water hexes.`);
+
+    let pointer = 0;
+    while (pointer < queue.length) {
+        const uIdx = queue[pointer++];
+        const currentDist = distArray[uIdx];
+
+        // Neighbors are accessed via WorldMap/allHexes
+        const uHex = allHexes[uIdx];
+        uHex.neighbors.forEach(vIdx => {
+            if (distArray[vIdx] > currentDist + 1) {
+                distArray[vIdx] = currentDist + 1;
+                queue.push(vIdx);
+            }
+        });
+    }
+
     allHexes.forEach(h => {
         const { properties, col, row } = h;
         const { isWater, elevation, temperature } = properties;
-        const nx = col / config.COLS;
-        const ny = row / config.ROWS;
+        const nx = col / mapCols;
+        const ny = row / mapRows;
 
         // terrainType, flatness は calculateDerivedProperties で計算済みだが、
         // 湖沼化などで変更されている可能性があるため、必要なら再確認
@@ -1002,12 +1100,16 @@ export function calculateFinalProperties(allHexes) {
         properties.landUse = { river: 0, desert: 0, barren: 0, grassland: 0, forest: 0 };
 
         if (isWater) {
-            if (properties.elevation < config.SHELF_PARAMS.MAX_DEPTH) {
-                properties.vegetation = '深海';
-            } else if (properties.elevation <= 0) {
-                properties.vegetation = '海洋';
-            } else {
-                properties.vegetation = '湖沼';
+            // [FIX] 既存の植生判定(initializeWaterVegetationで設定されたもの)があればそれを優先する
+            // 無ければ(生成時など)、標高ベースのフォールバックを行う
+            if (!properties.vegetation || !['深海', '海洋', '湖沼'].includes(properties.vegetation)) {
+                if (properties.elevation < config.SHELF_PARAMS.MAX_DEPTH) {
+                    properties.vegetation = '深海';
+                } else if (properties.elevation <= 0) {
+                    properties.vegetation = '海洋';
+                } else {
+                    properties.vegetation = '湖沼';
+                }
             }
             properties.vegetationAreas = { water: config.HEX_AREA_HA };
         } else {
@@ -1041,30 +1143,33 @@ export function calculateFinalProperties(allHexes) {
             const C = 140;
             const D = P / (20 * T + C);
 
-            let coastalDist = 100;
-            let oceanicity = 0.2;
-            let hasSeaNeighbor = false;
+            // 沿岸距離と海洋性の計算
+            // 1ステップ ≈ 5.77km (HEX_SIDE_LENGTH_KM) と仮定
+            const stepKm = config.HEX_SIDE_LENGTH_KM || 5.77;
+            const distSteps = distArray[h.index]; // Use TypedArray
+            let coastalDist = (distSteps === Infinity) ? 1000 : distSteps * stepKm;
+
+            // 海洋性 (oceanicity): 距離に応じて減衰
+            // 0km -> 1.0, 50km -> 0.5, 100km -> 0.0
+            let oceanicity = Math.max(0, 1.0 - (coastalDist / 100));
+
+            // 湖沼の影響を加味 (局所的な湿気)
+            let hasLakeNeighbor = false;
             h.neighbors.forEach(nIdx => {
                 const nHex = allHexes[nIdx];
-                if (nHex.properties.isWater && nHex.properties.elevation <= 0) {
-                    hasSeaNeighbor = true;
-                }
+                if (nHex.properties.vegetation === '湖沼') hasLakeNeighbor = true;
             });
-
-            if (hasSeaNeighbor) {
-                coastalDist = 5;
-                oceanicity = 0.9;
-            } else if (properties.isCoastal) {
-                coastalDist = 10;
-                oceanicity = 0.8;
+            if (hasLakeNeighbor) {
+                // 湖岸は少し海洋性を持つが、沿岸植生("Coastal")にはなりにくいように調整
+                oceanicity = Math.max(oceanicity, 0.4);
             }
 
             const beachHa = properties.beachArea || 0;
-            // 集落や道路の面積があればここで取得 (現時点では生成前なので0を想定)
             const settlementHa = properties.settlementArea || 0;
             const roadHa = properties.roadArea || 0;
             const totalDeduction = beachHa + settlementHa + roadHa;
 
+            // 植生割り当て (決定論的: ノイズ除去済み)
             const vegAreas = allocateVegetation({
                 T, P, H, waterHa,
                 flatness, soilFert, D,
@@ -1079,34 +1184,38 @@ export function calculateFinalProperties(allHexes) {
 
             properties.vegetationAreas = vegAreas;
 
-            let maxArea = -1;
-            let dominantVeg = 'wasteland';
-            const excludeKeys = ['water'];
-            for (const [key, area] of Object.entries(vegAreas)) {
-                if (excludeKeys.includes(key)) continue;
-                if (area > maxArea) {
-                    maxArea = area;
-                    dominantVeg = key;
+            if (options.preserveVegetation && properties.vegetation) {
+                // 既存の植生を維持 (ロード時)
+            } else {
+                let maxArea = -1;
+                let dominantVeg = 'wasteland';
+                const excludeKeys = ['water'];
+                for (const [key, area] of Object.entries(vegAreas)) {
+                    if (excludeKeys.includes(key)) continue;
+                    if (area > maxArea) {
+                        maxArea = area;
+                        dominantVeg = key;
+                    }
                 }
+
+                const vegNameMap = {
+                    desert: '砂漠',
+                    wasteland: '荒れ地',
+                    grassland: '草原',
+                    wetland: '湿地',
+                    temperateForest: '温帯林',
+                    subarcticForest: '亜寒帯林',
+                    tropicalRainforest: '熱帯雨林',
+                    alpine: 'アルパイン',
+                    tundra: 'ツンドラ',
+                    savanna: 'サバンナ',
+                    steppe: 'ステップ',
+                    coastal: '沿岸植生',
+                    iceSnow: '氷雪帯'
+                };
+
+                properties.vegetation = vegNameMap[dominantVeg] || dominantVeg;
             }
-
-            const vegNameMap = {
-                desert: '砂漠',
-                wasteland: '荒れ地',
-                grassland: '草原',
-                wetland: '湿地',
-                temperateForest: '温帯林',
-                subarcticForest: '亜寒帯林',
-                tropicalRainforest: '熱帯雨林',
-                alpine: 'アルパイン',
-                tundra: 'ツンドラ',
-                savanna: 'サバンナ',
-                steppe: 'ステップ',
-                coastal: '沿岸植生',
-                iceSnow: '氷雪帯'
-            };
-
-            properties.vegetation = vegNameMap[dominantVeg] || dominantVeg;
 
             const totalLandArea = config.HEX_AREA_HA - waterHa;
             const safeTotal = totalLandArea > 0 ? totalLandArea : 1;
@@ -1171,6 +1280,11 @@ export function calculateFinalProperties(allHexes) {
                 }
             });
         }
+
+        // [FIX] Preserve existing isCoastal/isLakeside if already set (by recalculateGeographicFlags)
+        if (properties.isCoastal) isCoastal = true;
+        if (properties.isLakeside) isLakeside = true;
+
         properties.isCoastal = isCoastal;
         properties.isLakeside = isLakeside;
 
@@ -1251,69 +1365,13 @@ export function calculateFinalProperties(allHexes) {
         else if (properties.manaValue > 0.1) properties.manaRank = 'C';
         else properties.manaRank = 'D';
         const resourceSymbols = ['石', '鉄', '金', '晶'];
-        properties.resourceRank = resourceSymbols[Math.floor(Math.random() * resourceSymbols.length)];
+        properties.resourceRank = resourceSymbols[Math.floor(globalRandom.next() * resourceSymbols.length)];
     });
 }
 
-function generateBeaches(allHexes) {
-    const landElevationScale = d3.scaleLinear().domain([50, 300]).range([1.0, 0.0]).clamp(true);
-    const seaDepthScale = d3.scaleLinear().domain([0, -500]).range([1.0, 0.0]).clamp(true);
-
-    const sideLen = config.HEX_SIDE_LENGTH_KM || 5.77;
-    const widthM = config.BEACH_WIDTH_M || 50;
-
-    allHexes.forEach(h => {
-        if (!beachNoise) {
-            console.error("[ERROR] beachNoise is not initialized!");
-            return;
-        }
-        const p = h.properties;
-        if (p.isWater) return;
-        p.beachNeighbors = [];
-        p.beachArea = 0; // 初期化
-
-        const nx = h.col / config.COLS;
-        const ny = h.row / config.ROWS;
-
-        h.neighbors.forEach(neighborIndex => {
-            const neighbor = allHexes[neighborIndex];
-            const n_p = neighbor.properties;
-            if (!n_p.isWater) return;
-
-            if (p.vegetation === '湿地') {
-                if (p.flow < 20) return;
-            }
-
-            const landScore = landElevationScale(p.elevation);
-            const seaScore = seaDepthScale(n_p.elevation);
-            let beachScore = landScore * seaScore;
-            if (beachScore < 0.1) return;
-
-            const riverBonus = 1.0 + Math.min(0.5, Math.sqrt(p.flow / 10) * 0.5);
-            beachScore *= riverBonus;
-
-            const landNeighborCount = neighbor.neighbors.filter(idx => !allHexes[idx].properties.isWater).length;
-            const bayBonus = 1.0 + (landNeighborCount / 6) * 0.5;
-            const randomFactor = 0.7 + (beachNoise(nx * 15, ny * 15) + 1) / 2 * 0.6;
-            beachScore *= randomFactor;
-
-            if (beachScore > 0.8) {
-                p.beachNeighbors.push(neighborIndex);
-
-                // 面積計算
-                const effectiveScore = Math.min(1.0, beachScore);
-                const area = effectiveScore * sideLen * widthM / 10;
-                p.beachArea += area;
-            }
-        });
-
-        // vegetationAreasにも入れておく
-        if (!p.vegetationAreas) p.vegetationAreas = {};
-        p.vegetationAreas.beach = p.beachArea;
-    });
-}
-
+// Export recalculateGeographicFlags so it can be used in main.js
 export function recalculateGeographicFlags(allHexes) {
+    let debugCount = 0;
     allHexes.forEach(h => {
         const p = h.properties;
         if (p.isWater) {
@@ -1325,20 +1383,49 @@ export function recalculateGeographicFlags(allHexes) {
         let isCoastal = false;
         let isLakeside = false;
 
+        // [DEBUG] Trace specific hex (e.g. index 0)
+        const isDebugTarget = (h.col === 0 && h.row === 0);
+
         h.neighbors.forEach(nIndex => {
             const nHex = allHexes[nIndex];
             if (nHex && nHex.properties.isWater) {
                 const veg = nHex.properties.vegetation;
+                // if (isDebugTarget) console.log(`[GeoFlag Internal] Hex[0,0] neighbor ${nIndex} isWater=true, veg=${veg}`);
+
                 if (veg === '海洋' || veg === '深海') {
                     isCoastal = true;
                 } else if (veg === '湖沼') {
                     isLakeside = true;
+                } else {
+                    // 植生情報が不十分な場合のフォールバック: 標高で判定
+                    // 標高 <= 0 なら海、> 0 なら湖
+                    if (nHex.properties.elevation <= 0) {
+                        isCoastal = true;
+                    } else {
+                        isLakeside = true;
+                    }
                 }
+            } else if (isDebugTarget) {
+                // console.log(`[GeoFlag Internal] Hex[0,0] neighbor ${nIndex} isWater=${nHex ? nHex.properties.isWater : 'null'}`);
             }
         });
 
         p.isCoastal = isCoastal;
         p.isLakeside = isLakeside;
+
+        if (isCoastal && debugCount < 5) {
+            console.log(`[GeoFlag Internal] Hex [${h.col},${h.row}] set to Coastal.`);
+            debugCount++;
+        }
+        // [DEBUG] Lakeside failure trace
+        if (p.vegetation === '湖沼' && !isLakeside && debugCount < 20) {
+            debugCount++;
+            const neighborsDebug = h.neighbors.map(ni => {
+                const n = allHexes[ni];
+                return `[${ni}: W=${n.properties.isWater}, V=${n.properties.vegetation}, E=${n.properties.elevation}]`;
+            }).join(', ');
+            console.log(`[GeoFlag Debug] Lake Hex [${h.col},${h.row}] (Veg:湖沼) FAILED Lakeside check. Neighbors: ${neighborsDebug}`);
+        }
     });
 }
 
@@ -1365,15 +1452,7 @@ export async function generateIntegratedMap(addLogMessage, redrawFn) {
 
     // Neighbors cache
     allHexes.forEach(h => {
-        const { col, row } = h;
-        const isOddCol = col % 2 !== 0;
-        h.neighbors = [
-            { col: col, row: row - 1 }, { col: col, row: row + 1 },
-            { col: col - 1, row: row }, { col: col + 1, row: row },
-            { col: col - 1, row: isOddCol ? row + 1 : row - 1 },
-            { col: col + 1, row: isOddCol ? row + 1 : row - 1 },
-        ].filter(n => n.col >= 0 && n.col < config.COLS && n.row >= 0 && n.row < config.ROWS)
-            .map(n => getIndex(n.col, n.row));
+        h.neighbors = getNeighborIndices(h.col, h.row, config.COLS, config.ROWS);
     });
 
     // Pass 1.2: Continental Shelves
@@ -1515,3 +1594,34 @@ export function recalculateRiverProperties(allHexes) {
         }
     });
 }
+
+/**
+ * 水域ヘックスの植生プロパティを初期化する (ロード時復元用)
+ * @param {Array<object>} allHexes 
+ */
+export function initializeWaterVegetation(allHexes) {
+    if (!allHexes || allHexes.length === 0) return;
+
+    allHexes.forEach(h => {
+        const p = h.properties;
+        if (p.isWater) {
+            // 生成ロジック(calculateDerivedProperties)との完全一致
+            // 標高0以下は海洋、0より上は湖沼
+            if (p.elevation < config.SHELF_PARAMS.MAX_DEPTH) {
+                p.vegetation = '深海';
+                p.terrainType = '深海';
+            } else if (p.elevation <= 0) {
+                p.vegetation = '海洋';
+                p.terrainType = '海洋';
+            } else {
+                p.vegetation = '湖沼';
+                p.terrainType = '湖沼';
+            }
+            // 面積も初期化
+            if (!p.vegetationAreas) p.vegetationAreas = {};
+            p.vegetationAreas.water = config.HEX_AREA_HA;
+        }
+    });
+    console.log(`[Restoration] Water vegetation initialized (Elevation-based).`);
+}
+

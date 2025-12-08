@@ -113,7 +113,7 @@ export async function simulateEconomy(allHexes, addLogMessage) {
             p.cultivatedArea = Math.min(laborBasedArea, maxArea);
 
             // 収穫量の計算 (ランダムな豊作・不作係数あり)
-            const yieldFluctuation = 0.7 + Math.random() * 0.6;
+            const yieldFluctuation = 0.7 + globalRandom.next() * 0.6;
 
             Object.keys(mainCrops).forEach(cropName => {
                 const cropData = config.CROP_DATA[cropName];
@@ -465,9 +465,9 @@ export function calculateShipOwnership(allHexes) {
         // 外洋対応最低保証 (沿岸のみ)
         if (isCoastal) {
             let minOcean = 0;
-            if (settlementLevel === '街') minOcean = Math.floor(Math.random() * 5);
-            else if (['領都', '都市'].includes(settlementLevel)) minOcean = 2 + Math.floor(Math.random() * 11);
-            else if (settlementLevel === '首都') minOcean = 8 + Math.floor(Math.random() * 18);
+            if (settlementLevel === '街') minOcean = Math.floor(globalRandom.next() * 5);
+            else if (['領都', '都市'].includes(settlementLevel)) minOcean = 2 + Math.floor(globalRandom.next() * 11);
+            else if (settlementLevel === '首都') minOcean = 8 + Math.floor(globalRandom.next() * 18);
 
             if (minOcean > 0) {
                 const mediumName = config.SHIP_TYPES['medium_merchant'].name;
@@ -533,6 +533,7 @@ export function calculateShipOwnership(allHexes) {
             }
         }
     });
+
 }
 
 export function generateCityCharacteristics(allHexes) {
@@ -692,7 +693,10 @@ export function calculateDemographics(allHexes) {
 }
 
 export function calculateFacilities(allHexes) {
+    console.log("[Econ] calculateFacilities started.");
+    let processedCount = 0;
     allHexes.forEach(h => {
+        processedCount++;
         const p = h.properties;
         p.facilities = []; // オブジェクト配列に変更: { name: string, count: number, level: number }
 
@@ -810,6 +814,11 @@ export function calculateFacilities(allHexes) {
         // 船舶の保有 (v2.5: 詳細ロジック)
         // 既に calculateShipOwnership で計算済み
         const ships = p.ships || {};
+
+        // [DEBUG] Check ship data
+        if (p.isCoastal && Object.keys(ships).length === 0 && p.population > 1000) {
+            // console.log(`[Econ Debug] Coastal city [${h.col},${h.row}] (Pop:${p.population}) has NO ships.`);
+        }
 
         // 輸送能力の計算 (v2.6)
         let waterCapacity = 0;
@@ -1039,7 +1048,10 @@ export async function calculateRoadTraffic(allHexes, roadPaths, addLogMessage) {
 }
 
 export function calculateLivingConditions(allHexes) {
+    console.log("[Econ] calculateLivingConditions started.");
+    let processedCount = 0;
     allHexes.forEach(h => {
+        processedCount++;
         const p = h.properties;
         if (p.population <= 0) return;
 
