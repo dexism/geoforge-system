@@ -66,7 +66,7 @@ export class WorldMap {
         this.row = new Uint16Array(this.size);
 
         // 基本プロパティ
-        this.isWater = new Uint8Array(this.size); // 0 or 1
+        this.isWater = new Uint8Array(this.size).fill(1); // Default to Ocean (1)
         this.elevation = new Int16Array(this.size);
         this.temperature = new Float32Array(this.size);
         this.precipitation_mm = new Float32Array(this.size);
@@ -252,6 +252,11 @@ class Hex {
     }
 
     get index() { return this._index; }
+
+    // Compatibility aliases for UI
+    get x() { return this.col; }
+    get y() { return this.row; }
+
 
     get cx() {
         // v3.2: Flat-Top Geometry (matches ui.js and neighbor logic)

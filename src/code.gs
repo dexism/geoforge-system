@@ -43,17 +43,27 @@ function doGet(e) {
     const roadValues = roadSheet.getDataRange().getValues();
     const roads = valuesToObjects(roadValues);
 
+    // Filter by blockId if requested
+    const blockId = e.parameter.blockId;
+    let filteredHexes = hexes;
+    let filteredRoads = roads;
+
+    if (blockId) {
+        filteredHexes = hexes.filter(h => h.blockId === blockId);
+        filteredRoads = roads.filter(r => r.blockId === blockId);
+    }
+
     // V2フォーマットで構築
     const worldData = {
       version: meta.version || 2,
       cols: meta.cols || 115,
       rows: meta.rows || 100,
       dicts: dicts,
-      hexes: hexes,
-      roads: roads,
+      hexes: filteredHexes,
+      roads: filteredRoads,
       // 互換性のため古いキーも残す（必要なら）
-      allHexes: hexes,
-      roadPaths: roads
+      allHexes: filteredHexes,
+      roadPaths: filteredRoads
     };
 
     // JSON形式で出力

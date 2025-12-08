@@ -693,29 +693,62 @@ export { calculateRoadDistance, calculateTravelDays };
  * @returns {object|null} - { path: Array<node>, cost: number } or null if not found
  */
 export function findAStarPath({ start, goal, getNeighbors, heuristic, cost }) {
-    const toVisit = [{ node: start, f: 0, g: 0, path: [start] }];
-    const visited = new Map();
-    visited.set(`${start.x}-${start.y}`, 0);
+    // Open set: [ { node, f, g } ]
+    const toVisit = [{ node: start, f: 0, g: 0 }];
+
+    // gScore map: "x-y" -> g
+    const gScoreMap = new Map();
+    gScoreMap.set(`${start.x}-${start.y}`, 0);
+
+    // cameFrom map: "x-y" -> { x, y } (parent node)
+    const cameFrom = new Map();
+
+    const MAX_ITERATIONS = 10000;
+    let iterations = 0;
 
     while (toVisit.length > 0) {
+        iterations++;
+        // Safety break
+        if (iterations > MAX_ITERATIONS) return null;
+
+        // Sort by f-score (Lowest first)
+        // Optimization: Use a min-heap in future for better performance
         toVisit.sort((a, b) => a.f - b.f);
         const current = toVisit.shift();
 
         if (current.node.x === goal.x && current.node.y === goal.y) {
-            return { path: current.path, cost: current.g };
+            // Reconstruct path
+            const path = [current.node];
+            let currKey = `${current.node.x}-${current.node.y}`;
+            while (cameFrom.has(currKey)) {
+                const parent = cameFrom.get(currKey);
+                path.unshift(parent);
+                currKey = `${parent.x}-${parent.y}`;
+            }
+            return { path: path, cost: current.g };
         }
 
-        getNeighbors(current.node).forEach(n => {
-            const gScore = current.g + cost(current.node, n);
-            const visitedNeighborCost = visited.get(`${n.x}-${n.y}`);
+        const neighbors = getNeighbors(current.node);
+        for (const n of neighbors) {
+            const tentativeG = current.g + cost(current.node, n);
+            const nKey = `${n.x}-${n.y}`;
 
-            if (visitedNeighborCost === undefined || gScore < visitedNeighborCost) {
-                visited.set(`${n.x}-${n.y}`, gScore);
-                const hScore = heuristic(n, goal);
-                const fScore = gScore + hScore;
-                toVisit.push({ node: n, f: fScore, g: gScore, path: [...current.path, n] });
+            const existingG = gScoreMap.get(nKey);
+
+            if (existingG === undefined || tentativeG < existingG) {
+                // Found a better path to n
+                cameFrom.set(nKey, current.node);
+                gScoreMap.set(nKey, tentativeG);
+
+                const fScore = tentativeG + heuristic(n, goal);
+
+                // Add to open set (or update if exists - simpler to just push duplicate and let visited check handle it, 
+                // but here we check if it's already in toVisit with higher g?)
+                // Simple approach: Push to toVisit. But removing old entry is O(N).
+                // Just push. Sort will handle it.
+                toVisit.push({ node: n, f: fScore, g: tentativeG });
             }
-        });
+        }
     }
     return null;
 }

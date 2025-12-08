@@ -7,8 +7,8 @@ import * as d3 from 'd3';
 // ================================================================
 // ■ 1. マップ基本設定
 // ================================================================
-export const COLS = 115;
-export const ROWS = 100;
+export const COLS = 117;
+export const ROWS = 102;
 export const HEX_SIZE_KM = 10;
 export const r = 20; // 1へクスのサイズ (px)
 export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
@@ -154,35 +154,35 @@ export const CROP_DATA = { // 収量(t/ha), 種類, 1人当たり必要耕作面
 
 // --- 農業適性パラメータ ---
 export const SUITABILITY_FIELD = {
-    'grassland': 0.95, 
-    'savanna': 0.9, 
+    'grassland': 0.95,
+    'savanna': 0.9,
     'steppe': 0.9,
-    'temperateForest': 0.7, 
-    'subarcticForest': 0.5, 
+    'temperateForest': 0.7,
+    'subarcticForest': 0.5,
     'tropicalRainforest': 0.4,
     'wetland': 0.1, // 排水が必要
-    'coastal': 0.3, 
-    'beach': 0.1, 
-    'desert': 0.1, 
+    'coastal': 0.3,
+    'beach': 0.1,
+    'desert': 0.1,
     'wasteland': 0.2,
-    'tundra': 0.1, 
-    'alpine': 0.1, 
+    'tundra': 0.1,
+    'alpine': 0.1,
     'iceSnow': 0.0
 };
 export const SUITABILITY_PADDY = {
-    'grassland': 0.9, 
-    'savanna': 0.8, 
+    'grassland': 0.9,
+    'savanna': 0.8,
     'steppe': 0.8,
-    'temperateForest': 0.6, 
-    'subarcticForest': 0.4, 
+    'temperateForest': 0.6,
+    'subarcticForest': 0.4,
     'tropicalRainforest': 0.5,
     'wetland': 0.9, // 水田には最適
-    'coastal': 0.4, 
-    'beach': 0.1, 
-    'desert': 0.1, 
+    'coastal': 0.4,
+    'beach': 0.1,
+    'desert': 0.1,
     'wasteland': 0.2,
-    'tundra': 0.0, 
-    'alpine': 0.0, 
+    'tundra': 0.0,
+    'alpine': 0.0,
     'iceSnow': 0.0
 };
 export const SUITABILITY_ORCHARD = {
@@ -197,8 +197,8 @@ export const SUITABILITY_ORCHARD = {
     'beach': 0.1,
     'desert': 0.1, // 灌漑あれば
     'wasteland': 0.3, // 傾斜地など
-    'tundra': 0.0, 
-    'alpine': 0.1, 
+    'tundra': 0.0,
+    'alpine': 0.1,
     'iceSnow': 0.0
 };
 

@@ -47,6 +47,7 @@ let currentSelectedHex = null;
 const BLOCK_COLS = 5;
 const BLOCK_ROWS = 5;
 let blocks = [];
+let blockLoaderRef = null; // Dynamic Block Loader Interface
 
 // ================================================================
 // ■ ヘルパー関数 (モジュールスコープ)
@@ -914,8 +915,14 @@ function initializeBlocks() {
             const yMin = startRow * hexHeight;
             const yMax = endRow * hexHeight + hexHeight; // 少し余裕を持たせる
 
+            // [FIX] Map Block Indices to Data File IDs (map_EE_NN)
+            // Spec: Start EE=48, NN=71. Center(2,2) -> 50,73
+            const ee = 48 + bx;
+            const nn = 71 + by;
+            const blockId = `map_${ee}_${nn}`;
+
             const block = {
-                id: `${bx}-${by}`,
+                id: blockId,
                 bx: bx,
                 by: by,
                 bounds: { xMin, xMax, yMin, yMax },
@@ -1027,7 +1034,7 @@ function updateVisibleBlocks(transform) {
 
         block.visible = isVisible;
 
-        // レイヤーごとの表示切り替え
+        // レイヤーごとの表示切り替え (Definition restored)
         const partitionedLayers = [
             'terrain', 'settlement', 'hex-border', 'labels',
             'road', 'sea-route', 'river', 'beach', 'ridge-water-system', 'contour', 'interaction', 'border',
@@ -1037,20 +1044,43 @@ function updateVisibleBlocks(transform) {
             'hunting-overlay', 'pastoral-overlay', 'livestock-overlay', 'monster-overlay', 'population-overlay'
         ];
 
+        // [New] Dynamic Loading Logic
         if (isVisible) {
+            if (blockLoaderRef && !block.loaded && !block.loading) {
+                // console.log(`[UI] Requesting load for visible block ${block.id}`);
+                block.loading = true;
+
+                // Load block data
+                blockLoaderRef.load(block.id).then(success => {
+                    block.loading = false;
+                    if (success) {
+                        block.loaded = true;
+                        block.rendered = false; // Force re-render
+                        // Trigger update to render the newly loaded block
+                        // Use current transform from global state or fetch from svg
+                        if (svg) {
+                            updateVisibleBlocks(d3.zoomTransform(svg.node()));
+                        }
+                    }
+                });
+            }
+
             // 表示: まだレンダリングされていなければ描画
-            if (!block.rendered) {
-                console.log(`Triggering renderBlock for ${block.id}`);
+            if (!block.rendered && block.loaded) { // Only render if loaded
+                // console.log(`Triggering renderBlock for ${block.id}`);
                 renderBlock(block);
                 block.rendered = true;
+            } else if (!block.rendered && !block.loaded) {
+                // Loading... placeholder?
             }
+
             // 各レイヤーのグループを表示
             partitionedLayers.forEach(layerName => {
                 if (layers[layerName]) {
                     layers[layerName].group.select(`#${layerName}-${block.id}`).style('display', 'inline');
                 }
             });
-        } else {
+        } else { // !isVisible
             // 非表示: レンダリング済みならDOMを削除してメモリ解放
             if (block.rendered) {
                 partitionedLayers.forEach(layerName => {
@@ -1061,6 +1091,14 @@ function updateVisibleBlocks(transform) {
                     }
                 });
                 block.rendered = false;
+            }
+
+            // [New] Dynamic Unloading Logic
+            // If block is hidden and loaded, unload data to free memory
+            if (blockLoaderRef && block.loaded && !block.loading) {
+                // console.log(`[UI] Requesting unload for hidden block ${block.id}`);
+                blockLoaderRef.unload(block.id);
+                block.loaded = false;
             }
         }
     });
@@ -2123,7 +2161,8 @@ function updateMinimapViewport(transform) {
         .attr('height', minimapHeight);
 }
 
-export async function setupUI(allHexes, roadPaths, addLogMessage) {
+export async function setupUI(allHexes, roadPaths, addLogMessage, blockLoader) {
+    blockLoaderRef = blockLoader; // Store reference
     // [FIX] WorldMapインスタンス(TypedArrayラッパー)が渡された場合、
     // UI側の描画関数が配列アクセス(hexes[i])を前提としているため、標準配列に変換する。
     // メモリ使用量は増えるが、UI操作の安定性を優先する。
@@ -2245,6 +2284,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     for (let row = 0; row < iterRows; row++) {
         for (let col = 0; col < iterCols; col++) {
             const hexData = allHexes[getIndex(col, row)];
+            if (!hexData) continue; // Skip if hex data is missing
             const offsetY = (col % 2 === 0) ? 0 : hexHeight / 2;
             const cx = col * (hexWidth * 3 / 4) + config.r;
             const cy = row * hexHeight + offsetY + config.r;
@@ -2788,7 +2828,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage) {
     if (targetHex) {
         console.log(`Setting initial zoom to hex: [${targetHex.x}, ${targetHex.y}] (${targetHex.cx}, ${targetHex.cy})`);
 
-        const initialScale = 2.0;
+        const initialScale = 3.0;
         const initialTransform = d3.zoomIdentity
             .translate(svgWidth / 2 - targetHex.cx * initialScale, svgHeight / 2 - targetHex.cy * initialScale)
             .scale(initialScale);

@@ -3,6 +3,8 @@
 // ================================================================
 
 import * as config from './config.js';
+import { globalToBlock } from './BlockUtils.js';
+
 
 /**
  * 座標からallHexes配列のインデックスを計算する
@@ -60,6 +62,41 @@ export function getDistance(h1, h2) {
 }
 
 /**
+ * Calculates determine direction from h1 to h2 (0-5 Clockwise starting N).
+ * Flat-Top Hexes, Odd-Q (odd columns shifted down).
+ * 
+ * @param {object} h1 - From Hex ({col, row})
+ * @param {object} h2 - To Hex ({col, row})
+ * @returns {number} 0:N, 1:NE, 2:SE, 3:S, 4:SW, 5:NW. Returns -1 if not neighbors.
+ */
+export function getDirection(h1, h2) {
+    const dc = h2.col - h1.col;
+    const dr = h2.row - h1.row;
+    const isOdd = (h1.col % 2 !== 0);
+
+    // Standard Odd-Q Offsets for Neighbors
+    // Even Col: N(0,-1), NE(1,-1), SE(1,0), S(0,1), SW(-1,0), NW(-1,-1)
+    // Odd Col:  N(0,-1), NE(1,0), SE(1,1), S(0,1), SW(-1,1), NW(-1,0)
+
+    if (dc === 0 && dr === -1) return 0; // N
+    if (dc === 0 && dr === 1) return 3; // S
+
+    if (isOdd) {
+        if (dc === 1 && dr === 0) return 1; // NE
+        if (dc === 1 && dr === 1) return 2; // SE
+        if (dc === -1 && dr === 1) return 4; // SW
+        if (dc === -1 && dr === 0) return 5; // NW
+    } else {
+        if (dc === 1 && dr === -1) return 1; // NE
+        if (dc === 1 && dr === 0) return 2; // SE
+        if (dc === -1 && dr === 0) return 4; // SW
+        if (dc === -1 && dr === -1) return 5; // NW
+    }
+
+    return -1;
+}
+
+/**
  * プログレスバーの表示用文字列を生成する汎用関数
  * @param {object} params - パラメータオブジェクト
  * @param {number} params.current - 現在の処理数
@@ -90,8 +127,24 @@ export function formatLocation(hexData, formatType) {
     if (!hexData) return 'N/A';
 
     const p = hexData.properties || {};
-    const x = String(hexData.x || 0).padStart(3, '0');
-    const y = String(hexData.y || 0).padStart(3, '0');
+    // Use col/row if available (System Standard), fall back to x/y (Legacy/UI)
+    const col = (hexData.col !== undefined) ? hexData.col : (hexData.x || 0);
+    const row = (hexData.row !== undefined) ? hexData.row : (hexData.y || 0);
+
+    const blockInfo = globalToBlock(col, row);
+
+    let xStr, yStr;
+    if (blockInfo) {
+        // World Coordinate Format: EEXX-NNYY (e.g. 5012-7308)
+        // EE: Block EE (2 digits), XX: Local Col (2 digits)
+        xStr = `${blockInfo.ee}${String(blockInfo.localCol).padStart(2, '0')}`;
+        yStr = `${blockInfo.nn}${String(blockInfo.localRow).padStart(2, '0')}`;
+    } else {
+        // Fallback for out of bounds
+        xStr = String(col).padStart(4, '0');
+        yStr = String(row).padStart(4, '0');
+    }
+
     const elevation = Math.round(p.elevation || 0);
 
     const isDepth = elevation < 0;
@@ -100,15 +153,15 @@ export function formatLocation(hexData, formatType) {
 
     switch (formatType) {
         case 'full':
-            return `E ${x} N ${y} ${elevLabel} ${elevValue}`;
+            return `E ${xStr} N ${yStr} ${elevLabel} ${elevValue}`;
         case 'short':
-            return `${x}-${y} ${elevLabel} ${elevValue}`;
+            return `${xStr}-${yStr} ${elevLabel} ${elevValue}`;
         case 'coords':
-            return `${x}-${y}`;
+            return `${xStr}-${yStr}`;
         case 'elevation':
             return `${elevLabel} ${elevValue}`;
         default:
-            return `${x}-${y}`;
+            return `${xStr}-${yStr}`;
     }
 }
 

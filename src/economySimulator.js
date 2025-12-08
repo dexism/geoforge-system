@@ -980,10 +980,14 @@ export async function calculateRoadTraffic(allHexes, roadPaths, addLogMessage) {
                         const idx = getIndex(node.x, node.y);
                         const hex = allHexes[idx];
                         if (!hex) return [];
-                        return hex.neighbors.map(nIdx => {
-                            const nHex = allHexes[nIdx];
-                            return { x: nHex.col, y: nHex.row };
-                        });
+                        return hex.neighbors
+                            .filter(nIdx => nIdx !== -1) // Filter invalid indices
+                            .map(nIdx => {
+                                const nHex = allHexes[nIdx];
+                                if (!nHex) return null;
+                                return { x: nHex.col, y: nHex.row };
+                            })
+                            .filter(n => n !== null);
                     },
                     heuristic: (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y),
                     cost: (a, b) => {
