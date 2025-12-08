@@ -516,10 +516,12 @@ function compressWorldData() {
     if (!worldData || !worldData.allHexes) return null;
 
     // [DEBUG] 保存前のデータ検証
+    /*
     const missingVeg = worldData.allHexes.filter(h => !h.properties.vegetation).length;
     if (missingVeg > 0) {
         console.warn(`[WARN] Compressing data but ${missingVeg} hexes are missing vegetation.`);
     }
+    */
 
     // 1. 辞書の作成
     const dictionaries = {};
@@ -1265,16 +1267,18 @@ async function processLoadedData(loadedData) {
     generateBeaches(worldData.allHexes, loadedData.cols, loadedData.rows);
 
     // [DEBUG] Check beach generation
+    /*
     let totalBeachHexes = 0;
     let coastalHexes = 0;
     worldData.allHexes.forEach(h => {
         if (h.properties.isCoastal) coastalHexes++;
         if (h.properties.beachNeighbors && h.properties.beachNeighbors.length > 0) totalBeachHexes++;
     });
-    console.log(`[Beach Debug] Coastal: ${coastalHexes}, Beaches: ${totalBeachHexes}`);
+    // console.log(`[Beach Debug] Coastal: ${coastalHexes}, Beaches: ${totalBeachHexes}`);
     if (totalBeachHexes === 0 && coastalHexes > 0) {
         console.warn("[Beach Debug] Beaches not generated likely due to missing beachNoise initialization.");
     }
+    */
 
     // 最終プロパティ計算 (植生、産業ポテンシャル)
     // ノイズ関数が正しく初期化されているので、ここで正しい値になるはず

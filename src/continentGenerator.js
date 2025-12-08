@@ -1100,18 +1100,7 @@ export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRow
     });
 
     // [DEBUG] Log BFS queue size and sample check
-    console.log(`[Geo Internal] BFS Queue initialized with ${queue.length} water hexes.`);
-    if (queue.length === 0) {
-        // 原因調査用: 最初の方のヘックスの状態をダンプ
-        const sample = allHexes.slice(0, 5).map(h => ({
-            id: h.index,
-            isWater: h.properties.isWater,
-            veg: h.properties.vegetation,
-            col: h.col,
-            row: h.row
-        }));
-        console.warn('[Geo Internal] BFS Queue is EMPTY! Sample hexes:', JSON.stringify(sample));
-    }
+    // console.log(`[Geo Internal] BFS Queue initialized with ${queue.length} water hexes.`);
 
     let pointer = 0;
     while (pointer < queue.length) {
