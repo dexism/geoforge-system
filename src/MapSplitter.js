@@ -47,12 +47,12 @@ export function assignRoadPatterns(allHexes, roadPaths) {
                 // InDir "from neighbor 0". OutDir "to neighbor 3".
                 // Yes, so InDir should be the DIRECTION OF PREV FROM CURR.
 
-                const dirToPrev = utils.getDirection(curr, { col: prev.x, row: prev.y });
+                const dirToPrev = blockUtils.getDirection(curr, { col: prev.x, row: prev.y });
                 inDir = dirToPrev;
             }
 
             if (next) {
-                const dirToNext = utils.getDirection(curr, { col: next.x, row: next.y });
+                const dirToNext = blockUtils.getDirection(curr, { col: next.x, row: next.y });
                 outDir = dirToNext;
             }
 

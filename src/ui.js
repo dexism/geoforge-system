@@ -831,7 +831,7 @@ async function drawBlockContours(block) {
         .attr("transform", `translate(${xMin - resolution / 2}, ${yMin - resolution / 2}) scale(${resolution})`)
         .style('fill', 'none')
         .style('stroke', '#642')
-        .style('stroke-width', d => d.value % 1000 === 0 ? 0.1 : 0.05)
+        .style('stroke-width', d => d.value % 1000 === 0 ? 0.06 : 0.03)
         .style('pointer-events', 'none');
 }
 

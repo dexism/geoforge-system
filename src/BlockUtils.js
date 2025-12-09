@@ -226,3 +226,44 @@ export function getPatternIds(inDir, outDir) {
 
     return [];
 }
+
+/**
+ * Calculates determine direction from h1 to h2 (0-5 Clockwise starting N).
+ * Flat-Top Hexes, Odd-Q (odd columns shifted down).
+ * 
+ * @param {object} h1 - From Hex ({col, row})
+ * @param {object} h2 - To Hex ({col, row})
+ * @returns {number} 0:N, 1:NE, 2:SE, 3:S, 4:SW, 5:NW. Returns -1 if not neighbors.
+ */
+export function getDirection(h1, h2) {
+    // Treat inputs as simple objects with col/row if needed
+    const c1 = h1.col !== undefined ? h1.col : h1.x;
+    const r1 = h1.row !== undefined ? h1.row : h1.y;
+    const c2 = h2.col !== undefined ? h2.col : h2.x;
+    const r2 = h2.row !== undefined ? h2.row : h2.y;
+
+    const dc = c2 - c1;
+    const dr = r2 - r1;
+    const isOdd = (c1 % 2 !== 0);
+
+    // Standard Odd-Q Offsets for Neighbors
+    // Even Col: N(0,-1), NE(1,-1), SE(1,0), S(0,1), SW(-1,0), NW(-1,-1)
+    // Odd Col:  N(0,-1), NE(1,0), SE(1,1), S(0,1), SW(-1,1), NW(-1,0)
+
+    if (dc === 0 && dr === -1) return 0; // N
+    if (dc === 0 && dr === 1) return 3; // S
+
+    if (isOdd) {
+        if (dc === 1 && dr === 0) return 1; // NE
+        if (dc === 1 && dr === 1) return 2; // SE
+        if (dc === -1 && dr === 1) return 4; // SW
+        if (dc === -1 && dr === 0) return 5; // NW
+    } else {
+        if (dc === 1 && dr === -1) return 1; // NE
+        if (dc === 1 && dr === 0) return 2; // SE
+        if (dc === -1 && dr === 0) return 4; // SW
+        if (dc === -1 && dr === -1) return 5; // NW
+    }
+
+    return -1;
+}

@@ -3,7 +3,6 @@
 // ================================================================
 
 import * as config from './config.js';
-import { globalToBlock } from './BlockUtils.js';
 
 /**
  * 座標からallHexes配列のインデックスを計算する
@@ -91,40 +90,25 @@ export function formatLocation(hexData, formatType) {
     if (!hexData) return 'N/A';
 
     const p = hexData.properties || {};
-    
-    // Prefer col/row properties, fallback to x/y
-    const col = hexData.col !== undefined ? hexData.col : (hexData.x || 0);
-    const row = hexData.row !== undefined ? hexData.row : (hexData.y || 0);
-    
+    const x = String(hexData.x || 0).padStart(3, '0');
+    const y = String(hexData.y || 0).padStart(3, '0');
     const elevation = Math.round(p.elevation || 0);
+
     const isDepth = elevation < 0;
     const elevLabel = isDepth ? 'D' : 'H';
     const elevValue = isDepth ? Math.abs(elevation) : elevation;
 
-    // Convert to World Coords (Block-based)
-    const blockCoords = globalToBlock(col, row);
-    let coordsStr = `${col}-${row}`; // Default fallback
-    
-    if (blockCoords) {
-         // EEXX-NNYY
-         const ee = blockCoords.ee;
-         const nn = blockCoords.nn;
-         const lx = String(blockCoords.localCol).padStart(2, '0');
-         const ly = String(blockCoords.localRow).padStart(2, '0');
-         coordsStr = `${ee}${lx}-${nn}${ly}`;
-    }
-
     switch (formatType) {
         case 'full':
-            return `Loc ${coordsStr} ${elevLabel} ${elevValue}`;
+            return `E ${x} N ${y} ${elevLabel} ${elevValue}`;
         case 'short':
-            return `${coordsStr} ${elevLabel} ${elevValue}`;
+            return `${x}-${y} ${elevLabel} ${elevValue}`;
         case 'coords':
-            return coordsStr;
+            return `${x}-${y}`;
         case 'elevation':
             return `${elevLabel} ${elevValue}`;
         default:
-            return coordsStr;
+            return `${x}-${y}`;
     }
 }
 
