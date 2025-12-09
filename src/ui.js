@@ -8,7 +8,8 @@
 
 import * as d3 from 'd3';
 import * as config from './config.js';
-import { getIndex, formatProgressBar, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint, getDistance } from './utils.js';
+import * as blockUtils from './BlockUtils.js';
+import { getIndex, formatProgressBar, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint, getDistance, getNeighborIndices } from './utils.js';
 import {
     initInfoWindow,
     setAllHexesData,
@@ -875,12 +876,15 @@ function adjustSidebarHeight() {
  * また、各レイヤーにブロックごとのグループを作成する
  */
 function initializeBlocks() {
-    console.log("initializeBlocks: Starting...");
+    console.log("initializeBlocks: Starting with fixed specification (Core: 23x20, Offset: 1)...");
     blocks = []; // リセット
 
-    const blockColSize = Math.ceil(config.COLS / BLOCK_COLS);
-    const blockRowSize = Math.ceil(config.ROWS / BLOCK_ROWS);
-    const buffer = 1; // 1ヘックス分のバッファ
+    // 仕様に基づく固定サイズ
+    const CORE_COL_SIZE = 23;
+    const CORE_ROW_SIZE = 20;
+    const GLOBAL_OFFSET_X = 1;
+    const GLOBAL_OFFSET_Y = 1;
+    const BUFFER = 1;
 
     // クリップパス用のdefs要素を取得または作成
     let defs = svg.select('defs');
@@ -892,33 +896,45 @@ function initializeBlocks() {
 
     for (let by = 0; by < BLOCK_ROWS; by++) {
         for (let bx = 0; bx < BLOCK_COLS; bx++) {
-            const startCol = bx * blockColSize;
-            const endCol = Math.min((bx + 1) * blockColSize, config.COLS);
-            const startRow = by * blockRowSize;
-            const endRow = Math.min((by + 1) * blockRowSize, config.ROWS);
+            // コア領域の開始・終了インデックス (Global Grid Index)
+            // [Start, End) の範囲
+            const startCol = GLOBAL_OFFSET_X + bx * CORE_COL_SIZE;
+            const endCol = startCol + CORE_COL_SIZE;
+            const startRow = GLOBAL_OFFSET_Y + by * CORE_ROW_SIZE;
+            const endRow = startRow + CORE_ROW_SIZE;
 
             // バッファを含めた範囲 (データの取得用)
-            const bufferedStartCol = Math.max(0, startCol - buffer);
-            const bufferedEndCol = Math.min(config.COLS, endCol + buffer);
-            const bufferedStartRow = Math.max(0, startRow - buffer);
-            const bufferedEndRow = Math.min(config.ROWS, endRow + buffer);
+            // Block 0 (bx=0) の場合: startCol=1. bufferedStart=0 (Left Buffer).
+            // Block 0 EndCol=24. bufferedEnd=25 (Right Buffer index=24).
+            const bufferedStartCol = Math.max(0, startCol - BUFFER);
+            const bufferedEndCol = Math.min(config.COLS, endCol + BUFFER);
+            const bufferedStartRow = Math.max(0, startRow - BUFFER);
+            const bufferedEndRow = Math.min(config.ROWS, endRow + BUFFER);
 
-            // ブロックのバウンディングボックス計算 (表示判定用)
-            // 座標系はヘックスの中心座標に基づく
-
-            // ヘックスのサイズ
+            // ブロックのバウンディングボックス計算 (表示判定用・クリップパス用)
+            // コア領域に基づいて計算する
             const hexWidth = 2 * config.r;
             const hexHeight = Math.sqrt(3) * config.r;
 
-            const xMin = startCol * (hexWidth * 3 / 4);
-            const xMax = endCol * (hexWidth * 3 / 4) + hexWidth; // 少し余裕を持たせる
+            // 座標計算は hexes 生成ロジックと合わせる必要がある
+            // hexes[i].cx = col * (hexWidth * 3/4) + r
+            const xMin = startCol * (hexWidth * 3 / 4); // 概算
+            const xMax = endCol * (hexWidth * 3 / 4) + hexWidth;
             const yMin = startRow * hexHeight;
-            const yMax = endRow * hexHeight + hexHeight; // 少し余裕を持たせる
+            const yMax = endRow * hexHeight + hexHeight;
 
             // [FIX] Map Block Indices to Data File IDs (map_EE_NN)
-            // Spec: Start EE=48, NN=71. Center(2,2) -> 50,73
-            const ee = 48 + bx;
-            const nn = 71 + by;
+            // Determine center block from config
+            const initLoc = config.INITIAL_ZOOM_LOC || { x: 5012, y: 7308 };
+            const centerBx = Math.floor(initLoc.x / 100);
+            const centerBy = Math.floor(initLoc.y / 100);
+
+            // Calculate start indices based on grid size (assuming center is at generic grid center)
+            const startEE = centerBx - Math.floor(BLOCK_COLS / 2);
+            const startNN = centerBy - Math.floor(BLOCK_ROWS / 2);
+
+            const ee = startEE + bx;
+            const nn = startNN + by;
             const blockId = `map_${ee}_${nn}`;
 
             const block = {
@@ -926,9 +942,9 @@ function initializeBlocks() {
                 bx: bx,
                 by: by,
                 bounds: { xMin, xMax, yMin, yMax },
-                hexes: [],      // 互換性のために残すが、基本は coreHexes を使用推奨
-                coreHexes: [],  // 描画対象（バッファなし）
-                allHexes: [],   // 計算対象（バッファあり）
+                hexes: [],      // 互換性 (Core)
+                coreHexes: [],  // 描画対象 (Core Only: 1-23, 1-20 relative)
+                allHexes: [],   // 計算対象 (Buffered: 0-24, 0-21 relative)
                 rendered: false, // 遅延レンダリング用フラグ
                 visible: false
             };
@@ -959,6 +975,7 @@ function initializeBlocks() {
             blocks.push(block);
 
             // 3. クリップパスの生成
+            // coreHexes の領域のみを表示するようにクリップ
             const clipPathId = `clip-block-${block.id}`;
             const clipPath = defs.append('clipPath')
                 .attr('id', clipPathId)
@@ -984,7 +1001,7 @@ function initializeBlocks() {
             });
         }
     }
-    console.log(`initializeBlocks: Initialized ${blocks.length} blocks.`);
+    console.log(`initializeBlocks: Initialized ${blocks.length} blocks with strict core dimensions.`);
 }
 
 /**
@@ -1066,7 +1083,7 @@ function updateVisibleBlocks(transform) {
             }
 
             // 表示: まだレンダリングされていなければ描画
-            if (!block.rendered && block.loaded) { // Only render if loaded
+            if (!block.rendered) { // Render regardless of load status (show dummy if not loaded)
                 // console.log(`Triggering renderBlock for ${block.id}`);
                 renderBlock(block);
                 block.rendered = true;
@@ -2277,18 +2294,107 @@ export async function setupUI(allHexes, roadPaths, addLogMessage, blockLoader) {
     setAllHexesData(allHexes);
 
     // --- 2. 描画用データの事前計算 ---
-    hexes = []; // データをリセット (Use module-level variable)
+    // --- 2. 描画用データの事前計算 ---
 
-    const iterRows = allHexes.rows || config.ROWS;
-    const iterCols = allHexes.cols || config.COLS;
+    // [FIX] Viewport Offset Logic & Target Decoding
+    let offsetX = 0;
+    let offsetY = 0;
+
+    // Global Target Coordinates for Initial Zoom
+    // We attach these to the function scope or use a closure variable if possible, 
+    // but here we just log them and rely on Global Search in targetHex logic later.
+    // To pass to targetHex logic, we might need to store them in a way accessible later.
+    // However, since we recalculate them here, we can just use the decoded values if we assume the standard WorldMap fits.
+
+    if (config.INITIAL_ZOOM_LOC) {
+        const initLoc = config.INITIAL_ZOOM_LOC;
+        // Decode User-Format (Block*100 + Local) -> Global Block Coords
+        const bx = Math.floor(initLoc.x / 100);
+        const lx = initLoc.x % 100;
+        const by = Math.floor(initLoc.y / 100);
+        const ly = initLoc.y % 100;
+
+        const globalC = blockUtils.blockToGlobal(bx, by, lx, ly);
+        if (globalC) {
+            console.log(`[setupUI] Decoded INITIAL_ZOOM_LOC (${initLoc.x},${initLoc.y}) -> Global (${globalC.col},${globalC.row})`);
+            // If we wanted to shift viewport, we would set offsetX here. 
+            // For now, World fits in viewport, so Offset=0.
+            offsetX = 0;
+            offsetY = 0;
+
+            // [HACK] Verify if data exists at this global coord
+            if (allHexes && typeof allHexes.getHex === 'function') {
+                const testHex = allHexes.getHex(getIndex(globalC.col, globalC.row));
+                console.log(`[setupUI] Data check at Global ${globalC.col},${globalC.row}:`, testHex ? "EXISTS" : "MISSING");
+            }
+        }
+    }
+
+    const iterRows = config.ROWS;
+    const iterCols = config.COLS;
+    hexes = new Array(iterCols * iterRows); // [FIX] インデックスを固定するためにサイズを確保
     for (let row = 0; row < iterRows; row++) {
         for (let col = 0; col < iterCols; col++) {
-            const hexData = allHexes[getIndex(col, row)];
-            if (!hexData) continue; // Skip if hex data is missing
-            const offsetY = (col % 2 === 0) ? 0 : hexHeight / 2;
             const cx = col * (hexWidth * 3 / 4) + config.r;
-            const cy = row * hexHeight + offsetY + config.r;
+            const offsetY_px = (col % 2 === 0) ? 0 : hexHeight / 2;
+            const cy = row * hexHeight + offsetY_px + config.r;
+            const currentIndex = getIndex(col, row);
 
+            // [FIX] Use Global Coordinates
+            const globalCol = col + offsetX;
+            const globalRow = row + offsetY;
+
+            // Fetch Data using Global Coordinates (assuming Loaded data is stored globally)
+            // If allHexes is local array (initial gen), standard getIndex works if offsetX=0.
+            // If allHexes is Proxy (dynamic), use global index.
+            let hexData = null;
+            if (allHexesData && typeof allHexesData.getHex === 'function') {
+                // If it's a WorldMap/Proxy, assume it handles large indices or coordinate lookup?
+                // Standard getIndex logic:
+                const idx = getIndex(globalCol, globalRow); // This returns "Global Index" if global coords are passed
+                hexData = allHexesData.getHex(idx);
+            } else if (allHexesData && allHexesData.length > 0) {
+                // Array case (e.g. converted in setupUI).
+                // If array is small (0..11934), accessing with huge index fails.
+                // We must fallback to local index IF array size suggests it's a Viewport snapshot.
+                if (allHexesData.length <= (config.COLS * config.ROWS) * 2) {
+                    hexData = allHexesData[currentIndex]; // Use Local Index
+                } else {
+                    hexData = allHexesData[getIndex(globalCol, globalRow)]; // Assume large array
+                }
+            }
+
+            // [FIX] データがない場合はダミーの海洋データを生成する (Global Coordsを使用)
+            if (!hexData) {
+                const dummyNeighbors = getNeighborIndices(col, row, iterCols, iterRows);
+                const dummyProps = {
+                    isWater: true,
+                    terrainType: '海洋',
+                    vegetation: 'なし',
+                    elevation: 0,
+                    flow: 0,
+                    ridgeFlow: 0,
+                };
+
+                hexes[currentIndex] = {
+                    index: currentIndex,
+                    x: globalCol, y: (config.ROWS - 1) - globalRow, // Global Coords
+                    cx: cx, cy: cy,
+                    points: d3.range(6).map(i => [cx + config.r * Math.cos(Math.PI / 3 * i), cy + config.r * Math.sin(Math.PI / 3 * i)]),
+                    properties: {
+                        ...dummyProps,
+                        shadingValue: 0,
+                        _displayColor: config.TERRAIN_COLORS['海洋']
+                    },
+                    downstreamIndex: -1,
+                    ridgeUpstreamIndex: -1,
+                    neighbors: dummyNeighbors, // Viewport Neighbor Indices (for rendering)
+                    upstreamIndex: -1
+                };
+                continue;
+            }
+
+            // const currentIndex = getIndex(col, row); // Moved up
             // レリーフ（陰影）計算のための南北標高差を取得
             let northElevation = hexData.properties.elevation;
             let southElevation = hexData.properties.elevation;
@@ -2364,9 +2470,11 @@ export async function setupUI(allHexes, roadPaths, addLogMessage, blockLoader) {
             }
 
             // 最終的な描画用オブジェクトを配列に追加
-            hexes.push({
-                index: getIndex(col, row),
-                x: col, y: (config.ROWS - 1) - row,
+            // [FIX] pushではなくインデックス指定で代入し、隙間があってもインデックス位置を維持する
+            // const currentIndex = getIndex(col, row); // Moved up
+            hexes[currentIndex] = {
+                index: currentIndex,
+                x: globalCol, y: (config.ROWS - 1) - globalRow, // Global Coords
                 cx: cx, cy: cy,
                 points: d3.range(6).map(i => [cx + config.r * Math.cos(Math.PI / 3 * i), cy + config.r * Math.sin(Math.PI / 3 * i)]),
                 properties: { ...hexData.toObject(), shadingValue: elevationDifference },
@@ -2374,7 +2482,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage, blockLoader) {
                 ridgeUpstreamIndex: ridgeUpstreamIndex,
                 neighbors: hexData.neighbors,
                 upstreamIndex: -1 // 初期化
-            });
+            };
         }
     }
 
@@ -2823,12 +2931,34 @@ export async function setupUI(allHexes, roadPaths, addLogMessage, blockLoader) {
         svgHeight = window.innerHeight;
     }
 
-    const targetHex = hexes.find(h => h.x === 56 && h.y === 49);
+    let targetHex = null;
+    if (config.INITIAL_ZOOM_LOC) {
+        const initLoc = config.INITIAL_ZOOM_LOC;
+        // Decode User-Format (Block*100 + Local) -> Global Block Coords
+        const bx = Math.floor(initLoc.x / 100);
+        const lx = initLoc.x % 100;
+        const by = Math.floor(initLoc.y / 100);
+        const ly = initLoc.y % 100;
+
+        const globalC = blockUtils.blockToGlobal(bx, by, lx, ly);
+        if (globalC) {
+            console.log(`[setupUI] Searching for Initial Target at Global (${globalC.col},${globalC.row})`);
+            targetHex = hexes.find(h => h.x === globalC.col && h.y === globalC.row);
+        }
+    }
+    // Fallback logic
+    if (!targetHex) {
+        console.warn("[setupUI] Initial Target Hex not found. Using fallback.");
+        targetHex = hexes.find(h => h.x === 56 && h.y === 49); // Try default local
+        if (!targetHex && hexes.length > 0) {
+            targetHex = hexes[Math.floor(hexes.length / 2)]; // Use viewport center
+        }
+    }
 
     if (targetHex) {
         console.log(`Setting initial zoom to hex: [${targetHex.x}, ${targetHex.y}] (${targetHex.cx}, ${targetHex.cy})`);
 
-        const initialScale = 3.0;
+        const initialScale = config.INITIAL_SCALE || 3.0;
         const initialTransform = d3.zoomIdentity
             .translate(svgWidth / 2 - targetHex.cx * initialScale, svgHeight / 2 - targetHex.cy * initialScale)
             .scale(initialScale);
@@ -2849,6 +2979,7 @@ export async function setupUI(allHexes, roadPaths, addLogMessage, blockLoader) {
         updateOverallInfo(allHexes);
     }
 }
+
 
 /**
  * 気候・植生情報が更新されたときに呼び出される再描画関数
@@ -3015,6 +3146,7 @@ export function updateMinimap(allHexes) {
     const hexWidth = 2 * config.r;
     const hexHeight = Math.sqrt(3) * config.r;
     const mapTotalWidth = (mapCols * hexWidth * 3 / 4 + hexWidth / 4);
+    // マップ全体の高さ
     const mapTotalHeight = (mapRows * hexHeight + hexHeight / 2);
 
     // スケールを設定 (マップ全体が200x200のSVGに収まるように)
@@ -3022,11 +3154,6 @@ export function updateMinimap(allHexes) {
 
     const minimapData = Array.isArray(allHexes) ? allHexes : Array.from(allHexes);
     console.log(`[Minimap] Updating minimap for ${minimapData.length} hexes. Scale: ${scale}. Container present: ${!minimapTerrain.empty()}`);
-    // [DEBUG] Inspect first 3 hexes
-    for (let i = 0; i < 3; i++) {
-        const d = minimapData[i];
-        console.log(`[Minimap Debug] Hex[${i}] (x:${d.col},y:${d.row}): isWater=${d.properties.isWater}, elev=${d.properties.elevation}, veg=${d.properties.vegetation}, color=${d.properties.isWater ? '#004' : '#444'}`);
-    }
 
     minimapTerrain.selectAll('.minimap-hex')
         .data(minimapData)
@@ -3055,4 +3182,84 @@ export function updateMinimap(allHexes) {
             return '#444'; // 平地・森林
         });
     console.log("[Minimap] Update complete.");
+}
+
+/**
+ * 動的にロードされたブロックデータをUIのhexes配列に反映する
+ * @param {string} blockId - 更新されたブロックID (例: "map_50_73")
+ * @param {Array} updatedAllHexes - 最新のallHexes
+ */
+export function updateUIWithBlockData(blockId, updatedAllHexes) {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+
+    // ブロックのallHexes範囲 (バッファ込み) をGlobal Grid Indexで走査
+    // specifications based fixed size
+    const CORE_COL_SIZE = 23;
+    const CORE_ROW_SIZE = 20;
+    const GLOBAL_OFFSET_X = 1;
+    const GLOBAL_OFFSET_Y = 1;
+    const BUFFER = 1;
+
+    // コア領域の開始・終了インデックス
+    const startCol = GLOBAL_OFFSET_X + block.bx * CORE_COL_SIZE;
+    const endCol = startCol + CORE_COL_SIZE;
+    const startRow = GLOBAL_OFFSET_Y + block.by * CORE_ROW_SIZE;
+    const endRow = startRow + CORE_ROW_SIZE;
+
+    // バッファを含めた範囲
+    const bufferedStartCol = Math.max(0, startCol - BUFFER);
+    const bufferedEndCol = Math.min(config.COLS, endCol + BUFFER);
+    const bufferedStartRow = Math.max(0, startRow - BUFFER);
+    const bufferedEndRow = Math.min(config.ROWS, endRow + BUFFER);
+
+    const hexWidth = 2 * config.r;
+    const hexHeight = Math.sqrt(3) * config.r;
+
+    for (let r = bufferedStartRow; r < bufferedEndRow; r++) {
+        for (let c = bufferedStartCol; c < bufferedEndCol; c++) {
+            const hexIndex = getIndex(c, r);
+            const hexData = updatedAllHexes[hexIndex];
+
+            // データが存在すれば hexes 配列を更新
+            if (hexData) {
+                const cx = c * (hexWidth * 3 / 4) + config.r;
+                const offsetY = (c % 2 === 0) ? 0 : hexHeight / 2;
+                const cy = r * hexHeight + offsetY + config.r;
+
+                // existing hex object update (Mutation) to preserve references in block.allHexes
+                if (hexes[hexIndex]) {
+                    const targetHex = hexes[hexIndex];
+                    targetHex.properties = hexData.properties; // プロパティの参照更新
+                    targetHex.downstreamIndex = hexData.downstreamIndex;
+                    targetHex.upstreamIndex = hexData.upstreamIndex;
+                    targetHex.ridgeUpstreamIndex = hexData.ridgeUpstreamIndex;
+                    targetHex.neighbors = hexData.neighbors;
+                    targetHex._displayColor = hexData.properties.isWater ?
+                        (hexData.properties.vegetation === '深海' ? config.TERRAIN_COLORS['深海'] : config.TERRAIN_COLORS['海洋']) :
+                        (config.TERRAIN_COLORS[hexData.properties.vegetation] || '#000');
+
+                    // 座標などは変更されない前提だが、必要なら更新する
+                    // cx, cy, points は Grid Index に依存するため不変
+                } else {
+                    // 万が一存在しない場合は新規作成（参照切れのリスクはあるが、ないよりマシ）
+                    hexes[hexIndex] = {
+                        index: hexIndex,
+                        x: c, y: (config.ROWS - 1) - r,
+                        cx: cx, cy: cy,
+                        points: d3.range(6).map(i => [cx + config.r * Math.cos(Math.PI / 3 * i), cy + config.r * Math.sin(Math.PI / 3 * i)]),
+                        properties: hexData.properties,
+                        downstreamIndex: hexData.downstreamIndex,
+                        upstreamIndex: hexData.upstreamIndex,
+                        ridgeUpstreamIndex: hexData.ridgeUpstreamIndex,
+                        neighbors: hexData.neighbors,
+                        _displayColor: hexData.properties.isWater ?
+                            (hexData.properties.vegetation === '深海' ? config.TERRAIN_COLORS['深海'] : config.TERRAIN_COLORS['海洋']) :
+                            (config.TERRAIN_COLORS[hexData.properties.vegetation] || '#000')
+                    };
+                }
+            }
+        }
+    }
+    // console.log(`updateUIWithBlockData: Updated hexes for block ${blockId}`);
 }

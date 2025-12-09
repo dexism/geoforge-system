@@ -15,6 +15,10 @@ export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
 export const HEX_SIDE_LENGTH_KM = 5.77; // ヘクス1辺の長さ (km)
 export const BEACH_WIDTH_M = 50; // 砂浜の幅 (m)
 
+// 初期表示設定 (ワールド座標: Block 50-73, Hex 12-08)
+export const INITIAL_ZOOM_LOC = { x: 5012, y: 7308 };
+export const INITIAL_SCALE = 3.0;
+
 // ================================================================
 // ■ 2. 地形生成パラメータ (v3.2 - 大陸生成パラメータ再調整版)
 // ================================================================

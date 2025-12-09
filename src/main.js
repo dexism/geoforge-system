@@ -7,7 +7,7 @@ import * as config from './config.js';
 import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions, recalculateRiverProperties, generateWaterSystems, generateBeaches, initializeWaterVegetation } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
 import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership } from './economySimulator.js';
-import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap, updateMinimap } from './ui.js';
+import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap, updateMinimap, updateUIWithBlockData } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex, initGlobalRandom, globalRandom, getNeighborIndices } from './utils.js';
 import { WorldMap } from './WorldMap.js';
@@ -1021,7 +1021,10 @@ const blockManager = {
             const data = await res.json();
 
             // processLoadedData will handle merging and padding skipping
-            await processLoadedData(data);
+            await processLoadedData(data, { skipCalculations: true });
+
+            // [FIX] Update UI global hexes array with new data to ensure neighbors are valid for rendering
+            updateUIWithBlockData(blockId, worldData.allHexes);
 
             this.loaded.add(blockId);
             this.loading.delete(blockId);
@@ -1086,7 +1089,7 @@ async function loadBlockBasedWorld() {
     return false;
 }
 
-async function processLoadedData(loadedData) {
+async function processLoadedData(loadedData, options = {}) {
     // シードの復元とPRNG初期化
     if (loadedData.seed) {
         worldData.seed = loadedData.seed;
@@ -1600,7 +1603,9 @@ async function processLoadedData(loadedData) {
     }
 
     // 経済指標の再計算 (不足データの補完 - 船舶数などもここ)
-    await recalculateEconomyMetrics(worldData);
+    if (!options.skipCalculations) {
+        await recalculateEconomyMetrics(worldData);
+    }
 
     // UI初期化・再描画
     if (!uiInitialized) {
