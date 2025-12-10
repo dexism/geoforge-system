@@ -82,12 +82,76 @@ function setupEventHandlers() {
     }
 
     // 4. Map Type Switch
+    // 4. Map Type Switch
+    const layerMemory = {
+        'terrain': {
+            'vegetation-overlay': true, 'snow': true, 'shading': false, 'contour': true,
+            'settlement': true, 'road': true, 'territory-overlay': false, 'hex-border': false, 'ridge-water-system': false
+        },
+        'white': {
+            'vegetation-overlay': false, 'snow': false, 'shading': true, 'contour': true,
+            'settlement': true, 'road': true, 'territory-overlay': false, 'hex-border': false, 'ridge-water-system': false
+        }
+    };
+    let currentMapType = 'terrain';
+
+    const updateLayerUI = () => {
+        // Sync UI buttons with MapView state
+        const layersToCheck = [
+            { id: '#toggleVegetationLayer', layer: 'vegetation-overlay' },
+            { id: '#toggleReliefLayer', layer: 'shading' },
+            { id: '#toggleContourLayer', layer: 'contour' },
+            { id: '#toggleSettlementLayer', layer: 'settlement' },
+            { id: '#toggleRoadLayer', layer: 'road' },
+            { id: '#toggleTerritoryLayer', layer: 'territory-overlay' },
+            { id: '#toggleHexBorderLayer', layer: 'hex-border' },
+            { id: '#toggleRidgeWaterSystemLayer', layer: 'ridge-water-system' },
+            // Shortcuts
+            { id: '#shortcut-vegetation', layer: 'vegetation-overlay' },
+            { id: '#shortcut-relief', layer: 'shading' },
+            { id: '#shortcut-contour', layer: 'contour' },
+            { id: '#shortcut-settlement', layer: 'settlement' },
+            { id: '#shortcut-road', layer: 'road' },
+            { id: '#shortcut-territory', layer: 'territory-overlay' },
+            { id: '#shortcut-hex-border', layer: 'hex-border' }
+        ];
+
+        layersToCheck.forEach(item => {
+            const isVisible = mapView.layers[item.layer] ? mapView.layers[item.layer].visible : false;
+            d3.select(item.id).classed('active', isVisible);
+        });
+    };
+
     d3.selectAll('input[name="map-type"]').on('change', function () {
-        // const selectedType = d3.select(this).property('value');
-        // MapView側で状態管理していない場合は、ここでUI状態を管理してtoggleLayerを呼ぶ
-        // ここでは簡易的に全色の再計算をトリガー
+        const newType = d3.select(this).property('value');
+        if (newType === currentMapType) return;
+
+        // Save current state to memory
+        const currentMemory = layerMemory[currentMapType];
+        Object.keys(currentMemory).forEach(layerName => {
+            if (mapView.layers[layerName]) {
+                currentMemory[layerName] = mapView.layers[layerName].visible;
+            }
+        });
+
+        // Load new state
+        currentMapType = newType;
+        const newMemory = layerMemory[newType];
+        Object.keys(newMemory).forEach(layerName => {
+            mapView.toggleLayer(layerName, newMemory[layerName]);
+        });
+
+        // Special handling for vegetation/snow sync
+        if (newMemory['vegetation-overlay'] !== undefined) {
+            mapView.toggleLayer('snow', newMemory['vegetation-overlay']);
+            // Note: 'snow' key exists in memory but is synced with veg mostly
+        }
+
         mapView.updateAllHexColors();
+        mapView.updateRiverColor(); // Sync river color (Blue vs Grey)
         mapView.updateVisibleBlocks(mapView.currentTransform);
+
+        updateLayerUI();
     });
 
     d3.select('#shortcut-map-type').on('click', function () {

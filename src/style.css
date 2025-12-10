@@ -502,11 +502,9 @@ button.active:hover {
     user-select: none;
     margin: 0;
     padding: 0;
-    font-size: 5px;
     fill: #222;
     paint-order: stroke;
     stroke: #fff;
-    stroke-width: 0.5px;
     stroke-linecap: butt;
     stroke-linejoin: miter;
     text-anchor: middle;
@@ -520,11 +518,10 @@ button.active:hover {
     stroke-width: 1px;
 }
 
-/* 座標ラベル (000 000) */
+/* 座標ラベル (0000 0000) */
 /* 標高ラベル (H 000) */
 .hex-label {
-    fill: #333;
-    font-size: 5px;
+    font-size: 4.5px;
     font-weight: 900;
     stroke-width: 0.5px;
 }

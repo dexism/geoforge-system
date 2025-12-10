@@ -639,6 +639,8 @@ export class MapView {
 
     // [FIX] Ensure Dummy Data exists in Global Map (this.hexes)
     // Called when block load fails, or to fill gaps.
+    // [FIX] Ensure Dummy Data exists in Global Map (this.hexes)
+    // Called when block load fails, or to fill gaps.
     ensureDummyData(block) {
         const CORE_COL = 23;
         const CORE_ROW = 20;
@@ -656,11 +658,29 @@ export class MapView {
         const coreStartCol = GLOBAL_OFFSET_X + (absEe - BLOCK_START_EE) * CORE_COL;
         const coreStartRow = GLOBAL_OFFSET_Y + (absNn - BLOCK_START_NN) * CORE_ROW;
 
+        // Neighbor Blocks Lookup
+        const getNeighborHex = (nAbsEe, nAbsNn, gloCol, gloRow) => {
+            const nId = `map_${nAbsEe}_${nAbsNn}`;
+            const nBlock = this.blocks.find(b => b.id === nId);
+            if (nBlock && nBlock.hexes && nBlock.hexes.length > 0) {
+                // Find matching hex by global coords
+                return nBlock.hexes.find(h => h.col === gloCol && h.row === gloRow);
+            }
+            return null;
+        };
+
+        const neighbors = {
+            north: { ee: absEe, nn: absNn + 1 }, // Top (High N)
+            south: { ee: absEe, nn: absNn - 1 }, // Bottom (Low N)
+            west:  { ee: absEe - 1, nn: absNn },
+            east:  { ee: absEe + 1, nn: absNn }
+        };
+
         // [FIX] Loop Full Range (0..25 cols, 0..22 rows) to update Global Map
         const rowStart = 0;
-        const rowEnd = 22; 
+        const rowEnd = 22;
         const colStart = 0;
-        const colEnd = 25; 
+        const colEnd = 25;
 
         for (let lr = rowStart; lr < rowEnd; lr++) {
             for (let lc = colStart; lc < colEnd; lc++) {
@@ -671,54 +691,79 @@ export class MapView {
                 const r = coreStartRow + (CORE_ROW - 1) - (lr - 1);
 
                 // [CRITICAL FIX] Use Local Index for Buffer Access
-                // The shared buffer seems to rely on local keys/indices.
                 const hexIndex = getIndex(lc, lr);
-                let hex = this.hexes[hexIndex];
+                
+                // [SPEC] Default to Ocean (-1m)
+                let targetHex = {
+                    col: c,
+                    row: r,
+                    isWater: true,
+                    terrainType: '海洋',
+                    elevation: -1,
+                    vegetation: '海洋',
+                    properties: {}, 
+                    _displayColor: config.TERRAIN_COLORS['海洋'] || '#48d',
+                    shadingValue: 0
+                };
+                
+                // [SPEC] Overlap Copying
+                let sourceHex = null;
 
-                // [FIX] 2-Cell Overlap Definition
-                // Inner Core (Exclusive): Col 2..22, Row 2..19.
-                const isInnerCore = (lc >= 2 && lc <= 22) && (lr >= 2 && lr <= 19);
-
-                // If Inner Core -> Force Overwrite (Clear Ghosts).
-                // If Overlap -> Only Fill if Missing (Copy/Preserve Neighbor).
-                if (isInnerCore || !hex) {
-                     hex = {
-                        col: c,
-                        row: r,
-                        isWater: true,
-                        terrainType: '海洋',
-                        elevation: -1,
-                        vegetation: '海洋',
-                        properties: {}, 
-                        _displayColor: config.TERRAIN_COLORS['海洋'] || '#8cf',
-                        shadingValue: 0
-                    };
-                    hex.properties = hex;
-                    
-                    // Display Coords
-                    hex.ee = absEe;
-                    hex.nn = absNn;
-                    hex.localCol = lc;
-                    hex.localRow = (CORE_ROW + 1) - lr;
-
-                    // Geometry
-                    const WORLD_ROWS = 2002;
-                    const cx = c * (hexWidth * 0.75) + config.r;
-                    const cy = ((WORLD_ROWS - 1) - r) * hexHeight + (c % 2 === 0 ? 0 : hexHeight / 2) + config.r;
-
-                    hex.cx = cx;
-                    hex.cy = cy;
-                    const points = [];
-                    for (let i = 0; i < 6; i++) {
-                        const angle_deg = 60 * i;
-                        const angle_rad = Math.PI / 180 * angle_deg;
-                        points.push([cx + config.r * Math.cos(angle_rad), cy + config.r * Math.sin(angle_rad)]);
-                    }
-                    hex.points = points;
-
-                    // Update Global Map
-                    this.hexes[hexIndex] = hex;
+                // Logic: Only attempt copy if in Overlap Zone of THIS block
+                // Overlap Zones: lc < 2 (West), lc > 22 (East), lr < 2 (North), lr > 20 (South)
+                
+                if (lc < 2) { // West Overlap
+                    const h = getNeighborHex(neighbors.west.ee, neighbors.west.nn, c, r);
+                    if (h) sourceHex = h;
                 }
+                if (!sourceHex && lc > 22) { // East Overlap
+                    const h = getNeighborHex(neighbors.east.ee, neighbors.east.nn, c, r);
+                    if (h) sourceHex = h;
+                }
+                if (!sourceHex && lr < 2) { // North Overlap (lr=0 is Top=North)
+                    const h = getNeighborHex(neighbors.north.ee, neighbors.north.nn, c, r);
+                    if (h) sourceHex = h;
+                }
+                if (!sourceHex && lr > 20) { // South Overlap (lr=21 is Bottom=South)
+                    const h = getNeighborHex(neighbors.south.ee, neighbors.south.nn, c, r);
+                    if (h) sourceHex = h;
+                }
+
+                if (sourceHex) {
+                    // Clone found neighbor data
+                    targetHex.terrainType = sourceHex.terrainType;
+                    targetHex.elevation = sourceHex.elevation;
+                    targetHex.vegetation = sourceHex.vegetation;
+                    targetHex.isWater = sourceHex.isWater;
+                    targetHex._displayColor = sourceHex._displayColor;
+                    targetHex.properties = { ...sourceHex.properties }; // Light clone
+                }
+
+                targetHex.properties = targetHex;
+
+                // Display Coords
+                targetHex.ee = absEe;
+                targetHex.nn = absNn;
+                targetHex.localCol = lc;
+                targetHex.localRow = (CORE_ROW + 1) - lr;
+
+                // Geometry
+                const WORLD_ROWS = 2002;
+                const cx = c * (hexWidth * 0.75) + config.r;
+                const cy = ((WORLD_ROWS - 1) - r) * hexHeight + (c % 2 === 0 ? 0 : hexHeight / 2) + config.r;
+
+                targetHex.cx = cx;
+                targetHex.cy = cy;
+                const points = [];
+                for (let i = 0; i < 6; i++) {
+                    const angle_deg = 60 * i;
+                    const angle_rad = Math.PI / 180 * angle_deg;
+                    points.push([cx + config.r * Math.cos(angle_rad), cy + config.r * Math.sin(angle_rad)]);
+                }
+                targetHex.points = points;
+
+                // Update Global Map (Dirty Buffer)
+                this.hexes[hexIndex] = targetHex;
             }
         }
     }
@@ -874,18 +919,6 @@ export class MapView {
                     // Ensure _displayColor is set if sourceHex had none (and fallback failed above)
                     if (!hex._displayColor) hex._displayColor = '#eef6f6';
 
-                    // [FEAT] Apply Relief Shading
-                    // Use Padding to access neighbors: Top (North) is lr-1, Bottom (South) is lr+1.
-                    // Buffer: 0=Pad(N), 1..20=Core, 21=Pad(S).
-                    const northIdx = getIndex(lc, lr - 1);
-                    const southIdx = getIndex(lc, lr + 1);
-                    const northHex = this.hexes[northIdx];
-                    const southHex = this.hexes[southIdx];
-
-                    if (northHex && southHex) {
-                        this.applyRelief(hex, northHex, southHex);
-                    }
-
                 } else {
                     // Dummy Hex (inside generateBlockHexes logic)
                     hex = {
@@ -893,13 +926,25 @@ export class MapView {
                         row: r,
                         isWater: true,
                         terrainType: '海洋',
-                        elevation: 0,
+                        elevation: -1,
                         vegetation: '海洋',
                         properties: {}, // Will be set to self below
-                        _displayColor: config.TERRAIN_COLORS['海洋'] || '#48d'
+                        _displayColor: config.TERRAIN_COLORS['海洋'] || '#8cf'
                     };
                     hex.properties = hex;
                     hex.shadingValue = 0;
+                }
+
+                // [FEAT] Apply Relief Shading
+                // Use Padding to access neighbors: Top (North) is lr-1, Bottom (South) is lr+1.
+                // Buffer: 0=Pad(N), 1..20=Core, 21=Pad(S).
+                const northIdx = getIndex(lc, lr - 1);
+                const southIdx = getIndex(lc, lr + 1);
+                const northHex = this.hexes[northIdx];
+                const southHex = this.hexes[southIdx];
+
+                if (northHex && southHex) {
+                    this.applyRelief(hex, northHex, southHex);
                 }
 
                 // Assign Coords for Display (Fixes coordinate display issue)
