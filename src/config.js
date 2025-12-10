@@ -7,16 +7,16 @@ import * as d3 from 'd3';
 // ================================================================
 // ■ 1. マップ基本設定
 // ================================================================
-export const COLS = 117;
-export const ROWS = 102;
-export const HEX_SIZE_KM = 10;
+export const COLS = 25; // 1 block (23) + 2 padding
+export const ROWS = 22; // 1 block (20) + 2 padding
+export const HEX_SIZE_KM = 10; // へクスの対辺距離 (km)
 export const r = 20; // 1へクスのサイズ (px)
 export const HEX_AREA_HA = 8660; // ヘクス1マスあたりの面積 (ha)
 export const HEX_SIDE_LENGTH_KM = 5.77; // ヘクス1辺の長さ (km)
 export const BEACH_WIDTH_M = 50; // 砂浜の幅 (m)
 
-// 初期表示設定 (ワールド座標: Block 50-73, Hex 12-08)
-export const INITIAL_ZOOM_LOC = { x: 5012, y: 7308 };
+// 初期表示設定 (ワールド座標: Block 50-73, Hex 11-09)
+export const INITIAL_ZOOM_LOC = { x: 5011, y: 7309 };
 export const INITIAL_SCALE = 3.0;
 
 // ================================================================
@@ -391,6 +391,7 @@ export function getElevationColor(elevation) {
 export const TERRAIN_COLORS = {
     深海: '#147',
     海洋: '#48d',
+    水域: '#48d', // Default Terrain Type
     湖沼: '#058',
     河川: '#37b',
     砂浜: '#feb',

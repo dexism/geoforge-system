@@ -6,8 +6,17 @@ import * as config from './config.js';
 // ================================================================
 
 export const CLIMATE_ZONES = [
-    "砂漠気候(寒)", "ツンドラ気候", "亜寒帯湿潤気候", "亜寒帯乾燥気候", "ステップ気候",
-    "地中海性気候", "温暖湿潤気候", "亜熱帯湿潤気候", "砂漠気候(熱)", "熱帯草原気候", "熱帯雨林気候",
+    "砂漠気候(寒)",
+    "ツンドラ気候",
+    "亜寒帯湿潤気候",
+    "亜寒帯乾燥気候",
+    "ステップ気候",
+    "地中海性気候",
+    "温暖湿潤気候",
+    "亜熱帯湿潤気候",
+    "砂漠気候(熱)",
+    "熱帯草原気候",
+    "熱帯雨林気候",
     "氷雪気候"
 ];
 
@@ -90,7 +99,7 @@ export class WorldMap {
         // Enum IDs (Uint8)
         this.climateZoneId = new Uint8Array(this.size);
         this.vegetationId = new Uint8Array(this.size);
-        this.terrainTypeId = new Uint8Array(this.size);
+        this.terrainTypeId = new Uint8Array(this.size).fill(1); // Default to Water (1)
         this.settlementId = new Uint8Array(this.size);
         this.manaRankId = new Uint8Array(this.size);
         this.resourceRankId = new Uint8Array(this.size);

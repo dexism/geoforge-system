@@ -91,27 +91,41 @@ export function formatLocation(hexData, formatType) {
     if (!hexData) return 'N/A';
 
     const p = hexData.properties || {};
-    
+
     // Prefer col/row properties, fallback to x/y
     const col = hexData.col !== undefined ? hexData.col : (hexData.x || 0);
     const row = hexData.row !== undefined ? hexData.row : (hexData.y || 0);
-    
+
     const elevation = Math.round(p.elevation || 0);
     const isDepth = elevation < 0;
     const elevLabel = isDepth ? 'D' : 'H';
     const elevValue = isDepth ? Math.abs(elevation) : elevation;
 
-    // Convert to World Coords (Block-based)
-    const blockCoords = globalToBlock(col, row);
-    let coordsStr = `${col}-${row}`; // Default fallback
-    
-    if (blockCoords) {
-         // EEXX-NNYY
-         const ee = blockCoords.ee;
-         const nn = blockCoords.nn;
-         const lx = String(blockCoords.localCol).padStart(2, '0');
-         const ly = String(blockCoords.localRow).padStart(2, '0');
-         coordsStr = `${ee}${lx}-${nn}${ly}`;
+    let ee, nn, lx, ly;
+    let coordsStr = '00-00'; // Default fallback
+
+    if (hexData.ee !== undefined && hexData.nn !== undefined) {
+        ee = hexData.ee;
+        nn = hexData.nn;
+        // Use localCol/localRow if available (preferred for block hexes), else fallback to col/row
+        const lCol = hexData.localCol !== undefined ? hexData.localCol : col;
+        const lRow = hexData.localRow !== undefined ? hexData.localRow : row;
+
+        lx = String(lCol).padStart(2, '0');
+        ly = String(lRow).padStart(2, '0');
+        coordsStr = `${ee}${lx}-${nn}${ly}`;
+    } else {
+        // Fallback: Convert to World Coords (Block-based) using global assumption (likely fails for local coords)
+        const blockCoords = globalToBlock(col, row);
+
+        if (blockCoords) {
+            // EEXX-NNYY
+            ee = blockCoords.ee;
+            nn = blockCoords.nn;
+            lx = String(blockCoords.localCol).padStart(2, '0');
+            ly = String(blockCoords.localRow).padStart(2, '0');
+            coordsStr = `${ee}${lx}-${nn}${ly}`;
+        }
     }
 
     switch (formatType) {

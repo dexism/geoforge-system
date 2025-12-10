@@ -9,10 +9,10 @@ export const BLOCK_PADDING = 1;
 export const BLOCK_TOTAL_COLS = BLOCK_CORE_COLS + (BLOCK_PADDING * 2); // 25
 export const BLOCK_TOTAL_ROWS = BLOCK_CORE_ROWS + (BLOCK_PADDING * 2); // 22
 
-export const BLOCK_START_EE = 48;
-export const BLOCK_START_NN = 71;
-export const BLOCK_END_EE = 52;
-export const BLOCK_END_NN = 75;
+export const BLOCK_START_EE = 0;
+export const BLOCK_START_NN = 0;
+export const BLOCK_END_EE = 99;
+export const BLOCK_END_NN = 99;
 
 // Global map constraints
 // With 5x5 blocks (23x20 core), total core size is 115x100.
@@ -75,7 +75,10 @@ export function globalToBlock(globalCol, globalRow) {
 
     // Calculate EE and NN
     const ee = BLOCK_START_EE + blockX;
-    const nn = BLOCK_START_NN + blockY;
+    // [FIX] NN increases SOUTH (0=North).
+    // blockY increases North (0=South of Core).
+    // So nn = 99 - blockY.
+    const nn = BLOCK_END_NN - blockY;
 
     // Calculate Local Coordinates within that block
     // Local (0,0) is bottom-left of the 25x22 grid.
