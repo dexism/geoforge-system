@@ -509,28 +509,31 @@ button.active:hover {
     stroke-width: 0.5px;
     stroke-linecap: butt;
     stroke-linejoin: miter;
+    text-anchor: middle;
+    dominant-baseline: middle;
 }
 
 /* 居住区ラベル (都, 街) */
 .settlement-label {
-    font-size: 12px;
-    font-weight: 900;
-    stroke-width: 0.6px;
-    pointer-events: none;
+    font-size: 10px;
+    font-weight: bold;
+    stroke-width: 1px;
 }
 
 /* 座標ラベル (000 000) */
 /* 標高ラベル (H 000) */
 .hex-label {
     fill: #333;
+    font-size: 5px;
     font-weight: 900;
-    pointer-events: none;
+    stroke-width: 0.5px;
 }
 
 /* 魔力・資源ラベル */
 .property-label {
-    font-weight: bold;
-    pointer-events: none;
+    font-size: 5px;
+    font-weight: 900;
+    stroke-width: 0.5px;
 }
 
 /* ================================================================

@@ -350,7 +350,7 @@ export class MapView {
 
         if (this.layers['territory-overlay']?.visible && p.nationId > 0) {
             const tColor = d3.color(this.nationColor(p.nationId));
-            tColor.opacity = 0.5;
+            tColor.opacity = 0.7;
             c = this.interpolateColor(c, tColor);
         }
 
@@ -548,19 +548,19 @@ export class MapView {
                         console.log(`[Buffer Operation] Loader Buffer populated for ${block.id}. Creating Screen Buffer Snapshot...`);
                         this.generateBlockHexes(block);
                     } else {
-                        console.warn(`[MapView] Block ${block.id} load failed or invalid.Generating dummy.`);
-                        // [FIX] Do NOT use generateBlockHexes(block) here, because 'this.hexes' (shared buffer)
-                        // still contains the PREVIOUS block's data. We must generate pure dummy data.
-                        this.generateDummyBlockHexes(block);
+                        console.warn(`[MapView] Block ${block.id} load failed or invalid. Filling Dummy Data.`);
+                        // [FIX] Fill Global Map with Dummy Data (Inner Core Overwrite)
+                        this.ensureDummyData(block);
+                        // [FIX] Render from Global Map
+                        this.generateBlockHexes(block);
                     }
                     this.renderBlock(block);
                 });
             } else {
                 block.loaded = true;
                 console.log(`[Buffer Operation] No Loader. Generating Default/Dummy Screen Buffer for ${block.id}...`);
-                // If strictly no loader, we might want dummy or assume hexes are pre-filled?
-                // For safety in this "minimal config", let's assume if no loader, it's a dummy/test scenario.
-                this.generateDummyBlockHexes(block);
+                this.ensureDummyData(block);
+                this.generateBlockHexes(block);
                 this.renderBlock(block);
             }
         } else if (block.loaded && !block.rendered) {
@@ -569,78 +569,61 @@ export class MapView {
         }
     }
 
-    // [FIX] New method to generate pure ocean data without reading potentially dirty shared buffer
-    generateDummyBlockHexes(block) {
-        block.hexes = [];
-        const CORE_COL = 23;
-        const CORE_ROW = 20;
-        const GLOBAL_OFFSET_X = 1;
-        const GLOBAL_OFFSET_Y = 1;
+    // [FEAT] Relief Shading Logic
+    applyRelief(hex, northHex, southHex) {
+        // [RESTORE] Original Logic from ui.js reference
+        // South > North -> Positive (Brighter)
+        // North > South -> Negative (Darker)
+        // Removed arbitrary scaling (* 5) to restore original gradient feel.
 
-        const hexWidth = 2 * config.r;
-        const hexHeight = Math.sqrt(3) * config.r;
+        const delta = (southHex.elevation - northHex.elevation);
+        hex.shadingValue = delta;
 
-        let absNn = block.absNn;
-        let absEe = block.absEe;
-        // Fallback if not set
-        if (absNn === undefined) { const p = block.id.split('_'); absNn = parseInt(p[2]); absEe = parseInt(p[1]); }
+        if (this.layers.shading && this.layers.shading.visible) {
+            const val = hex.shadingValue;
+            // Use same scale as calculateCompositeColor for consistency
+            // Domain [0, 400] -> Opacity [0, 0.2]
+            const opacity = Math.min(0.2, Math.abs(val) / 400 * 0.2);
+            const shading = val > 0 ? opacity : -opacity;
 
-        const coreStartCol = GLOBAL_OFFSET_X + (absEe - BLOCK_START_EE) * CORE_COL;
-        const coreStartRow = GLOBAL_OFFSET_Y + (absNn - BLOCK_START_NN) * CORE_ROW;
-
-        const rowStart = 1;
-        const rowEnd = 21;
-        const colStart = 1;
-        const colEnd = 24;
-
-        for (let lr = rowStart; lr < rowEnd; lr++) {
-            for (let lc = colStart; lc < colEnd; lc++) {
-                // Global Coords
-                const c = coreStartCol + (lc - 1);
-
-                // [FIX] Intra-Block Vertical Inversion Corrected
-                // Buffer Data is Top-Left (Row 1 is North).
-                // World Coords are Cartesian (Row 0 is South).
-                // Must invert the row index mapping.
-                const r = coreStartRow + (CORE_ROW - 1) - (lr - 1);
-
-                const hex = {
-                    col: c,
-                    row: r,
-                    isWater: true,
-                    terrainType: '海洋',
-                    elevation: 0,
-                    vegetation: '海洋',
-                    properties: { isWater: true, vegetation: '海洋' },
-                    _displayColor: config.WHITE_MAP_COLORS.WATER
-                };
-
-                // Display Coords
-                hex.ee = absEe;
-                hex.nn = absNn;
-                hex.localCol = lc;
-                // [FIX] Local Row Inversion (Same as above)
-                hex.localRow = (CORE_ROW + 1) - lr;
-
-                // Geometry
-                const WORLD_ROWS = 2002;
-                const cx = c * (hexWidth * 0.75) + config.r;
-                const cy = ((WORLD_ROWS - 1) - r) * hexHeight + (c % 2 === 0 ? 0 : hexHeight / 2) + config.r;
-
-                // Points & Logic same as generateBlockHexes...
-                hex.cx = cx;
-                hex.cy = cy;
-                const points = [];
-                for (let i = 0; i < 6; i++) {
-                    const angle_deg = 60 * i;
-                    const angle_rad = Math.PI / 180 * angle_deg;
-                    points.push([cx + config.r * Math.cos(angle_rad), cy + config.r * Math.sin(angle_rad)]);
-                }
-                hex.points = points;
-
-                block.hexes.push(hex);
-            }
+            hex._displayColor = this.adjustBrightness(hex._displayColor, shading);
         }
+    }
+
+    adjustBrightness(hexColor, percent) {
+        if (!hexColor || typeof hexColor !== 'string') return hexColor;
+        // Simple RGB adjustment
+        // hexColor format assumed: "#RRGGBB"
+        if (hexColor.length < 7) return hexColor; // Safety for short/named colors
+
+        let r = parseInt(hexColor.substr(1, 2), 16);
+        let g = parseInt(hexColor.substr(3, 2), 16);
+        let b = parseInt(hexColor.substr(5, 2), 16);
+
+        // Apply percentage (e.g. +0.1 for 10% brighter)
+        // 0.0 is neutral.
+        // Logic: Add/Subtract from channels? Or Multiply?
+        // Standard "Lighten/Darken":
+        // Target is White (255) for lighten, Black (0) for darken.
+
+        if (percent > 0) {
+            // Lighten: approach 255
+            r = r + (255 - r) * percent;
+            g = g + (255 - g) * percent;
+            b = b + (255 - b) * percent;
+        } else {
+            // Darken: approach 0
+            const p = Math.abs(percent);
+            r = r * (1 - p);
+            g = g * (1 - p);
+            b = b * (1 - p);
+        }
+
+        r = Math.min(255, Math.max(0, Math.round(r)));
+        g = Math.min(255, Math.max(0, Math.round(g)));
+        b = Math.min(255, Math.max(0, Math.round(b)));
+
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
     }
 
     unloadBlockDOM(block) {
@@ -652,6 +635,92 @@ export class MapView {
         });
         block.rendered = false;
         // console.log(`[Buffer Operation] Unloaded DOM for Block ${block.id}`);
+    }
+
+    // [FIX] Ensure Dummy Data exists in Global Map (this.hexes)
+    // Called when block load fails, or to fill gaps.
+    ensureDummyData(block) {
+        const CORE_COL = 23;
+        const CORE_ROW = 20;
+        const GLOBAL_OFFSET_X = 1;
+        const GLOBAL_OFFSET_Y = 1;
+
+        const hexWidth = 2 * config.r;
+        const hexHeight = Math.sqrt(3) * config.r;
+
+        let absNn = block.absNn;
+        if (absNn === undefined) { const p = block.id.split('_'); absNn = parseInt(p[2]); absEe = parseInt(p[1]); }
+        let absEe = block.absEe;
+        if (absEe === undefined) { const p = block.id.split('_'); absEe = parseInt(p[1]); }
+
+        const coreStartCol = GLOBAL_OFFSET_X + (absEe - BLOCK_START_EE) * CORE_COL;
+        const coreStartRow = GLOBAL_OFFSET_Y + (absNn - BLOCK_START_NN) * CORE_ROW;
+
+        // [FIX] Loop Full Range (0..25 cols, 0..22 rows) to update Global Map
+        const rowStart = 0;
+        const rowEnd = 22; 
+        const colStart = 0;
+        const colEnd = 25; 
+
+        for (let lr = rowStart; lr < rowEnd; lr++) {
+            for (let lc = colStart; lc < colEnd; lc++) {
+                // Global Coords
+                const c = coreStartCol + (lc - 1);
+                // [FIX] Vertical Inversion (Match generateBlockHexes)
+                // lr 1..20 -> r (High..Low)
+                const r = coreStartRow + (CORE_ROW - 1) - (lr - 1);
+
+                // [CRITICAL FIX] Use Local Index for Buffer Access
+                // The shared buffer seems to rely on local keys/indices.
+                const hexIndex = getIndex(lc, lr);
+                let hex = this.hexes[hexIndex];
+
+                // [FIX] 2-Cell Overlap Definition
+                // Inner Core (Exclusive): Col 2..22, Row 2..19.
+                const isInnerCore = (lc >= 2 && lc <= 22) && (lr >= 2 && lr <= 19);
+
+                // If Inner Core -> Force Overwrite (Clear Ghosts).
+                // If Overlap -> Only Fill if Missing (Copy/Preserve Neighbor).
+                if (isInnerCore || !hex) {
+                     hex = {
+                        col: c,
+                        row: r,
+                        isWater: true,
+                        terrainType: '海洋',
+                        elevation: -1,
+                        vegetation: '海洋',
+                        properties: {}, 
+                        _displayColor: config.TERRAIN_COLORS['海洋'] || '#8cf',
+                        shadingValue: 0
+                    };
+                    hex.properties = hex;
+                    
+                    // Display Coords
+                    hex.ee = absEe;
+                    hex.nn = absNn;
+                    hex.localCol = lc;
+                    hex.localRow = (CORE_ROW + 1) - lr;
+
+                    // Geometry
+                    const WORLD_ROWS = 2002;
+                    const cx = c * (hexWidth * 0.75) + config.r;
+                    const cy = ((WORLD_ROWS - 1) - r) * hexHeight + (c % 2 === 0 ? 0 : hexHeight / 2) + config.r;
+
+                    hex.cx = cx;
+                    hex.cy = cy;
+                    const points = [];
+                    for (let i = 0; i < 6; i++) {
+                        const angle_deg = 60 * i;
+                        const angle_rad = Math.PI / 180 * angle_deg;
+                        points.push([cx + config.r * Math.cos(angle_rad), cy + config.r * Math.sin(angle_rad)]);
+                    }
+                    hex.points = points;
+
+                    // Update Global Map
+                    this.hexes[hexIndex] = hex;
+                }
+            }
+        }
     }
 
     updateUIWithBlockData(blockId, allHexes) {
@@ -706,6 +775,9 @@ export class MapView {
         const coreStartCol = GLOBAL_OFFSET_X + (absEe - BLOCK_START_EE) * CORE_COL;
         const coreStartRow = GLOBAL_OFFSET_Y + (absNn - BLOCK_START_NN) * CORE_ROW;
 
+        // [FIX] Generate Full Buffer Range (Including Overlap)
+        // Buffer: 0..24 (Cols), 0..21 (Rows)
+        // Previous: 1..24, 1..21 skipped edges.
         // Use STRICT bounds (Core Only) to avoid overlap rendering
         // Buffer Access: 0=Pad, 1=CoreStart ... 
         // Core Cols: 1 to 23 (Inclusive) -> < 24
@@ -720,8 +792,8 @@ export class MapView {
         for (let lr = rowStart; lr < rowEnd; lr++) {
             for (let lc = colStart; lc < colEnd; lc++) {
                 // Buffer Access (Local)
-                const hexIndex = getIndex(lc, lr);
-                const sourceHex = this.hexes[hexIndex];
+                // const hexIndex = getIndex(lc, lr); // [BUG] This was using Local Index for Global Map!
+                // const sourceHex = this.hexes[hexIndex];
 
                 const c = coreStartCol + (lc - 1);
 
@@ -732,6 +804,10 @@ export class MapView {
                 // lr goes 1..20.
                 // r should go (coreStartRow + 19) .. (coreStartRow).
                 const r = coreStartRow + (CORE_ROW - 1) - (lr - 1);
+
+                // [CRITICAL FIX] Use Local Index (Revert)
+                const hexIndex = getIndex(lc, lr);
+                const sourceHex = this.hexes[hexIndex];
 
                 // Assign Block & Local Coords for correct display
                 // Note: Spec says Local is 01-23. Data array buffer is 00-24.
@@ -787,10 +863,31 @@ export class MapView {
                         neighbors: sourceHex.neighbors ? [...sourceHex.neighbors] : [],
                         beachNeighbors: sourceHex.beachNeighbors ? [...sourceHex.beachNeighbors] : [],
 
-                        properties: {} // Proxy target
+                        properties: {}, // Proxy target
+
+                        // Copy base color
+                        _displayColor: sourceHex._displayColor || (config.WHITE_MAP_COLORS && config.WHITE_MAP_COLORS.WATER ? config.WHITE_MAP_COLORS.WATER : '#eef6f6')
                     };
+
+                    // [FIX] Compatibility
+                    hex.properties = hex;
+                    // Ensure _displayColor is set if sourceHex had none (and fallback failed above)
+                    if (!hex._displayColor) hex._displayColor = '#eef6f6';
+
+                    // [FEAT] Apply Relief Shading
+                    // Use Padding to access neighbors: Top (North) is lr-1, Bottom (South) is lr+1.
+                    // Buffer: 0=Pad(N), 1..20=Core, 21=Pad(S).
+                    const northIdx = getIndex(lc, lr - 1);
+                    const southIdx = getIndex(lc, lr + 1);
+                    const northHex = this.hexes[northIdx];
+                    const southHex = this.hexes[southIdx];
+
+                    if (northHex && southHex) {
+                        this.applyRelief(hex, northHex, southHex);
+                    }
+
                 } else {
-                    // Dummy Hex
+                    // Dummy Hex (inside generateBlockHexes logic)
                     hex = {
                         col: c,
                         row: r,
@@ -798,8 +895,11 @@ export class MapView {
                         terrainType: '海洋',
                         elevation: 0,
                         vegetation: '海洋',
-                        properties: {}
+                        properties: {}, // Will be set to self below
+                        _displayColor: config.TERRAIN_COLORS['海洋'] || '#48d'
                     };
+                    hex.properties = hex;
+                    hex.shadingValue = 0;
                 }
 
                 // Assign Coords for Display (Fixes coordinate display issue)
@@ -1029,9 +1129,17 @@ export class MapView {
         g.selectAll('.settlement-hex').data(data, d => d.index).join('polygon')
             .attr('class', 'settlement-hex')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => `translate(${d.cx}, ${d.cy}) scale(0.6)`)
-            .attr('fill', d => ({ '首都': '#f0f', '都市': '#f00', '領都': '#f00', '街': '#f80', '町': '#ff0', '村': '#0f0' }[d.properties.settlement] || '#fff'))
-            .style('fill-opacity', 0.9).style('pointer-events', 'none');
+            .attr('transform', d => `translate(${d.cx}, ${d.cy}) scale(0.5)`)
+            .attr('fill', d => ({
+                '首都': '#f0f',
+                '都市': '#f00',
+                '領都': '#f00',
+                '街': '#f80',
+                '町': '#ff0',
+                '村': '#0f0'
+            }[d.properties.settlement] || '#fff'))
+            .style('fill-opacity', 0.8)
+            .style('pointer-events', 'none');
     }
 
     drawBlockRoads(block) {
@@ -1074,13 +1182,27 @@ export class MapView {
 
         if (!g.empty()) {
             g.selectAll('path').data(roads).join('path').attr('d', d => d.path)
-                .attr('stroke', d => ({ 6: '#f0f', 5: '#f00', 4: '#f80', 3: '#ff0', 2: '#0f0', 1: '#600' }[d.level] || '#fff'))
+                .attr('stroke', d => ({
+                    6: '#f0f',
+                    5: '#f00',
+                    4: '#f80',
+                    3: '#ff0',
+                    2: '#0f0',
+                    1: '#600'
+                }[d.level] || '#fff'))
                 .attr('stroke-width', d => d.level)
-                .style('fill', 'none').style('pointer-events', 'none');
+                .style('fill', 'none')
+                .style('pointer-events', 'none');
         }
         if (!seaG.empty()) {
             seaG.selectAll('path').data(seaRoutes).join('path').attr('d', d => d.path)
-                .attr('stroke', d => ({ 'dinghy': '#0f0', 'small_trader': '#ff0', 'coastal_trader': '#f00', 'medium_merchant': '#a0f', 'large_sailing_ship': '#00f' }[d.shipKey] || '#fff'))
+                .attr('stroke', d => ({
+                    'dinghy': '#0f0',
+                    'small_trader': '#ff0',
+                    'coastal_trader': '#f00',
+                    'medium_merchant': '#a0f',
+                    'large_sailing_ship': '#00f'
+                }[d.shipKey] || '#fff'))
                 .attr('stroke-width', 2).attr('stroke-dasharray', '2,4')
                 .style('fill', 'none').style('pointer-events', 'none');
         }
@@ -1093,15 +1215,23 @@ export class MapView {
         const grps = g.selectAll('.hex-label-group').data(block.hexes, d => d.index).join('g').attr('class', 'hex-label-group');
         grps.selectAll('*').remove();
 
-        grps.append('text').attr('x', d => d.cx).attr('y', d => d.cy + config.r * 0.5).attr('text-anchor', 'middle')
-            .attr('class', 'hex-label').text(d => formatLocation(d, 'coords'))
-            .style('font-size', '5px').style('fill', '#000');
+        grps.append('text')
+            .attr('x', d => d.cx)
+            .attr('y', d => d.cy + config.r * 0.5)
+            // .attr('text-anchor', 'middle')
+            .attr('class', 'hex-label')
+            .text(d => formatLocation(d, 'coords'))
+        // .style('font-size', '5px')
+        // .style('fill', '#000');
 
         grps.filter(d => d.properties.settlement)
             .append('text').attr('x', d => d.cx).attr('y', d => d.cy)
-            .attr('class', 'settlement-label').text(d => d.properties.settlement)
-            .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-            .style('font-size', '8px').style('fill', '#fff')
+            .attr('class', 'settlement-label')
+            .text(d => d.properties.settlement)
+            // .attr('text-anchor', 'middle')
+            // .attr('dominant-baseline', 'middle')
+            // .style('font-size', '10px')
+            // .style('fill', '#000')
             .style('display', this.layers.settlement.visible ? 'inline' : 'none');
     }
 
@@ -1111,7 +1241,9 @@ export class MapView {
         g.selectAll('polygon').data(block.hexes, d => d.index).join('polygon')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
             .attr('transform', d => `translate(${d.cx}, ${d.cy})`)
-            .attr('fill', 'none').attr('stroke', '#fff8').attr('stroke-width', 0.2);
+            .attr('fill', 'none')
+            .attr('stroke', '#fff8')
+            .attr('stroke-width', 0.5);
     }
 
     drawBlockInteraction(block) {

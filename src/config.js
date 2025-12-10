@@ -17,7 +17,7 @@ export const BEACH_WIDTH_M = 50; // 砂浜の幅 (m)
 
 // 初期表示設定 (ワールド座標: Block 50-73, Hex 11-09)
 export const INITIAL_ZOOM_LOC = { x: 5011, y: 7309 };
-export const INITIAL_SCALE = 3.0;
+export const INITIAL_SCALE = 2.0;
 
 // ================================================================
 // ■ 2. 地形生成パラメータ (v3.2 - 大陸生成パラメータ再調整版)
@@ -390,8 +390,8 @@ export function getElevationColor(elevation) {
 }
 export const TERRAIN_COLORS = {
     深海: '#147',
-    海洋: '#48d',
-    水域: '#48d', // Default Terrain Type
+    海洋: '#48d', // 未使用
+    水域: '#48d', // 未使用 Default Terrain Type
     湖沼: '#058',
     河川: '#37b',
     砂浜: '#feb',
