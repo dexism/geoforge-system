@@ -266,24 +266,24 @@ export class MapView {
         }
 
         const compositeLayers = [
-            'terrain', 
-            'white-map-overlay', 
-            'vegetation-overlay', 
-            'snow', 
-            'shading', 
+            'terrain',
+            'white-map-overlay',
+            'vegetation-overlay',
+            'snow',
+            'shading',
             'territory-overlay',
-            'climate-zone-overlay', 
-            'temp-overlay', 
-            'precip-overlay', 
-            'population-overlay', 
+            'climate-zone-overlay',
+            'temp-overlay',
+            'precip-overlay',
+            'population-overlay',
             'monster-overlay',
-            'mana-overlay', 
-            'agri-overlay', 
-            'forest-overlay', 
-            'mining-overlay', 
+            'mana-overlay',
+            'agri-overlay',
+            'forest-overlay',
+            'mining-overlay',
             'fishing-overlay',
-            'hunting-overlay', 
-            'pastoral-overlay', 
+            'hunting-overlay',
+            'pastoral-overlay',
             'livestock-overlay'
         ];
 
@@ -974,7 +974,7 @@ export class MapView {
                         monsterElement: sourceHex.monsterElement,
                         monsterDanger: sourceHex.monsterDanger,
                         monsterRank: sourceHex.monsterRank,
-                        
+
                         // Resource Potentials
                         manaValue: sourceHex.manaValue,
                         agriPotential: sourceHex.agriPotential,
@@ -1075,6 +1075,9 @@ export class MapView {
                 block.hexes.push(hex);
             }
         }
+
+        // [FIX] Populate allHexes for Contours (currently same as Core, but needed for drawing)
+        block.allHexes = block.hexes;
 
         console.log(`[Buffer Operation] Screen Buffer Population Complete for ${block.id}. (Hex Count: ${block.hexes.length})`);
 
@@ -1250,9 +1253,182 @@ export class MapView {
             .style('fill', 'none').style('pointer-events', 'none');
     }
 
-    drawBlockContours(block) {
-        // Placeholder implementation
-        // Re-implement if logic is found or needed
+    // Helper to calculate pixel coordinates on demand
+    getHexCenter(col, row) {
+        const hexWidth = 2 * config.r;
+        const hexHeight = Math.sqrt(3) * config.r;
+        const WORLD_ROWS = 2002;
+        const cx = col * (hexWidth * 0.75) + config.r;
+        const cy = ((WORLD_ROWS - 1) - row) * hexHeight + (col % 2 === 0 ? 0 : hexHeight / 2) + config.r;
+        return { cx, cy };
+    }
+
+        drawBlockContours(block) {
+        const layerName = 'contour';
+        if (!this.layers[layerName]) {
+            console.error(`[Contours] Layer '${layerName}' not found in MapView.layers.`);
+            return;
+        }
+
+        const blockGroup = this.layers[layerName].group.select(`#${layerName}-${block.id}`);
+        if (blockGroup.empty()) {
+            console.warn(`[Contours] Block Group '#${layerName}-${block.id}' not found.`);
+            return;
+        }
+
+        // Clip path application (Ensure Clip Path uses Core Hexes only)
+        // Clip path application (Ensure Clip Path uses Core Hexes only)
+        // [FIX] Dynamically generate clip path from all hexes to ensure strict fit
+        const clipId = `clip-contours-${block.id}`;
+        
+        const blockHexes = block.allHexes; 
+        if (!blockHexes || blockHexes.length === 0) {
+            console.warn(`[Contours] Block ${block.id} has no hexes (allHexes).`);
+            return;
+        }
+
+        // Remove existing defs/clipPath if any to prevent duplicates/stale data
+        blockGroup.select('defs').remove();
+        
+        const defs = blockGroup.append('defs');
+        const clipPath = defs.append('clipPath').attr('id', clipId);
+        
+        // Add polygons for all hexes in the block to the clip path
+        // Notes: d.points are absolute coordinates (pre-calculated in generateBlock)
+        clipPath.selectAll('polygon')
+            .data(blockHexes)
+            .join('polygon')
+            .attr('points', d => d.points.map(p => p.join(',')).join(' '));
+
+        blockGroup.attr('clip-path', `url(#${clipId})`);
+
+        // Clear existing
+        blockGroup.selectAll('path').remove();
+
+        const resolution = config.CONTOUR_RESOLUTION || 20;
+
+        // [FIX] Calculate bounds dynamically from hexes (Strict Bounds + Margin)
+        const allCx = blockHexes.map(h => h.cx);
+        const allCy = blockHexes.map(h => h.cy);
+        const bXMin = Math.min(...allCx);
+        const bXMax = Math.max(...allCx);
+        const bYMin = Math.min(...allCy);
+        const bYMax = Math.max(...allCy);
+
+        // Include margin for edge continuity
+        const margin = config.r * 2; 
+        const rawXMin = bXMin - margin;
+        const rawYMin = bYMin - margin;
+        const rawXMax = bXMax + margin;
+        const rawYMax = bYMax + margin;
+
+        const xMin = Math.floor(rawXMin / resolution) * resolution;
+        const yMin = Math.floor(rawYMin / resolution) * resolution;
+        const xMax = Math.ceil(rawXMax / resolution) * resolution;
+        const yMax = Math.ceil(rawYMax / resolution) * resolution;
+
+        const width = xMax - xMin;
+        const height = yMax - yMin;
+
+        // Safety check for invalid dimensions
+        if (width <= 0 || height <= 0) {
+            console.error(`[Contours] Invalid grid dimensions for Block ${block.id}: ${width}x${height}`);
+            return;
+        }
+
+        const gridWidth = Math.floor(width / resolution);
+        const gridHeight = Math.floor(height / resolution);
+        const elevationValues = new Array(gridWidth * gridHeight);
+
+        // Delaunay triangulation for interpolation
+        const delaunay = d3.Delaunay.from(blockHexes.map(h => [h.cx, h.cy]));
+        const { triangles } = delaunay;
+        const numTriangles = triangles.length / 3;
+
+        // Initialize grid with specific "no data" value
+        elevationValues.fill(-10000); 
+
+        // Helper: Barycentric weights
+        // Returns [w0, w1, w2]. If any < 0, point is outside.
+        function getBarycentric(px, py, x0, y0, x1, y1, x2, y2) {
+            const denom = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
+            if (denom === 0) return [-1, -1, -1];
+            const w0 = ((y1 - y2) * (px - x2) + (x2 - x1) * (py - y2)) / denom;
+            const w1 = ((y2 - y0) * (px - x2) + (x0 - x2) * (py - y2)) / denom;
+            const w2 = 1 - w0 - w1;
+            return [w0, w1, w2];
+        }
+
+        // Rasterize each triangle
+        for (let t = 0; t < numTriangles; t++) {
+            const i0 = triangles[t * 3];
+            const i1 = triangles[t * 3 + 1];
+            const i2 = triangles[t * 3 + 2];
+
+            const h0 = blockHexes[i0];
+            const h1 = blockHexes[i1];
+            const h2 = blockHexes[i2];
+
+            const p0x = h0.cx, p0y = h0.cy, z0 = h0.properties.elevation;
+            const p1x = h1.cx, p1y = h1.cy, z1 = h1.properties.elevation;
+            const p2x = h2.cx, p2y = h2.cy, z2 = h2.properties.elevation;
+
+            // Bounding box of triangle
+            const minTx = Math.min(p0x, p1x, p2x);
+            const maxTx = Math.max(p0x, p1x, p2x);
+            const minTy = Math.min(p0y, p1y, p2y);
+            const maxTy = Math.max(p0y, p1y, p2y);
+
+            // Convert to grid indices (inclusive range)
+            const gMinX = Math.max(0, Math.floor((minTx - xMin) / resolution));
+            const gMaxX = Math.min(gridWidth - 1, Math.ceil((maxTx - xMin) / resolution));
+            const gMinY = Math.max(0, Math.floor((minTy - yMin) / resolution));
+            const gMaxY = Math.min(gridHeight - 1, Math.ceil((maxTy - yMin) / resolution));
+
+            // Iterate pixels in bounding box
+            for (let y = gMinY; y <= gMaxY; y++) {
+                const py = yMin + y * resolution;
+                for (let x = gMinX; x <= gMaxX; x++) {
+                    const px = xMin + x * resolution;
+                    
+                    const [w0, w1, w2] = getBarycentric(px, py, p0x, p0y, p1x, p1y, p2x, p2y);
+                    
+                    if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+                        // Point inside triangle
+                        const z = w0 * z0 + w1 * z1 + w2 * z2;
+                        // Overwrite is fine as mesh is continuous (values are same on edges)
+                        elevationValues[y * gridWidth + x] = z;
+                    }
+                }
+            }
+        }
+
+        // Generate contours
+        const maxElevation = 7500;
+        const thresholds = d3.range(config.CONTOUR_INTERVAL || 200, maxElevation, config.CONTOUR_INTERVAL || 200);
+
+        try {
+            const contours = d3.contours()
+                .size([gridWidth, gridHeight])
+                .thresholds(thresholds)
+                (elevationValues);
+
+            // Draw paths
+            blockGroup.selectAll("path")
+                .data(contours)
+                .join("path")
+                .attr("class", d => `contour-path ${d.value % 1000 === 0 ? 'contour-index' : 'contour-intermediate'}`)
+                .attr("d", d3.geoPath())
+                .attr("transform", `translate(${xMin - resolution / 2}, ${yMin - resolution / 2}) scale(${resolution})`)
+                .style('fill', 'none')
+                .style('stroke', '#642')
+                .style('stroke-opacity', 0.5) // Slightly transparent for subtle look
+                .style('stroke-width', d => d.value % 1000 === 0 ? 0.06 : 0.03) // Reverted to thin lines
+                .style('pointer-events', 'none');
+                
+        } catch (e) {
+            console.error(`[Contours] Generation failed for Block ${block.id}:`, e);
+        }
     }
 
     drawBlockSettlements(block) {
