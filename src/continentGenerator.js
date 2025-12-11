@@ -1671,3 +1671,5 @@ export function initializeWaterVegetation(allHexes) {
     console.log(`[Restoration] Water vegetation initialized (Elevation-based).`);
 }
 
+
+
