@@ -226,12 +226,20 @@ function setupEventHandlers() {
 
     overlayIds.forEach(id => {
         d3.select(id).on('click', function () {
-            const layerName = id.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();
+            let layerName = id.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();
+            // [FIX] Explicit mapping for multi-word keys
+            if (id === '#toggleClimateZoneLayer') {
+                layerName = 'climate-zone-overlay';
+            }
+
             const isActive = this.classList.contains('active');
 
             // Deactivate all first
             overlayIds.forEach(oid => {
-                const lname = oid.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();
+                let lname = oid.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();
+                if (oid === '#toggleClimateZoneLayer') {
+                    lname = 'climate-zone-overlay';
+                }
                 d3.select(oid).classed('active', false);
                 mapView.toggleLayer(lname, false);
             });

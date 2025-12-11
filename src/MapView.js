@@ -1,4 +1,4 @@
-// ================================================================
+﻿// ================================================================
 // GeoForge System - MapView Module
 // ================================================================
 import * as d3 from 'd3';
@@ -51,7 +51,7 @@ export class MapView {
         let headerText = '';
         const terrain = p.isWater ? '水域' : (p.terrainType || '不明');
         const vegetation = p.vegetation || 'なし';
-        headerText += `地形：${terrain}\n代表植生：${vegetation}\n`;
+        headerText += `地形：${terrain}\n植生：${vegetation}\n`;
 
         const features = [];
         if (p.isAlluvial) features.push('河川');
@@ -337,7 +337,17 @@ export class MapView {
 
         overlayMap.forEach(l => {
             if (this.layers[l.name]?.visible) {
-                const colorVal = l.func(p);
+                let colorVal = null;
+
+                if (l.name === 'climate-zone-overlay') {
+                    const cz = p.climateZone;
+                    if (cz) {
+                        colorVal = config.CLIMATE_ZONE_COLORS[cz];
+                    }
+                } else {
+                    colorVal = l.func(p);
+                }
+
                 if (colorVal) {
                     const col = d3.color(colorVal);
                     if (col) {
@@ -395,7 +405,7 @@ export class MapView {
     updateRiverColor() {
         const isRidge = this.layers['ridge-water-system']?.visible;
         const isWhite = document.querySelector('input[name="map-type"][value="white"]')?.checked;
-        const color = isRidge ? config.RIDGE_WATER_SYSTEM_COLORS.RIVER : (isWhite ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.河川);
+        const color = isRidge ? config.RIDGE_WATER_SYSTEM_COLORS.RIVER : (isWhite ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.水域);
         this.layers.river.group.selectAll('path').attr('stroke', color);
         // Ridge water hexes
         this.layers['ridge-water-system'].group.selectAll('.rws-water-hex').attr('fill', color);
@@ -530,7 +540,7 @@ export class MapView {
         // If already rendered, ensure display is on
         if (block.rendered) {
             // Optional: check if display:none and show it
-            return;
+            return Promise.resolve();
         }
 
         console.log(`[Buffer Operation] Start Processing Block: ${block.id}`);
@@ -539,7 +549,7 @@ export class MapView {
             if (this.blockLoaderRef) {
                 block.loading = true;
                 // console.log(`[MapView] Loading block ${ block.id }...`);
-                this.blockLoaderRef.load(block.id).then(success => {
+                return this.blockLoaderRef.load(block.id).then(async success => {
                     block.loading = false;
                     block.loaded = true;
                     if (success) {
@@ -550,23 +560,34 @@ export class MapView {
                     } else {
                         console.warn(`[MapView] Block ${block.id} load failed or invalid. Filling Dummy Data.`);
                         // [FIX] Fill Global Map with Dummy Data (Inner Core Overwrite)
-                        this.ensureDummyData(block);
+                        await this.ensureDummyData(block);
                         // [FIX] Render from Global Map
                         this.generateBlockHexes(block);
                     }
                     this.renderBlock(block);
+                }).catch(err => {
+                    console.error(`[MapView] Load Error for ${block.id}:`, err);
+                    block.loading = false;
+                    // Fallback using dummy data
+                    this.ensureDummyData(block).then(() => {
+                        this.generateBlockHexes(block);
+                        this.renderBlock(block);
+                    });
                 });
             } else {
                 block.loaded = true;
                 console.log(`[Buffer Operation] No Loader. Generating Default/Dummy Screen Buffer for ${block.id}...`);
-                this.ensureDummyData(block);
-                this.generateBlockHexes(block);
-                this.renderBlock(block);
+                return this.ensureDummyData(block).then(() => {
+                    this.generateBlockHexes(block);
+                    this.renderBlock(block);
+                });
             }
         } else if (block.loaded && !block.rendered) {
             console.log(`[Buffer Operation] Block ${block.id} already loaded. Re-rendering from Screen Buffer.`);
             this.renderBlock(block);
+            return Promise.resolve();
         }
+        return Promise.resolve();
     }
 
     // [FEAT] Relief Shading Logic
@@ -641,133 +662,169 @@ export class MapView {
     // Called when block load fails, or to fill gaps.
     // [FIX] Ensure Dummy Data exists in Global Map (this.hexes)
     // Called when block load fails, or to fill gaps.
-    ensureDummyData(block) {
+    async ensureDummyData(block) {
+        console.log(`[MapView Debug] ensureDummyData called for ${block.id}`);
+        block.isDummy = true; // Mark as dummy
+
         const CORE_COL = 23;
         const CORE_ROW = 20;
         const GLOBAL_OFFSET_X = 1;
         const GLOBAL_OFFSET_Y = 1;
 
-        const hexWidth = 2 * config.r;
-        const hexHeight = Math.sqrt(3) * config.r;
+        // Neighbor Lookup Helper: Find a hex from any LOADED (non-dummy) block at global coords
+        const getLoadedNeighborHex = (gloCol, gloRow) => {
+            for (const b of this.blocks) {
+                if (b.id === block.id) continue;
+                // if (b.isDummy) continue; // Coping from Dummy is allowed for Seamless Ocean
+                if (!b.loaded || !b.hexes || b.hexes.length === 0) continue;
+
+                // Simple find (optimization possibility: check bounds first)
+                const found = b.hexes.find(h => h.col === gloCol && h.row === gloRow);
+                if (found) return found;
+            }
+            return null;
+        };
 
         let absNn = block.absNn;
         if (absNn === undefined) { const p = block.id.split('_'); absNn = parseInt(p[2]); absEe = parseInt(p[1]); }
         let absEe = block.absEe;
         if (absEe === undefined) { const p = block.id.split('_'); absEe = parseInt(p[1]); }
 
+        // [FIX] Pre-load Neighbors to ensure seamless edges
+        const neighborIds = [
+            `map_${String(absEe + 1).padStart(2, '0')}_${String(absNn).padStart(2, '0')}`, // Right
+            `map_${String(absEe - 1).padStart(2, '0')}_${String(absNn).padStart(2, '0')}`, // Left
+            `map_${String(absEe).padStart(2, '0')}_${String(absNn + 1).padStart(2, '0')}`, // Top
+            `map_${String(absEe).padStart(2, '0')}_${String(absNn - 1).padStart(2, '0')}`  // Bottom
+        ];
+
+        // Trigger load for non-loaded neighbors
+        const loadPromises = [];
+        for (const nid of neighborIds) {
+            const nb = this.blocks.find(b => b.id === nid);
+            if (nb && !nb.loaded && !nb.loading) {
+                console.log(`[MapView] ensureDummyData(${block.id}): Triggering dependency load for neighbor ${nid}`);
+                loadPromises.push(this.handleBlockAndRender(nb));
+            }
+        }
+        if (loadPromises.length > 0) {
+            await Promise.all(loadPromises);
+        }
+
+        // Use imported constants directly
         const coreStartCol = GLOBAL_OFFSET_X + (absEe - BLOCK_START_EE) * CORE_COL;
         const coreStartRow = GLOBAL_OFFSET_Y + (absNn - BLOCK_START_NN) * CORE_ROW;
 
-        // Neighbor Blocks Lookup
-        const getNeighborHex = (nAbsEe, nAbsNn, gloCol, gloRow) => {
-            const nId = `map_${nAbsEe}_${nAbsNn}`;
-            const nBlock = this.blocks.find(b => b.id === nId);
-            if (nBlock && nBlock.hexes && nBlock.hexes.length > 0) {
-                // Find matching hex by global coords
-                return nBlock.hexes.find(h => h.col === gloCol && h.row === gloRow);
-            }
-            return null;
-        };
+        const TOTAL_ROW = 22;
+        const TOTAL_COL = 25;
 
-        const neighbors = {
-            north: { ee: absEe, nn: absNn + 1 }, // Top (High N)
-            south: { ee: absEe, nn: absNn - 1 }, // Bottom (Low N)
-            west:  { ee: absEe - 1, nn: absNn },
-            east:  { ee: absEe + 1, nn: absNn }
-        };
+        // Initialize block hexes array if needed
+        block.hexes = [];
 
-        // [FIX] Loop Full Range (0..25 cols, 0..22 rows) to update Global Map
-        const rowStart = 0;
-        const rowEnd = 22;
-        const colStart = 0;
-        const colEnd = 25;
-
-        for (let lr = rowStart; lr < rowEnd; lr++) {
-            for (let lc = colStart; lc < colEnd; lc++) {
+        for (let lr = 0; lr < TOTAL_ROW; lr++) {
+            for (let lc = 0; lc < TOTAL_COL; lc++) {
                 // Global Coords
                 const c = coreStartCol + (lc - 1);
-                // [FIX] Vertical Inversion (Match generateBlockHexes)
-                // lr 1..20 -> r (High..Low)
                 const r = coreStartRow + (CORE_ROW - 1) - (lr - 1);
 
-                // [CRITICAL FIX] Use Local Index for Buffer Access
+                // Update Global Map (Local Buffer)
+                // [CRITICAL FIX] Use Local Index to populate the buffer that generateBlockHexes reads from.
                 const hexIndex = getIndex(lc, lr);
-                
-                // [SPEC] Default to Ocean (-1m)
-                let targetHex = {
-                    col: c,
-                    row: r,
-                    isWater: true,
-                    terrainType: '海洋',
-                    elevation: -1,
-                    vegetation: '海洋',
-                    properties: {}, 
-                    _displayColor: config.TERRAIN_COLORS['海洋'] || '#48d',
-                    shadingValue: 0
-                };
-                
-                // [SPEC] Overlap Copying
-                let sourceHex = null;
+                const hex = this.hexes[hexIndex]; // Access Flyweight
 
-                // Logic: Only attempt copy if in Overlap Zone of THIS block
-                // Overlap Zones: lc < 2 (West), lc > 22 (East), lr < 2 (North), lr > 20 (South)
-                
-                if (lc < 2) { // West Overlap
-                    const h = getNeighborHex(neighbors.west.ee, neighbors.west.nn, c, r);
-                    if (h) sourceHex = h;
+                // 1. Fully Reset Hex Data (Clear Stale Buffer)
+                hex.col = c;
+                hex.row = r;
+
+                // Flags
+                hex.isWater = true;
+                hex.isAlluvial = false;
+                hex.hasSnow = false;
+                hex.isCoastal = false;
+                hex.isLakeside = false;
+
+                // Numeric
+                hex.elevation = -1;
+                hex.temperature = 0;
+                hex.precipitation_mm = 0;
+                hex.precipitation = 0;
+                hex.climate = 0;
+                hex.flow = 0;
+                hex.ridgeFlow = 0;
+                hex.riverWidth = 0;
+                hex.riverDepth = 0;
+                hex.riverVelocity = 0;
+                hex.waterArea = 0; // Ocean implied
+                hex.beachArea = 0;
+                hex.inflowCount = 0;
+                hex.Qin = 0;
+
+                // Enums/IDs
+                hex.climateZone = null;
+                hex.vegetation = '海洋';
+                hex.terrainType = '海洋';
+                hex.settlement = null;
+                hex.manaRank = null;
+                hex.resourceRank = null;
+                hex.monsterRank = null;
+                hex.nationId = 0;
+                hex.territoryId = -1;
+                hex.parentHexId = -1;
+
+                // Potentials
+                hex.manaValue = 0;
+                hex.agriPotential = 0;
+                hex.forestPotential = 0;
+                hex.miningPotential = 0;
+                hex.fishingPotential = 0;
+                hex.huntingPotential = 0;
+                hex.pastoralPotential = 0;
+                hex.livestockPotential = 0;
+                hex.cultivatedArea = 0;
+                hex.habitability = 0;
+
+                // Population/Roads
+                hex.population = 0;
+                hex.distanceToParent = 0;
+                hex.travelDaysToParent = 0;
+                hex.roadLevel = 0;
+                hex.roadUsage = 0;
+                hex.roadLoss = 0;
+
+                // Complex Objects (Sparse)
+                hex.industry = null;
+                hex.demographics = null;
+                hex.facilities = null;
+                hex.production = null;
+                hex.surplus = null;
+                hex.shortage = null;
+                hex.territoryData = null;
+                hex.beachNeighbors = null;
+                hex.vegetationAreas = null;
+                hex.logistics = null;
+                hex.livingConditions = null;
+                hex.ships = null;
+
+                hex.downstreamIndex = -1;
+                hex.ridgeUpstreamIndex = -1;
+
+                // 2. Overlap Check & Copy
+                // Valid Overlap Zones: West (lc=0), East (lc=24), North (lr=0), South (lr=21)
+                const isOverlap = (lc === 0 || lc === 24 || lr === 0 || lr === 21);
+
+                if (isOverlap) {
+                    const neighbor = getLoadedNeighborHex(c, r);
+                    if (neighbor) {
+                        // Copy visual properties to Flyweight
+                        hex.terrainType = neighbor.terrainType;
+                        hex.elevation = neighbor.elevation;
+                        hex.isWater = neighbor.isWater;
+                        hex.vegetation = neighbor.vegetation;
+                    }
                 }
-                if (!sourceHex && lc > 22) { // East Overlap
-                    const h = getNeighborHex(neighbors.east.ee, neighbors.east.nn, c, r);
-                    if (h) sourceHex = h;
-                }
-                if (!sourceHex && lr < 2) { // North Overlap (lr=0 is Top=North)
-                    const h = getNeighborHex(neighbors.north.ee, neighbors.north.nn, c, r);
-                    if (h) sourceHex = h;
-                }
-                if (!sourceHex && lr > 20) { // South Overlap (lr=21 is Bottom=South)
-                    const h = getNeighborHex(neighbors.south.ee, neighbors.south.nn, c, r);
-                    if (h) sourceHex = h;
-                }
-
-                if (sourceHex) {
-                    // Clone found neighbor data
-                    targetHex.terrainType = sourceHex.terrainType;
-                    targetHex.elevation = sourceHex.elevation;
-                    targetHex.vegetation = sourceHex.vegetation;
-                    targetHex.isWater = sourceHex.isWater;
-                    targetHex._displayColor = sourceHex._displayColor;
-                    targetHex.properties = { ...sourceHex.properties }; // Light clone
-                }
-
-                targetHex.properties = targetHex;
-
-                // Display Coords
-                targetHex.ee = absEe;
-                targetHex.nn = absNn;
-                targetHex.localCol = lc;
-                targetHex.localRow = (CORE_ROW + 1) - lr;
-
-                // Geometry
-                const WORLD_ROWS = 2002;
-                const cx = c * (hexWidth * 0.75) + config.r;
-                const cy = ((WORLD_ROWS - 1) - r) * hexHeight + (c % 2 === 0 ? 0 : hexHeight / 2) + config.r;
-
-                targetHex.cx = cx;
-                targetHex.cy = cy;
-                const points = [];
-                for (let i = 0; i < 6; i++) {
-                    const angle_deg = 60 * i;
-                    const angle_rad = Math.PI / 180 * angle_deg;
-                    points.push([cx + config.r * Math.cos(angle_rad), cy + config.r * Math.sin(angle_rad)]);
-                }
-                targetHex.points = points;
-
-                // Update Global Map (Dirty Buffer)
-                this.hexes[hexIndex] = targetHex;
             }
         }
     }
-
     updateUIWithBlockData(blockId, allHexes) {
         const block = this.blocks.find(b => b.id === blockId);
         if (!block) return;
@@ -886,6 +943,9 @@ export class MapView {
                         isCoastal: sourceHex.isCoastal,
                         isLakeside: sourceHex.isLakeside,
 
+                        ridgeFlow: sourceHex.ridgeFlow,
+                        ridgeUpstreamIndex: sourceHex.ridgeUpstreamIndex,
+
                         settlement: sourceHex.settlement,
                         population: sourceHex.population,
                         roadLevel: sourceHex.roadLevel,
@@ -929,7 +989,7 @@ export class MapView {
                         elevation: -1,
                         vegetation: '海洋',
                         properties: {}, // Will be set to self below
-                        _displayColor: config.TERRAIN_COLORS['海洋'] || '#8cf'
+                        _displayColor: config.TERRAIN_COLORS['海洋' || '#8cf']
                     };
                     hex.properties = hex;
                     hex.shadingValue = 0;
@@ -1066,7 +1126,7 @@ export class MapView {
 
         const isRidge = this.layers['ridge-water-system']?.visible;
         const isWhite = document.querySelector('input[name="map-type"][value="white"]')?.checked;
-        const color = isRidge ? config.RIDGE_WATER_SYSTEM_COLORS.RIVER : (isWhite ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.河川);
+        const color = isRidge ? config.RIDGE_WATER_SYSTEM_COLORS.RIVER : (isWhite ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.水域);
 
         g.selectAll('path').data(pathData).join('path')
             .attr('d', d => d.path)
@@ -1094,7 +1154,7 @@ export class MapView {
         });
         g.selectAll('path').data(paths).join('path')
             .attr('d', d => d)
-            .attr('stroke', config.TERRAIN_COLORS.砂浜)
+            .attr('stroke', config.TERRAIN_COLORS.水域)
             .attr('stroke-width', 6)
             .attr('stroke-linecap', 'round')
             .style('fill', 'none')
@@ -1177,8 +1237,8 @@ export class MapView {
             .attr('transform', d => `translate(${d.cx}, ${d.cy}) scale(0.5)`)
             .attr('fill', d => ({
                 '首都': '#f0f',
-                '都市': '#f00',
                 '領都': '#f00',
+                '都市': '#f00',
                 '街': '#f80',
                 '町': '#ff0',
                 '村': '#0f0'
@@ -1365,7 +1425,7 @@ export class MapView {
             .join('rect').attr('class', 'minimap-hex')
             .attr('x', d => d.cx * scale).attr('y', d => d.cy * scale)
             .attr('width', hexWidth * scale).attr('height', hexHeight * scale)
-            .attr('fill', d => d._displayColor || '#000');
+            .attr('fill', d => this.calculateCompositeColor(d));
     }
 
     updateMinimapViewport() {

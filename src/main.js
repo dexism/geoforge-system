@@ -976,6 +976,8 @@ async function loadExistingWorld() {
 
 
         await processLoadedData(loadedData);
+        await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage, blockManager);
+        uiInitialized = true;
 
     } catch (error) {
         console.error(error);
@@ -1579,9 +1581,9 @@ async function processLoadedData(loadedData, options = {}) {
                 }
             });
 
-            // console.log(`[River Debug] Restored connections: ${restoredCount}`);
+            console.log(`[River Debug] Restored connections: ${restoredCount}`);
             if (restoredCount > 0) {
-                // await addLogMessage(`${restoredCount}箇所の河川接続を復元しました`);
+                await addLogMessage(`${restoredCount}箇所の河川接続を復元しました`);
             }
 
             recalculateRiverProperties(worldData.allHexes);
@@ -1643,7 +1645,7 @@ async function processLoadedData(loadedData, options = {}) {
         await recalculateDistances(worldData);
     } else {
         // Minimal restoration for rendering if needed
-        // console.log("[processLoadedData] Skipping heavy geometric recalculations.");
+        console.log("[processLoadedData] Skipping heavy geometric recalculations.");
     }
 
     // 人口データの復元チェック (散居対応)
