@@ -5,5 +5,5 @@ dist/
 *test_*.*
 .DS_Store
 Thumbs.db
-src_backup*/
+*backup*/
 geoforge-system.code-workspace

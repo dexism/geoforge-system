@@ -265,10 +265,27 @@ export class MapView {
             this.toggleLayer('border', newState);
         }
 
-        const compositeLayers = ['terrain', 'white-map-overlay', 'vegetation-overlay', 'snow', 'shading', 'territory-overlay',
-            'climate-zone-overlay', 'temp-overlay', 'precip-overlay', 'population-overlay', 'monster-overlay',
-            'mana-overlay', 'agri-overlay', 'forest-overlay', 'mining-overlay', 'fishing-overlay',
-            'hunting-overlay', 'pastoral-overlay', 'livestock-overlay'];
+        const compositeLayers = [
+            'terrain', 
+            'white-map-overlay', 
+            'vegetation-overlay', 
+            'snow', 
+            'shading', 
+            'territory-overlay',
+            'climate-zone-overlay', 
+            'temp-overlay', 
+            'precip-overlay', 
+            'population-overlay', 
+            'monster-overlay',
+            'mana-overlay', 
+            'agri-overlay', 
+            'forest-overlay', 
+            'mining-overlay', 
+            'fishing-overlay',
+            'hunting-overlay', 
+            'pastoral-overlay', 
+            'livestock-overlay'
+        ];
 
         if (compositeLayers.includes(layerName)) {
             this.updateAllHexColors();
@@ -956,6 +973,17 @@ export class MapView {
 
                         monsterElement: sourceHex.monsterElement,
                         monsterDanger: sourceHex.monsterDanger,
+                        monsterRank: sourceHex.monsterRank,
+                        
+                        // Resource Potentials
+                        manaValue: sourceHex.manaValue,
+                        agriPotential: sourceHex.agriPotential,
+                        forestPotential: sourceHex.forestPotential,
+                        miningPotential: sourceHex.miningPotential,
+                        fishingPotential: sourceHex.fishingPotential,
+                        huntingPotential: sourceHex.huntingPotential,
+                        pastoralPotential: sourceHex.pastoralPotential,
+                        livestockPotential: sourceHex.livestockPotential,
 
                         // Complex objects (Copy if exist)
                         landUse: sourceHex.landUse ? { ...sourceHex.landUse } : {},
