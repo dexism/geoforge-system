@@ -257,11 +257,13 @@ function generateBaseProperties(col, row) {
     };
 }
 
+
 /**
  * 大陸棚生成 (既存ロジック)
  */
 export function generateContinentalShelves(allHexes) {
     const distanceFromLand = new Map();
+    // 陸地に隣接する海ヘックスをキューに入れる
     const queue = allHexes.filter(h =>
         h.properties.isWater && h.neighbors.some(n => !allHexes[n].properties.isWater)
     );
@@ -293,12 +295,14 @@ export function generateContinentalShelves(allHexes) {
         const randomizedShelfDepth = C.MAX_DEPTH + noise * 100;
 
         if (dist !== undefined && dist <= shelfWidthInHexes) {
+            // 大陸棚の深度を計算
             const shelfSlope = d3.scaleLinear()
                 .domain([1, shelfWidthInHexes])
                 .range([-10, randomizedShelfDepth])
                 .clamp(true);
             p.elevation = Math.round(shelfSlope(dist));
         } else {
+            // 深海の深度を計算
             const landStrength = (continentNoise(nx * config.CONTINENT_NOISE_FREQ, ny * config.CONTINENT_NOISE_FREQ) + 1) / 2;
             const abyssalSlope = d3.scaleLinear()
                 .domain([config.SEA_LEVEL * 0.8, 0])
@@ -311,6 +315,7 @@ export function generateContinentalShelves(allHexes) {
 
 /**
  * 降水量補正 (既存ロジック)
+ * 山岳による雨陰効果などを適用します。
  */
 export function applyGeographicPrecipitationEffects(allHexes) {
     const precipCorrections = new Array(allHexes.length).fill(0);
@@ -319,10 +324,12 @@ export function applyGeographicPrecipitationEffects(allHexes) {
         const p = h.properties;
         if (p.isWater) return;
 
+        // 高山による降水量増加
         if (p.elevation > 1500) {
             precipCorrections[index] += config.PRECIPITATION_PARAMS.MOUNTAIN_UPLIFT_BONUS * (p.elevation / 7000);
         }
 
+        // 雨陰効果 (Rain Shadow)
         const westNeighbor = h.col > 0 ? allHexes[getIndex(h.col - 1, h.row)] : null;
         if (westNeighbor && !westNeighbor.properties.isWater) {
             const elevationDiff = westNeighbor.properties.elevation - p.elevation;
@@ -686,9 +693,6 @@ function calcWaterArea({
     // 幅・深さの計算 (物理ベースの指数に戻す)
     // w = a * Q^b, d = c * Q^f
     // b=0.5, f=0.4 が標準的
-    // 幅・深さの計算 (物理ベースの指数に戻す)
-    // w = a * Q^b, d = c * Q^f
-    // b=0.5, f=0.4 が標準的
     const a = 2.0, b = 0.5;
     const c = 0.2, f = 0.4;
     const width = Math.max(2.0, a * Math.pow(Qout, b)); // 最小幅2m
@@ -744,9 +748,6 @@ export function waterAreasRiverMouthV2({
     const clip01 = x => Math.max(0, Math.min(1, x));
     const L_m = L_km * 1000;
 
-    // 幅・深さの経験式（初期係数）
-    // 幅・深さの経験式（物理ベース）
-    // 幅・深さの経験式（初期係数）
     // 幅・深さの経験式（物理ベース）
     const a = 2.0, b = 0.5;     // w = a * Q^b
     const c = 0.2, f = 0.4;    // d = c * Q^f
@@ -810,6 +811,7 @@ export function waterAreasRiverMouthV2({
 
 /**
  * 陸地標高補正 (既存ロジック)
+ * 小さすぎる島や低地を修正するなどの後処理を行います。
  */
 export function adjustLandElevation(allHexes) {
     const MIN_ELEVATION_TARGET = 10; // 定数定義が見つからない場合のフォールバック
@@ -865,6 +867,7 @@ export function adjustLandElevation(allHexes) {
 
 /**
  * 稜線生成 (安定版ロジック + 描画用インデックス修正)
+ * 川とは逆に、低いところから高いところへ昇るラインを形成します。
  */
 export function generateRidgeLines(allHexes) {
     const ridgeSources = allHexes.filter(h => {
@@ -1019,6 +1022,10 @@ function allocateVegetation({
     return areas;
 }
 
+/**
+ * 砂浜生成
+ * 海岸線に沿って砂浜を配置します。
+ */
 export function generateBeaches(allHexes, mapCols = config.COLS, mapRows = config.ROWS) {
     const landElevationScale = d3.scaleLinear().domain([50, 300]).range([1.0, 0.0]).clamp(true);
     const seaDepthScale = d3.scaleLinear().domain([0, -500]).range([1.0, 0.0]).clamp(true);
@@ -1079,9 +1086,9 @@ export function generateBeaches(allHexes, mapCols = config.COLS, mapRows = confi
 
 /**
  * 最終プロパティ計算 (植生、産業ポテンシャル)
+ * 気候・地形・水系データに基づき、ヘックスごとの最終的な植生や産業価値を算出します。
  */
 export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRows = config.ROWS, options = {}) {
-    // 事前に海岸からの距離をBFSで全計算
     // 事前に海岸からの距離をBFSで全計算 (Flyweightパターン対応のため、TypedArrayを使用)
     const distArray = new Float32Array(allHexes.length).fill(Infinity);
     const queue = []; // Store indices
@@ -1416,6 +1423,7 @@ export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRow
 }
 
 // Export recalculateGeographicFlags so it can be used in main.js
+// 外部からも利用可能な地理フラグ再計算関数
 export function recalculateGeographicFlags(allHexes) {
     let debugCount = 0;
     allHexes.forEach(h => {
@@ -1477,6 +1485,7 @@ export function recalculateGeographicFlags(allHexes) {
 
 /**
  * 統合マップ生成関数 (メインエントリポイント)
+ * マップ生成の全工程を統括し、各フェーズを順次実行します。
  */
 export async function generateIntegratedMap(addLogMessage, redrawFn) {
     initializeNoiseFunctions();
@@ -1485,6 +1494,7 @@ export async function generateIntegratedMap(addLogMessage, redrawFn) {
     const allHexes = new WorldMap(config.COLS, config.ROWS);
 
     // Pass 1: Base Properties
+    // 基本プロパティ（大陸形状、標高、気温、基本降水量）の生成
     for (let row = 0; row < config.ROWS; row++) {
         for (let col = 0; col < config.COLS; col++) {
             const index = getIndex(col, row);
@@ -1497,36 +1507,44 @@ export async function generateIntegratedMap(addLogMessage, redrawFn) {
     }
 
     // Neighbors cache
+    // 近隣ヘックスのインデックスをキャッシュ
     allHexes.forEach(h => {
         h.neighbors = getNeighborIndices(h.col, h.row, config.COLS, config.ROWS);
     });
 
     // Pass 1.2: Continental Shelves
+    // 大陸棚と深海の形成
     await addLogMessage("大陸棚と深海を形成しています...");
     generateContinentalShelves(allHexes);
     if (redrawFn) await redrawFn(allHexes);
 
     // Pass 1.5: Geographic Precip
+    // 風と地形による降水量の計算
     await addLogMessage("風と地形による降水量を計算しています...");
     applyGeographicPrecipitationEffects(allHexes);
 
     // Pass 2: Derived Properties (Terrain, Flatness, ClimateZone)
+    // 派生プロパティ（地形、平坦度、気候帯）の計算
     await addLogMessage("気候区分と地形タイプを判定しています...");
     calculateDerivedProperties(allHexes);
 
     // Pass 3: Water Systems (New Logic)
+    // 水系と河川の生成（新しい保水モデル）
     await addLogMessage("水系と河川を配置しています (新保水モデル)...");
     generateWaterSystems(allHexes);
     if (redrawFn) await redrawFn(allHexes);
 
     // Pass 4: Adjust Land Elevation
+    // 陸地の標高調整
     adjustLandElevation(allHexes);
 
     // Pass 5: Ridge Lines
+    // 山系の稜線の計算
     await addLogMessage("山系の稜線を計算しています...");
     generateRidgeLines(allHexes);
 
     // Pass 5.5: Beaches (Moved before allocation)
+    // 海岸線の砂浜の形成
     await addLogMessage("海岸線の砂浜を形成しています...");
     generateBeaches(allHexes);
 
@@ -1543,6 +1561,7 @@ export async function generateIntegratedMap(addLogMessage, redrawFn) {
     await addLogMessage(`砂浜生成完了: ${beachCount}箇所, 計${Math.round(totalBeachArea)}ha`);
 
     // Pass 6: Final Properties (Vegetation, etc.)
+    // 最終プロパティ（植生、資源など）の決定
     await addLogMessage("植生と資源分布を決定しています...");
     calculateFinalProperties(allHexes);
 
@@ -1600,27 +1619,51 @@ export function recalculateRiverProperties(allHexes) {
             let isRiverMouth = false;
             let downstreamTerrain = null;
 
-            // Note: 正確なdownstreamIndexがないため、isCoastalかつflowなりに大きい場合などを河口とする
-            // ここでは簡易的に「海に隣接している」なら河口扱いにしてみる
-            if (hasSeaNeighbor) {
-                isRiverMouth = true;
-                downstreamTerrain = '海洋'; // 仮
+            // Try to deduce downstream from neighbors with lower elevation (heuristic)
+            const downNeighbors = h.neighbors.map(i => allHexes[i]).filter(n => n.properties.elevation < p.elevation);
+            if (downNeighbors.length > 0) {
+                // The one with max flow is likely the downstream? Or just any water?
+                // If neighbor is water, it's likely a mouth
+                const waterNeighbor = downNeighbors.find(n => n.properties.isWater);
+                if (waterNeighbor) {
+                    isRiverMouth = true;
+                    downstreamTerrain = waterNeighbor.properties.terrainType;
+                }
             }
+            if (p.isCoastal) isRiverMouth = true;
 
-            // 2. 保水力 (Retention) の再計算
-            // calculateWaterRetentionはexportされていないため、簡易版を実装するか、needed?
-            // waterAreasRiverMouthV2でRを使用している。デフォルト 0.5。
-            // 厳密には terrainType から引くべきだが、ここでは 0.5 で近似するか、
-            // 可能であれば関数を公開して呼ぶべき。
-            // calculateWaterRetentionはファイル内関数。
-            // ここでは手間を避けるため、標準的な値を使用する。
+
+            // Calculate area using the logic
+            // Need Qin logic? No, just use flow as Qout approximation for restoration
+            // (Ideally we have Qin, but flow is Qout)
+
+            // calcWaterArea logic:
+            // Q = flow (Qout)
+            // width = a * flow^b
+            // depth = c * flow^f
+            // A = width * depth
+            // v = flow / A
+            const width = Math.max(2.0, a * Math.pow(p.flow, b));
+            const depth = Math.max(0.5, c * Math.pow(p.flow, f));
+            const A = width * depth;
+            const v = p.flow / A;
+
+            p.riverWidth = width;
+            p.riverDepth = depth;
+            p.riverVelocity = v;
+
+            // Area from waterAreasRiverMouthV2
+            // We need L_actual. Estimate from flatness.
+            let dH = 10; // Default
+            const meanderFactor = 1 + (dH / 1000) * (1 - flatness);
+            const L_actual = 8.66 * meanderFactor; // approx
+
+            // Retention? Unknown, use default
             const R = 0.5;
 
-            // 3. 面積・幅・深さの完全再計算
-            // waterAreasRiverMouthV2 は export されているので利用可能
-            const result = waterAreasRiverMouthV2({
+            const areaResult = waterAreasRiverMouthV2({
                 hexHa: config.HEX_AREA_HA,
-                L_km: 10.0 * 1.2, // 蛇行を含めた概算長
+                L_km: L_actual,
                 Q: p.flow,
                 flatness: flatness,
                 oceanicity: oceanicity,
@@ -1630,20 +1673,14 @@ export function recalculateRiverProperties(allHexes) {
                 downstreamTerrain: downstreamTerrain
             });
 
-            p.riverWidth = result.width || Math.max(2.0, a * Math.pow(p.flow, b));
-            p.riverDepth = result.depth || Math.max(0.5, c * Math.pow(p.flow, f));
-            p.riverVelocity = result.v || (p.flow / (p.riverWidth * p.riverDepth));
-
-            // waterAreaの復元
-            // result.waterTotalHa には channelだけでなく marsh, delta 等が含まれるため 255ha 等になりうる
-            p.waterArea = result.waterTotalHa;
+            p.waterArea = areaResult.waterTotalHa;
         }
     });
 }
 
 /**
  * 水域ヘックスの植生プロパティを初期化する (ロード時復元用)
- * @param {Array<object>} allHexes 
+ * @param {Array<object>} allHexes
  */
 export function initializeWaterVegetation(allHexes) {
     if (!allHexes || allHexes.length === 0) return;

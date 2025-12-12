@@ -9,6 +9,10 @@ import {
     generateHexJson
 } from './infoWindow.js';
 
+/**
+ * サイドバーの高さを動的に調整する関数
+ * 情報ウィンドウの表示状態に応じて、サイドバーの高さを変更します。
+ */
 function adjustSidebarHeight() {
     const sidebar = document.querySelector('.sidebar');
     const infoWindow = document.getElementById('info-window');
@@ -29,26 +33,43 @@ function adjustSidebarHeight() {
 let mapView;
 let blockLoaderRef;
 
+/**
+ * UIのセットアップを行うメイン関数
+ * MapViewの初期化、イベントハンドラの設定、初期UI状態の適用を行います。
+ * @param {WorldMap} allHexes - 全てのヘックスデータ (またはProxy)
+ * @param {Array} roadPaths - 道路パスデータの配列
+ * @param {Function} addLogMessage - ログ出力用関数
+ * @param {Object} blockLoader - ブロックロード管理オブジェクト
+ */
 export async function setupUI(allHexes, roadPaths, addLogMessage, blockLoader) {
     blockLoaderRef = blockLoader;
 
     // MapViewの初期化
+    console.log("[UI Setup] Initializing MapView...");
     mapView = new MapView('#hexmap');
     await mapView.initialize(allHexes, roadPaths, blockLoader);
 
     console.log("[UI Setup] MapView initialized.");
 
     // --- イベントハンドラの設定 ---
+    console.log("[UI Setup] Setting up event handlers...");
     setupEventHandlers();
+    console.log("[UI Setup] Event handlers set.");
 
     // 初期ロード時のUI状態適用
+    console.log("[UI Setup] Applying initial UI state...");
     applyInitialUIState();
+    console.log("[UI Setup] Initial UI state applied. setupUI COMPLETED.");
 }
 
+/**
+ * 各種UI要素へのイベントリスナーを設定する関数
+ */
 function setupEventHandlers() {
     // 1. Zoom/Pan は MapView 内部で処理されるため記述不要
 
     // 2. Info Window Close
+    // 情報ウィンドウを閉じるボタンの処理
     const closeInfoWindow = () => {
         const infoWindow = document.getElementById('info-window');
         if (infoWindow) infoWindow.classList.add('hidden');
@@ -63,9 +84,9 @@ function setupEventHandlers() {
     }
     // SVGクリック時の処理はMapView内で伝播ストップされなければbodyへ抜けるが、
     // ここではMapView側で特定の要素以外をクリックした場合の処理が必要。
-    // MapView.g (またはsvg) に click リスナーがついているはず。
 
     // 3. Copy JSON Button
+    // 選択中のヘックスデータをJSONとしてクリップボードにコピーする処理
     const copyInfoBtn = document.getElementById('copy-info-btn');
     if (copyInfoBtn) {
         copyInfoBtn.addEventListener('click', () => {
@@ -82,7 +103,7 @@ function setupEventHandlers() {
     }
 
     // 4. Map Type Switch
-    // 4. Map Type Switch
+    // マップタイプ（地形図/白地図）の切り替え処理
     const layerMemory = {
         'terrain': {
             'vegetation-overlay': true, 'snow': true, 'shading': false, 'contour': true,
@@ -95,8 +116,8 @@ function setupEventHandlers() {
     };
     let currentMapType = 'terrain';
 
+    // UIボタンの状態をMapViewのレイヤー状態と同期させる関数
     const updateLayerUI = () => {
-        // Sync UI buttons with MapView state
         const layersToCheck = [
             { id: '#toggleVegetationLayer', layer: 'vegetation-overlay' },
             { id: '#toggleReliefLayer', layer: 'shading' },
@@ -106,7 +127,7 @@ function setupEventHandlers() {
             { id: '#toggleTerritoryLayer', layer: 'territory-overlay' },
             { id: '#toggleHexBorderLayer', layer: 'hex-border' },
             { id: '#toggleRidgeWaterSystemLayer', layer: 'ridge-water-system' },
-            // Shortcuts
+            // ショートカットボタン
             { id: '#shortcut-vegetation', layer: 'vegetation-overlay' },
             { id: '#shortcut-relief', layer: 'shading' },
             { id: '#shortcut-contour', layer: 'contour' },
@@ -122,11 +143,12 @@ function setupEventHandlers() {
         });
     };
 
+    // マップタイプ変更時の処理
     d3.selectAll('input[name="map-type"]').on('change', function () {
         const newType = d3.select(this).property('value');
         if (newType === currentMapType) return;
 
-        // Save current state to memory
+        // 現在の状態を保存
         const currentMemory = layerMemory[currentMapType];
         Object.keys(currentMemory).forEach(layerName => {
             if (mapView.layers[layerName]) {
@@ -134,26 +156,26 @@ function setupEventHandlers() {
             }
         });
 
-        // Load new state
+        // 新しい状態をロード
         currentMapType = newType;
         const newMemory = layerMemory[newType];
         Object.keys(newMemory).forEach(layerName => {
             mapView.toggleLayer(layerName, newMemory[layerName]);
         });
 
-        // Special handling for vegetation/snow sync
+        // 植生と雪の表示同期
         if (newMemory['vegetation-overlay'] !== undefined) {
             mapView.toggleLayer('snow', newMemory['vegetation-overlay']);
-            // Note: 'snow' key exists in memory but is synced with veg mostly
         }
 
         mapView.updateAllHexColors();
-        mapView.updateRiverColor(); // Sync river color (Blue vs Grey)
+        mapView.updateRiverColor(); // 河川の色を更新 (青 vs グレー)
         mapView.updateVisibleBlocks(mapView.currentTransform);
 
         updateLayerUI();
     });
 
+    // キーボードショートカット等でマップタイプを切り替えるボタン
     d3.select('#shortcut-map-type').on('click', function () {
         const currentType = d3.select('input[name="map-type"]:checked').property('value');
         const newType = currentType === 'terrain' ? 'white' : 'terrain';
@@ -161,9 +183,10 @@ function setupEventHandlers() {
     });
 
     // 5. Layer Toggles
+    // 各レイヤーの表示/非表示切り替えボタン
     const layerToggles = [
         { id: '#toggleVegetationLayer', layer: 'vegetation-overlay' },
-        { id: '#toggleSnowLayer', layer: 'snow' }, // ボタンがないかもしれないが連動用
+        { id: '#toggleSnowLayer', layer: 'snow' }, // ボタンはないが連動用
         { id: '#toggleReliefLayer', layer: 'shading' },
         { id: '#toggleContourLayer', layer: 'contour' },
         { id: '#toggleSettlementLayer', layer: 'settlement' },
@@ -181,7 +204,6 @@ function setupEventHandlers() {
             // 特殊連動
             if (item.layer === 'vegetation-overlay') {
                 mapView.toggleLayer('snow', isVisible);
-                // beach連動などもMapView内で処理済
             }
             if (item.layer === 'ridge-water-system') {
                 mapView.updateRiverColor();
@@ -190,6 +212,7 @@ function setupEventHandlers() {
     });
 
     // 6. Shortcuts
+    // 画面上のショートカットボタン用
     const shortcuts = [
         { id: '#shortcut-vegetation', layer: 'vegetation-overlay' },
         { id: '#shortcut-relief', layer: 'shading' },
@@ -205,7 +228,7 @@ function setupEventHandlers() {
             const isVisible = mapView.toggleLayer(item.layer);
             this.classList.toggle('active', isVisible);
 
-            // Sidebar button sync
+            // サイドバーのボタン状態も同期
             const sidebarBtnId = layerToggles.find(t => t.layer === item.layer)?.id;
             if (sidebarBtnId) d3.select(sidebarBtnId).classed('active', isVisible);
 
@@ -216,6 +239,8 @@ function setupEventHandlers() {
     });
 
     // 7. Data Overlays (Only one active at a time)
+    // データオーバーレイ（気温、降水量、人口など）の切り替え
+    // これらは排他的（一度に一つだけ）に表示される
     const overlayIds = [
         '#toggleTempLayer', '#togglePrecipLayer', '#toggleClimateZoneLayer',
         '#togglePopulationLayer', '#toggleMonsterLayer',
@@ -227,14 +252,14 @@ function setupEventHandlers() {
     overlayIds.forEach(id => {
         d3.select(id).on('click', function () {
             let layerName = id.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();
-            // [FIX] Explicit mapping for multi-word keys
+            // [FIX] 明示的なマッピング（複数単語のキーに対応）
             if (id === '#toggleClimateZoneLayer') {
                 layerName = 'climate-zone-overlay';
             }
 
             const isActive = this.classList.contains('active');
 
-            // Deactivate all first
+            // 全て非アクティブ化
             overlayIds.forEach(oid => {
                 let lname = oid.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();
                 if (oid === '#toggleClimateZoneLayer') {
@@ -244,11 +269,11 @@ function setupEventHandlers() {
                 mapView.toggleLayer(lname, false);
             });
 
-            // Activate target if it wasn't active
+            // ターゲットが非アクティブだった場合のみアクティブ化（トグル動作）
             if (!isActive) {
                 d3.select(this).classed('active', true);
                 mapView.toggleLayer(layerName, true);
-                // legend update needed in MapView or InfoWindow
+                // 凡例の更新が必要な場合はここで呼び出す
                 // updateLegend(layerName); // infoWindow.js
             } else {
                 // updateLegend(null);
@@ -262,11 +287,21 @@ function applyInitialUIState() {
     // 今回は初期化時にデフォルトで設定されていると仮定
 }
 
-// 外部連携用 (main.jsなどから呼ばれる)
+// ================================================================
+// ■ 外部連携用各種関数 (main.jsなどからコールされる)
+// ================================================================
+
+/**
+ * 気候データの再描画
+ * @param {WorldMap} allHexes - ヘックスデータ
+ */
 export async function redrawClimate(allHexes) {
     if (mapView) mapView.redrawClimate(allHexes);
 }
 
+/**
+ * 集落データの再描画と情報更新
+ */
 export async function redrawSettlements(allHexes) {
     if (mapView) {
         mapView.redrawClimate(allHexes); // 実質同じ再描画
@@ -275,22 +310,26 @@ export async function redrawSettlements(allHexes) {
     }
 }
 
+/**
+ * 道路・国境・領土の再描画
+ * ロード完了時などに呼び出され、必要なデータを更新し再描画を行う。
+ */
 export async function redrawRoadsAndNations(allHexes, roadPaths) {
     if (mapView) {
-        // [FIX] Do NOT full reset (initialize) as it resets transform/zoom state.
-        // Instead, update data references and redraw specific layers.
+        // [FIX] 完全なリセットは行わず、データの参照を更新するのみ
         mapView.hexes = allHexes;
         mapView.roadPathsData = roadPaths;
 
-        // Re-render specific layers if necessary
-        // For now, updating hex colors and potentially road layer is enough
-        // mapView.drawRoads(); // If such method exists, or re-init layers
+        // 必要なレイヤーのみ再描画
         mapView.updateAllHexColors();
-        // Force update of visible blocks to refresh data, but KEEP current transform
+        // 現在のTransform（ズーム状態）を維持したまま表示ブロックを更新
         mapView.updateVisibleBlocks(mapView.currentTransform);
     }
 }
 
+/**
+ * マップ全体の再描画
+ */
 export async function redrawMap(allHexes) {
     if (mapView) {
         mapView.updateAllHexColors();
@@ -299,6 +338,10 @@ export async function redrawMap(allHexes) {
     }
 }
 
+/**
+ * UIのリセット
+ * ミニマップ等の要素を削除します。
+ */
 export function resetUI() {
     if (mapView && mapView.minimapContainer) {
         mapView.minimapContainer.remove();
@@ -307,10 +350,17 @@ export function resetUI() {
     d3.select('#minimap-icon').remove();
 }
 
+/**
+ * ミニマップの更新
+ */
 export function updateMinimap(allHexes) {
     if (mapView) mapView.updateMinimap(allHexes);
 }
 
+/**
+ * ブロックごとのデータ更新をUIに反映
+ */
 export function updateUIWithBlockData(blockId, updatedAllHexes) {
+    console.log(`[UI] Updating UI for block ${blockId}`);
     if (mapView) mapView.updateUIWithBlockData(blockId, updatedAllHexes);
 }

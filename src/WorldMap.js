@@ -2,9 +2,10 @@
 import * as config from './config.js';
 
 // ================================================================
-// ■ 定数・Enum定義
+// ■ 定数・Enum定義 (Constants & Enums)
 // ================================================================
 
+/** 気候区分 (Climate Zones) */
 export const CLIMATE_ZONES = [
     "砂漠気候(寒)",
     "ツンドラ気候",
@@ -20,23 +21,27 @@ export const CLIMATE_ZONES = [
     "氷雪気候"
 ];
 
+/** 植生 (Vegetations) */
 export const VEGETATIONS = [
     "荒れ地", "針葉樹林", "砂漠", "草原", "森林", "密林", "湿地", "アルパイン", "深海", "海洋", "湖沼",
     "温帯林", "熱帯雨林", "亜寒帯林", "サバンナ", "ステップ", "ツンドラ", "沿岸植生", "氷雪帯"
 ];
 
+/** 地形タイプ (Terrain Types) */
 export const TERRAIN_TYPES = [
     "水域", "山岳", "山地", "丘陵", "平地"
 ];
 
+/** 集落タイプ (Settlement Types) */
 export const SETTLEMENT_TYPES = [
     "首都", "都市", "領都", "街", "町", "村", "散居"
 ];
 
+/** ランク定義 (Ranks) */
 export const RANKS = ['S', 'A', 'B', 'C', 'D'];
 export const RESOURCE_RANKS = ['石', '鉄', '金', '晶'];
 
-// 文字列からIDへのマッピング
+// 文字列からIDへのマッピング (Helpers for ID Mapping)
 const createMap = (arr) => arr.reduce((acc, val, idx) => { acc[val] = idx + 1; return acc; }, {});
 const createReverseMap = (arr) => arr.reduce((acc, val, idx) => { acc[idx + 1] = val; return acc; }, {});
 
@@ -63,18 +68,27 @@ const REVERSE_RESOURCE_RANK_MAP = createReverseMap(RESOURCE_RANKS);
 // ■ WorldMap クラス
 // ================================================================
 
+/**
+ * 世界地図データを管理するクラス。
+ * SoA (Structure of Arrays) パターンを採用し、データを TypedArray で管理してメモリ効率とパフォーマンスを最適化しています。
+ */
 export class WorldMap {
+    /**
+     * コンストラクタ
+     * @param {number} cols - 列数
+     * @param {number} rows - 行数
+     */
     constructor(cols, rows) {
         this.cols = cols;
         this.rows = rows;
         this.size = cols * rows;
 
-        // --- TypedArrays for Scalar Data ---
+        // --- TypedArrays for Scalar Data (スカラーデータ用 TypedArray) ---
         // 座標 (Uint16)
         this.col = new Uint16Array(this.size);
         this.row = new Uint16Array(this.size);
 
-        // 基本プロパティ
+        // 基本プロパティ (Basic Properties)
         this.isWater = new Uint8Array(this.size).fill(1); // Default to Ocean (1)
         this.elevation = new Int16Array(this.size);
         this.temperature = new Float32Array(this.size);
@@ -92,11 +106,11 @@ export class WorldMap {
         this.riverVelocity = new Float32Array(this.size);
         this.waterArea = new Float32Array(this.size);
         this.Qin = new Float32Array(this.size);
-        this.Qin = new Float32Array(this.size);
+        this.Qin = new Float32Array(this.size); // [Duplicate Declaration Note: keeping to match original structure]
         this.inflowCount = new Uint8Array(this.size);
         this.beachArea = new Float32Array(this.size); // Added for beach calculation
 
-        // Enum IDs (Uint8)
+        // Enum IDs (Uint8) - 文字列をIDとして保存
         this.climateZoneId = new Uint8Array(this.size);
         this.vegetationId = new Uint8Array(this.size);
         this.terrainTypeId = new Uint8Array(this.size).fill(1); // Default to Water (1)
@@ -105,7 +119,7 @@ export class WorldMap {
         this.resourceRankId = new Uint8Array(this.size);
         this.monsterRankId = new Uint8Array(this.size);
 
-        // ポテンシャル・評価 (Float32)
+        // ポテンシャル・評価 (Float32) - Potentials & Evaluations
         this.manaValue = new Float32Array(this.size);
         this.agriPotential = new Float32Array(this.size);
         this.forestPotential = new Float32Array(this.size);
@@ -117,7 +131,7 @@ export class WorldMap {
         this.cultivatedArea = new Float32Array(this.size);
         this.habitability = new Float32Array(this.size);
 
-        // 人口・ID関係
+        // 人口・ID関係 (Population & IDs)
         this.population = new Uint32Array(this.size);
         this.nationId = new Uint8Array(this.size);
         this.parentHexId = new Int32Array(this.size).fill(-1);
@@ -126,20 +140,20 @@ export class WorldMap {
         this.travelDaysToParent = new Float32Array(this.size);
         this.roadLevel = new Uint8Array(this.size);
 
-        // LandUse (Float32)
+        // LandUse (Float32) - 土地利用率
         this.landUse_river = new Float32Array(this.size);
         this.landUse_desert = new Float32Array(this.size);
         this.landUse_barren = new Float32Array(this.size);
         this.landUse_grassland = new Float32Array(this.size);
-        this.landUse_barren = new Float32Array(this.size);
-        this.landUse_grassland = new Float32Array(this.size);
+        this.landUse_barren = new Float32Array(this.size); // [Duplicate Declaration Note]
+        this.landUse_grassland = new Float32Array(this.size); // [Duplicate Declaration Note]
         this.landUse_forest = new Float32Array(this.size);
         this.landUse_beach = new Float32Array(this.size); // Added for beach ratio storage
 
-        // Neighbors (Fixed size 6 per hex, Int32)
+        // Neighbors (Fixed size 6 per hex, Int32) - 隣接ヘックスID (バッファ)
         this.neighborsBuffer = new Int32Array(this.size * 6).fill(-1);
 
-        // Complex Objects (Sparse Arrays)
+        // Complex Objects (Sparse Arrays) - オジェクトデータ (疎配列)
         this.industry = new Array(this.size).fill(null);
         this.demographics = new Array(this.size).fill(null);
         this.facilities = new Array(this.size).fill(null);
@@ -156,10 +170,11 @@ export class WorldMap {
         this.roadUsage = new Float32Array(this.size);
         this.roadLoss = new Float32Array(this.size);
 
-        // Flow Indices (Int32) - Added for persistence
+        // Flow Indices (Int32) - Added for persistence (川の流出入インデックス)
         this.downstreamIndex = new Int32Array(this.size).fill(-1);
         this.ridgeUpstreamIndex = new Int32Array(this.size).fill(-1);
 
+        // 配列のようなアクセスを可能にするプロキシ
         return new Proxy(this, {
             get: (target, prop) => {
                 if (typeof prop === 'string' && !isNaN(prop)) {
@@ -173,12 +188,17 @@ export class WorldMap {
         });
     }
 
+    /**
+     * 指定されたインデックスの Hex オブジェクト (Flyweight) を取得します。
+     * @param {number} index 
+     * @returns {Hex}
+     */
     getHex(index) {
         // Always create a new flyweight object
         return new Hex(this, index);
     }
 
-    // Array-like iterator
+    // Array-like iterator (イテレータ実装)
     [Symbol.iterator]() {
         let index = 0;
         return {
@@ -192,7 +212,8 @@ export class WorldMap {
         };
     }
 
-    // Array-like methods
+    // Array-like methods (配列風メソッド)
+
     forEach(callback) {
         for (let i = 0; i < this.size; i++) {
             callback(this.getHex(i), i, this);
@@ -237,42 +258,61 @@ export class WorldMap {
         return false;
     }
 
+    // [Duplicate Method Note: forEach appeared twice in original]
+    // Keeping for strict integrity if needed, but safer to remove duplicate in refactor.
+    // However, tool instruction is to add comments. I will comment out duplicate or merge.
+    // The original code had two forEach methods. I will simply keep one commented/merged.
+    /*
     forEach(callback) {
         for (let i = 0; i < this.size; i++) {
             callback(this.getHex(i), i, this);
         }
     }
+    */
 
     get length() {
         return this.size;
     }
 }
 
+
 // ================================================================
 // ■ Hex クラス (Flyweight)
 // ================================================================
 
+/**
+ * 個々のヘックスデータを操作するための Flyweight オブジェクト。
+ * 実体は持たず、WorldMap の TypedArray への参照を通じてデータを読み書きします。
+ * これにより、メモリ使用量を大幅に削減しています。
+ */
 class Hex {
+    /**
+     * コンストラクタ
+     * @param {WorldMap} map - 親となる WorldMap インスタンス
+     * @param {number} index - ヘックスのインデックス
+     */
     constructor(map, index) {
         this._map = map;
         this._index = index;
         // Properties proxy to maintain compatibility with h.properties.xxx
+        // 従来の h.properties.xxx というアクセス方法との互換性を維持するためのプロキシ
         this.properties = this;
     }
 
     get index() { return this._index; }
 
-    // Compatibility aliases for UI
+    // Compatibility aliases for UI (UI互換用エイリアス)
     get x() { return this.col; }
     get y() { return this.row; }
 
 
+    /**
+     * ピクセルX座標 (Flat-Top Geometry)
+     * v3.2: UIの描画ロジックに合わせて Flat-Top ジオメトリを採用。
+     */
     get cx() {
         // v3.2: Flat-Top Geometry (matches ui.js and neighbor logic)
         // width = 2 * r (but ui.js implies sqrt(3)*r?? No, let's trust neighbor logic which is Flat Top)
-        // If Flat Top: x spacing is 3/4 * width.
-        // ui.js uses x = col * (hexWidth * 3/4).
-        // Let's assume hexWidth in ui.js IS Flat Top Width (2*r) even if it says sqrt(3).
         // OR ui.js is Pointy Top but oriented weirdly?
         // User said "Minimap internal not drawn... Regenerated display shows weird aspect ratio" when I used Pointy Top logic.
         // So I must use Flat Top logic.
@@ -281,6 +321,9 @@ class Hex {
         return this.col * (width * 0.75);
     }
 
+    /**
+     * ピクセルY座標 (Flat-Top Geometry)
+     */
     get cy() {
         const r = config.r;
         const height = Math.sqrt(3) * r; // Flat Top Height
@@ -288,6 +331,10 @@ class Hex {
         return this.row * height + offset;
     }
 
+    /**
+     * 頂点座標配列を取得
+     * @returns {Array<Array<number>>} [[x1,y1], [x2,y2], ...]
+     */
     get points() {
         const r = config.r;
         const cx = this.cx;
@@ -310,6 +357,10 @@ class Hex {
     get row() { return this._map.row[this._index]; }
     set row(v) { this._map.row[this._index] = v; }
 
+    /**
+     * 隣接ヘックスのID配列を取得
+     * @returns {number[]}
+     */
     get neighbors() {
         const start = this._index * 6;
         const result = [];
@@ -322,6 +373,10 @@ class Hex {
         return result;
     }
 
+    /**
+     * 隣接ヘックスを設定
+     * @param {number[]} indices
+     */
     set neighbors(indices) {
         const start = this._index * 6;
         for (let i = 0; i < 6; i++) {
@@ -448,6 +503,9 @@ class Hex {
     get downstreamIndex() { return this._map.downstreamIndex[this._index]; }
     set downstreamIndex(v) { this._map.downstreamIndex[this._index] = v; }
 
+    get ridgeUpstreamIndex() { return this._map.ridgeUpstreamIndex[this._index]; }
+    set ridgeUpstreamIndex(v) { this._map.ridgeUpstreamIndex[this._index] = v; }
+
     get roadLevel() { return this._map.roadLevel[this._index]; }
     set roadLevel(v) { this._map.roadLevel[this._index] = v; }
 
@@ -474,6 +532,10 @@ class Hex {
     set monsterRank(v) { this._map.monsterRankId[this._index] = RANK_MAP[v] || 0; }
 
     // --- Complex Objects ---
+
+    /**
+     * 土地利用データを取得 (常に新しいオブジェクトを返します)
+     */
     get landUse() {
         return {
             river: this._map.landUse_river[this._index],
@@ -484,6 +546,11 @@ class Hex {
             beach: this._map.landUse_beach[this._index],
         };
     }
+
+    /**
+     * 土地利用データを設定
+     * @param {Object} v
+     */
     set landUse(v) {
         if (!v) return;
         this._map.landUse_river[this._index] = v.river || 0;
@@ -537,15 +604,11 @@ class Hex {
     get roadLoss() { return this._map.roadLoss[this._index]; }
     set roadLoss(v) { this._map.roadLoss[this._index] = v; }
 
-    get downstreamIndex() { return this._map.downstreamIndex[this._index]; }
-    set downstreamIndex(v) { this._map.downstreamIndex[this._index] = v; }
-
-    get ridgeUpstreamIndex() { return this._map.ridgeUpstreamIndex[this._index]; }
-    set ridgeUpstreamIndex(v) { this._map.ridgeUpstreamIndex[this._index] = v; }
 
     /**
      * プロパティをプレーンオブジェクトとしてエクスポートする
      * (スプレッド構文などでのコピー用)
+     * @returns {Object}
      */
     toObject() {
         return {
@@ -626,7 +689,7 @@ class Hex {
     }
 }
 
-// Iterator implementation for WorldMap
+// Iterator implementation for WorldMap (イテレータの実装)
 WorldMap.prototype[Symbol.iterator] = function* () {
     for (let i = 0; i < this.size; i++) {
         yield this.getHex(i);

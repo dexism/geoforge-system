@@ -1,5 +1,9 @@
 // ================================================================
-// GeoForge System - ユーティリティモジュール
+// GeoForge System - ユーティリティモジュール (utils.js)
+// ================================================================
+// 解説:
+// アプリケーション全体で使用される汎用的な関数群を提供するモジュール。
+// 依存関係: config.js (定数), BlockUtils.js (座標変換)
 // ================================================================
 
 import * as config from './config.js';
@@ -7,9 +11,14 @@ import { globalToBlock } from './BlockUtils.js';
 
 /**
  * 座標からallHexes配列のインデックスを計算する
- * @param {number} col - ヘックスの列
- * @param {number} row - ヘックスの行
- * @returns {number} 配列のインデックス
+ * 
+ * 仕様:
+ * 2次元配列ではなく、1次元配列で管理されるヘックスデータへのアクセスに使用する。
+ * 行(row) * 最大列数(config.COLS) + 列(col) でインデックスを算出。
+ * 
+ * @param {number} col - ヘックスの列 (X成分相当)
+ * @param {number} row - ヘックスの行 (Y成分相当)
+ * @returns {number} 1次元配列上のインデックス。範囲外チェックは行わないため呼び出し側で注意が必要。
  */
 export function getIndex(col, row) {
     return row * config.COLS + col;
@@ -17,56 +26,70 @@ export function getIndex(col, row) {
 
 /**
  * 指定された座標の隣接ヘックスのインデックス配列を取得する
- * (Flat-Top / Odd-Q 垂直列オフセット)
- * @param {number} col - 中心ヘックスの列
- * @param {number} row - 中心ヘックスの行
- * @param {number} maxCols - グリッドの最大列数 (config.COLS)
- * @param {number} maxRows - グリッドの最大行数 (config.ROWS)
- * @returns {Array<number>} 隣接ヘックスのインデックス配列 (範囲外は含まない)
+ * 
+ * 仕様:
+ * ヘックスグリッドは「Flat-Top / Odd-Q (奇数列が垂直方向に半段ずれる)」形式を採用。
+ * 偶数列(Even)と奇数列(Odd)で、隣接する6方向の座標計算式が異なる。
+ * グリッド範囲外の座標は結果に含まれない。
+ * 
+ * @param {number} col - 中心ヘックスの列番号
+ * @param {number} row - 中心ヘックスの行番号
+ * @param {number} maxCols - グリッドの最大列数 (通常 config.COLS)
+ * @param {number} maxRows - グリッドの最大行数 (通常 config.ROWS)
+ * @returns {Array<number>} 隣接する有効なヘックスの1次元配列インデックスのリスト
  */
 export function getNeighborIndices(col, row, maxCols, maxRows) {
     const isOddCol = col % 2 !== 0;
     const candidates = [
-        { col: col, row: row - 1 },     // N (North)
-        { col: col, row: row + 1 },     // S (South)
-        { col: col - 1, row: row },     // NW (North West)
-        { col: col + 1, row: row },     // NE (North East)
-        { col: col - 1, row: isOddCol ? row + 1 : row - 1 }, // SW (South West)
-        { col: col + 1, row: isOddCol ? row + 1 : row - 1 }, // SE (South East)
+        { col: col, row: row - 1 },     // N (北)
+        { col: col, row: row + 1 },     // S (南)
+        { col: col - 1, row: row },     // NW (北西)
+        { col: col + 1, row: row },     // NE (北東)
+        { col: col - 1, row: isOddCol ? row + 1 : row - 1 }, // SW (南西: 偶数列ならrow-1, 奇数列ならrow+1)
+        { col: col + 1, row: isOddCol ? row + 1 : row - 1 }, // SE (南東: 偶数列ならrow-1, 奇数列ならrow+1)
     ];
 
     const neighbors = [];
     candidates.forEach(n => {
+        // グリッド範囲内かチェック
         if (n.col >= 0 && n.col < maxCols && n.row >= 0 && n.row < maxRows) {
-            neighbors.push(n.row * maxCols + n.col); // getIndexと同様のRow-Major順
+            neighbors.push(n.row * maxCols + n.col); // getIndexと同様のロジックでインデックス化
         }
     });
     return neighbors;
 }
 
 /**
- * 2つのヘックス間の簡易的な距離を計算する (マンハッタン距離のヘックス版)
- * @param {object} h1 - 1つ目のヘックスオブジェクト ({ col, row })
- * @param {object} h2 - 2つ目のヘックスオブジェクト ({ col, row })
- * @returns {number} ヘックス単位での距離
+ * 2つのヘックス間の簡易的な距離を計算する
+ * 
+ * 仕様:
+ * 正確な3軸座標(Cube Coordinates)変換を行わず、Axial座標の差分からマンハッタン距離を近似計算する。
+ * GeoForgeのグリッド系では、dx, dyの最大値をとることで十分な近似となる。
+ * 
+ * @param {object} h1 - 1つ目のヘックスオブジェクト (要: col, row プロパティ)
+ * @param {object} h2 - 2つ目のヘックスオブジェクト (要: col, row プロパティ)
+ * @returns {number} ヘックス単位でのステップ距離（近似値）
  */
 export function getDistance(h1, h2) {
-    // 軸座標系への変換は不要な、簡略化された距離計算
     const dx = Math.abs(h1.col - h2.col);
     const dy = Math.abs(h1.row - h2.row);
 
-    // ヘックスグリッドの距離計算は、dx, dy, dzの差の最大値に等しい
-    // このグリッド系ではこれで十分な近似となる
+    // ヘックス距離 = max(|dx|, |dy|, |dx+dy|) だが、この座標系では簡易的に以下で算出
     return Math.max(dx, dy);
 }
 
 /**
  * プログレスバーの表示用文字列を生成する汎用関数
+ * 
+ * 仕様:
+ * ターミナルやログ出力用に、テキストベースのプログレスバーを生成する。
+ * 例: "Prefix [||||||||||..........] 50% (50/100)"
+ * 
  * @param {object} params - パラメータオブジェクト
- * @param {number} params.current - 現在の処理数
- * @param {number} params.total - 全体の処理数
- * @param {string} [params.prefix=""] - バーの前に表示する接頭辞
- * @param {number} [params.barWidth=20] - バーの文字数
+ * @param {number} params.current - 現在の進捗数
+ * @param {number} params.total - 全体の作業総数
+ * @param {string} [params.prefix=""] - バーの先頭に付与するラベル
+ * @param {number} [params.barWidth=40] - バー部分の文字数幅
  * @returns {string} フォーマットされたプログレスバー文字列
  */
 export function formatProgressBar({ current, total, prefix = "", barWidth = 40 }) {
@@ -83,31 +106,42 @@ export function formatProgressBar({ current, total, prefix = "", barWidth = 40 }
 
 /**
  * ヘックスの位置情報を指定されたフォーマットの文字列に変換する
- * @param {object} hexData - ヘックスのデータオブジェクト (x, y, properties.elevation を持つ)
- * @param {string} formatType - 'full', 'short', 'coords', 'elevation' のいずれか
- * @returns {string} フォーマットされた位置情報文字列
+ * 
+ * 仕様:
+ * UIのツールチップやデバッグ表示用。
+ * ブロック座標系(World Coords)とローカル座標系の両方に対応し、可能な限り詳細な情報を表示する。
+ * 
+ * @param {object} hexData - ヘックスデータ (x, y, col, row, properties.elevation, ee/nnブロック座標 等)
+ * @param {string} formatType - 出力形式
+ *   - 'full': "Loc EEXX-NNYY H 100" 形式 (詳細)
+ *   - 'short': "EEXX-NNYY H 100" 形式 (標準)
+ *   - 'coords': "EEXX-NNYY" 形式 (座標のみ)
+ *   - 'elevation': "H 100" 形式 (標高のみ)
+ * @returns {string} フォーマット結果
  */
 export function formatLocation(hexData, formatType) {
     if (!hexData) return 'N/A';
 
     const p = hexData.properties || {};
 
-    // Prefer col/row properties, fallback to x/y
+    // col/row プロパティを優先、無ければ x/y (互換性維持)
     const col = hexData.col !== undefined ? hexData.col : (hexData.x || 0);
     const row = hexData.row !== undefined ? hexData.row : (hexData.y || 0);
 
+    // 標高の表示形式処理 (負の値はDepth 'D', 正の値はHeight 'H')
     const elevation = Math.round(p.elevation || 0);
     const isDepth = elevation < 0;
     const elevLabel = isDepth ? 'D' : 'H';
     const elevValue = isDepth ? Math.abs(elevation) : elevation;
 
     let ee, nn, lx, ly;
-    let coordsStr = '00-00'; // Default fallback
+    let coordsStr = '00-00'; // デフォルト値
 
+    // ブロック座標情報 (ee/nn) を持っている場合
     if (hexData.ee !== undefined && hexData.nn !== undefined) {
         ee = hexData.ee;
         nn = hexData.nn;
-        // Use localCol/localRow if available (preferred for block hexes), else fallback to col/row
+        // ブロック内ローカル座標があれば使用、なければグローバルcol/rowを使用
         const lCol = hexData.localCol !== undefined ? hexData.localCol : col;
         const lRow = hexData.localRow !== undefined ? hexData.localRow : row;
 
@@ -115,11 +149,11 @@ export function formatLocation(hexData, formatType) {
         ly = String(lRow).padStart(2, '0');
         coordsStr = `${ee}${lx}-${nn}${ly}`;
     } else {
-        // Fallback: Convert to World Coords (Block-based) using global assumption (likely fails for local coords)
+        // フォールバック: グローバル座標からブロック座標を逆算 (BlockUtils利用)
         const blockCoords = globalToBlock(col, row);
 
         if (blockCoords) {
-            // EEXX-NNYY
+            // EEXX-NNYY 形式に整形
             ee = blockCoords.ee;
             nn = blockCoords.nn;
             lx = String(blockCoords.localCol).padStart(2, '0');
@@ -144,27 +178,33 @@ export function formatLocation(hexData, formatType) {
 
 /**
  * 2つの隣接するヘックスの共有辺の端点（2点）を計算する
+ * 
+ * 仕様:
+ * 川の描画などで使用。2つのヘックスポリゴンの頂点座標を比較し、
+ * 座標が一致する（誤差epsilon未満）2つの点を見つけ出す。
+ * 
  * @param {object} h1 - 1つ目のヘックス
  * @param {object} h2 - 2つ目のヘックス
- * @returns {Array<Array<number>>|null} [[x1, y1], [x2, y2]] 形式の座標配列。隣接していない場合はnull
+ * @returns {Array<Array<number>>|null} [[x1, y1], [x2, y2]] 形式の座標配列。共有辺が無い場合はnull
  */
 export function getSharedEdgePoints(h1, h2) {
     if (!h1 || !h2) return null;
 
-    // ヘックスの頂点を比較して、共有されている2点を見つける
-    // 座標の許容誤差
+    // 座標比較の許容誤差 (浮動小数点演算対策)
     const epsilon = 0.1;
     const sharedPoints = [];
 
+    // 総当たりで頂点を比較
     for (const p1 of h1.points) {
         for (const p2 of h2.points) {
             if (Math.abs(p1[0] - p2[0]) < epsilon && Math.abs(p1[1] - p2[1]) < epsilon) {
                 sharedPoints.push(p1);
-                break; // h2のループを抜けて次のh1の点へ
+                break; // マッチしたら次のh1の点へ
             }
         }
     }
 
+    // 共有頂点がちょうど2つ見つかれば辺として成立
     if (sharedPoints.length === 2) {
         return sharedPoints;
     }
@@ -173,9 +213,14 @@ export function getSharedEdgePoints(h1, h2) {
 
 /**
  * 2つの隣接するヘックスの共有辺の中点を計算する
+ * 
+ * 仕様:
+ * getSharedEdgePoints で取得した2点の中間座標を返す。
+ * 川の流路計算や、境界線上のポイント特定などに使用。
+ * 
  * @param {object} h1 - 1つ目のヘックス
  * @param {object} h2 - 2つ目のヘックス
- * @returns {Array<number>|null} [x, y] 形式の座標。隣接していない場合はnull
+ * @returns {Array<number>|null} [x, y] 形式の座標。共有辺が無い場合はnull
  */
 export function getSharedEdgeMidpoint(h1, h2) {
     const points = getSharedEdgePoints(h1, h2);
@@ -187,15 +232,24 @@ export function getSharedEdgeMidpoint(h1, h2) {
 
 /**
  * シード付き疑似乱数生成器 (Xorshift128+)
+ * 
+ * 仕様:
+ * 再現性のある乱数を生成するためのクラス。
+ * Math.random() はシード指定できないため、このカスタムクラスを使用する。
+ * アルゴリズムには高速で品質の良い Xorshift128+ を採用。
  */
 export class SeededRandom {
+    /**
+     * コンストラクタ
+     * @param {number|string} seed - 乱数シード。省略時は現在時刻を使用。
+     */
     constructor(seed) {
-        // シードが指定されない、または0の場合は現在時刻を使用
+        // シード未指定時は現在時刻
         if (seed === undefined || seed === null || seed === 0) {
             seed = Date.now();
         }
 
-        // 文字列シード対応 (ハッシュ化して数値に変換)
+        // 文字列シード対応: 文字列をハッシュ化して数値シードに変換
         if (typeof seed === 'string') {
             let h = 0xdeadbeef;
             for (let i = 0; i < seed.length; i++) {
@@ -204,7 +258,7 @@ export class SeededRandom {
             seed = (h ^ h >>> 16) >>> 0;
         }
 
-        // 状態変数の初期化 (SplitMix64で初期状態を生成)
+        // 状態変数の初期化 (SplitMix64アルゴリズムで初期シードから内部状態を生成)
         this.s0 = this._splitmix64(seed);
         this.s1 = this._splitmix64(this.s0);
         this.s2 = this._splitmix64(this.s1);
@@ -213,7 +267,10 @@ export class SeededRandom {
         this.initialSeed = seed;
     }
 
-    // 初期化用ヘルパー (SplitMix64)
+    /**
+     * 初期化用ヘルパー (SplitMix64)
+     * シード値から偏りのない初期状態変数を生成する
+     */
     _splitmix64(a) {
         a |= 0; a = a + 0x9e3779b9 | 0;
         let t = a ^ a >>> 16;
@@ -225,9 +282,10 @@ export class SeededRandom {
 
     /**
      * 0以上1未満の乱数を返す (Math.random() 互換)
+     * @returns {number} 0 <= n < 1
      */
     next() {
-        // Xorshift128
+        // Xorshift128+ アルゴリズム
         let t = this.s3;
         const s = this.s0;
         this.s3 = this.s2;
@@ -238,23 +296,32 @@ export class SeededRandom {
         t ^= t >>> 8;
         this.s0 = t ^ s ^ (s >>> 19);
 
+        // 符号なし32ビット整数に変換して正規化
         return (this.s0 >>> 0) / 4294967296;
     }
 
     /**
-     * 指定された範囲の整数を返す (min以上 max以下)
+     * 指定された範囲の整数を返す
+     * @param {number} min - 最小値 (含む)
+     * @param {number} max - 最大値 (含む)
+     * @returns {number} min <= n <= max の整数
      */
     nextInt(min, max) {
         return Math.floor(this.next() * (max - min + 1)) + min;
     }
 }
 
-// グローバルなPRNGインスタンス
+// グローバルなPRNGインスタンス（アプリケーション全体で共有）
 export let globalRandom = new SeededRandom();
 
 /**
  * グローバルPRNGを初期化する
- * @param {number|string} seed 
+ * 
+ * 仕様:
+ * アプリケーション起動時や、新しいマップ生成時に呼び出し、
+ * 全体で使用する乱数系列をリセットする。これにより処理の再現性を確保する。
+ * 
+ * @param {number|string} seed - 新しいシード値
  */
 export function initGlobalRandom(seed) {
     globalRandom = new SeededRandom(seed);

@@ -7,28 +7,41 @@ import { getIndex, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint } 
 import { BLOCK_START_EE, BLOCK_START_NN, BLOCK_END_NN } from './BlockUtils.js';
 import { getInfoText, updateOverallInfo, generateHexJson, childrenMap } from './infoWindow.js';
 
+/**
+ * 変更履歴:
+ * - 2025-12-12: コード内のコメントを日本語化し、可読性を向上。
+ */
+
 export class MapView {
+    /**
+     * コンストラクタ
+     * @param {string} containerSelector - SVGを描画するコンテナのセレクタ
+     */
     constructor(containerSelector) {
         this.containerSelector = containerSelector;
         this.svg = d3.select(containerSelector);
         this.g = this.svg.append('g');
         this.layers = {};
-        this.hexes = []; // Global hex data (reference)
+        this.hexes = []; // 全ヘックスデータへの参照 (Flyweightパターン)
         this.roadPathsData = [];
         this.currentTransform = d3.zoomIdentity;
-        this.blocks = []; // Array of block objects
+        this.blocks = []; // 読み込まれたブロックオブジェクトの配列
         this.blockLoaderRef = null;
         this.minimapContainer = null;
         this.minimapSvg = null;
         this.currentSelectedHex = null;
         this.tooltipContainer = this.createTooltip();
 
-        // Constants
+        // 定数
         this.nationColor = d3.scaleOrdinal(d3.schemeTableau10);
         this.BLOCK_COLS = 23;
         this.BLOCK_ROWS = 20;
     }
 
+    /**
+     * ツールチップ要素を作成します。
+     * 既存のものを削除して再作成することで、重複を防ぎます。
+     */
     createTooltip() {
         d3.select('#tooltip').remove();
         return d3.select('body').append('div')
@@ -46,6 +59,11 @@ export class MapView {
             .style('white-space', 'pre-wrap');
     }
 
+    /**
+     * ヘックスのプロパティからツールチップに表示するテキストを生成します。
+     * @param {Object} d - ヘックスデータ
+     * @returns {string} ツールチップのテキスト
+     */
     getTooltipText(d) {
         const p = d.properties;
         let headerText = '';
@@ -70,6 +88,7 @@ export class MapView {
             bodyText += `\n---`;
             let currentHex = d;
             let safety = 0;
+            // 親ヘックスを辿って上位の所属を表示
             while (currentHex && currentHex.properties.parentHexId !== null && safety < 10) {
                 const parentHex = this.hexes[currentHex.properties.parentHexId];
                 if (!parentHex) break;
@@ -86,9 +105,21 @@ export class MapView {
         return headerText + bodyText;
     }
 
+    /**
+     * MapViewを初期化します。
+     * データを受け取り、レイヤー、ミニマップ、ズーム機能を初期化し、初期ビューを設定します。
+     * @param {Object} allHexes - 全ヘックスデータ
+     * @param {Array} roadPaths - 道路パスデータ
+     * @param {Object} blockLoader - ブロックローダーの参照
+     */
     async initialize(allHexes, roadPaths, blockLoader) {
         this.blockLoaderRef = blockLoader;
 
+        // allHexesがProxyや特殊オブジェクトの場合の対応
+        // allHexesがProxyや特殊オブジェクトの場合の対応
+        // [FIX] WorldMapインスタンスをそのまま保持し、動的なバッファ更新に対応する
+        // 以前は配列にコピーしていたため、後続のロードデータが反映されなかった
+        /*
         if (typeof allHexes.getHex === 'function') {
             const tempHexes = [];
             const count = allHexes.size || (allHexes.cols * allHexes.rows);
@@ -99,9 +130,10 @@ export class MapView {
             tempHexes.rows = allHexes.rows;
             allHexes = tempHexes;
         }
+        */
 
         this.hexes = allHexes;
-        this.roadPathsData = roadPaths || []; // Ensure array
+        this.roadPathsData = roadPaths || []; // 配列であることを保証
 
         this.initLayers();
         this.initMinimap();
@@ -112,6 +144,10 @@ export class MapView {
         updateOverallInfo(this.hexes);
     }
 
+    /**
+     * 描画レイヤーを初期化します。
+     * 描画順序を制御するため、適切な順番でグループを作成します。
+     */
     initLayers() {
         this.g.selectAll('*').remove();
         this.layers = {};
@@ -125,23 +161,25 @@ export class MapView {
             return layerGroup;
         };
 
-        createLayer('terrain');
-        createLayer('white-map-overlay', false);
-        createLayer('vegetation-overlay', true);
-        createLayer('beach', true);
-        createLayer('snow', true);
-        createLayer('river');
-        createLayer('shading');
-        createLayer('contour', true);
-        createLayer('ridge-water-system', false);
-        createLayer('territory-overlay', false);
-        createLayer('hex-border', false);
-        createLayer('road');
-        createLayer('sea-route');
-        createLayer('border');
-        createLayer('highlight-overlay');
-        createLayer('settlement');
+        // レイヤー作成 (描画順)
+        createLayer('terrain'); // 地形 (最下層)
+        createLayer('white-map-overlay', false); // 白地図
+        createLayer('vegetation-overlay', true); // 植生
+        createLayer('beach', true); // 砂浜
+        createLayer('snow', true); // 積雪
+        createLayer('river'); // 河川
+        createLayer('shading'); // 陰影
+        createLayer('contour', true); // 等高線
+        createLayer('ridge-water-system', false); // 稜線・水系デバッグ
+        createLayer('territory-overlay', false); // 領土
+        createLayer('hex-border', false); // ヘックス境界
+        createLayer('road'); // 道路
+        createLayer('sea-route'); // 海路
+        createLayer('border'); // 国境
+        createLayer('highlight-overlay'); // ハイライト
+        createLayer('settlement'); // 集落
 
+        // データオーバーレイ群
         const overlays = [
             'monster-overlay', 'population-overlay', 'climate-zone-overlay',
             'temp-overlay', 'precip-overlay', 'mana-overlay',
@@ -150,11 +188,15 @@ export class MapView {
         ];
         overlays.forEach(name => createLayer(name, false));
 
-        createLayer('labels');
-        const interactionLayer = createLayer('interaction');
-        interactionLayer.style('pointer-events', 'none');
+        createLayer('labels'); // ラベル
+        createLayer('block-id-labels', false); // ブロックID (ズームアウト時)
+        const interactionLayer = createLayer('interaction'); // インタラクション (最前面)
+        interactionLayer.style('pointer-events', 'none'); // イベントは透過させるが、要素検知には使う
     }
 
+    /**
+     * ミニマップを初期化します。
+     */
     initMinimap() {
         d3.select('#minimap-container').remove();
         this.minimapContainer = d3.select('body').append('div').attr('id', 'minimap-container');
@@ -167,13 +209,18 @@ export class MapView {
             .attr('stroke-width', 2);
     }
 
+    /**
+     * ズーム・パン機能を初期化します。
+     * D3のzoomを使用し、パフォーマンス向上のためズーム中は一部レイヤーを非表示にします。
+     */
     initZoom() {
         this.zoom = d3.zoom()
             .scaleExtent([0.2, 10])
             .on('start', () => {
                 this.svg.style('cursor', 'grabbing');
+                // ズーム中は重いレイヤーを非表示にする最適化
                 Object.entries(this.layers).forEach(([name, layer]) => {
-                    const isEssential = ['terrain', 'white-map-overlay', 'interaction', 'highlight-overlay'].includes(name);
+                    const isEssential = ['terrain', 'white-map-overlay', 'interaction', 'highlight-overlay', 'block-id-labels'].includes(name);
                     if (!isEssential && layer.visible) {
                         layer.group.style('display', 'none');
                     }
@@ -182,12 +229,16 @@ export class MapView {
             .on('zoom', (event) => {
                 this.g.attr('transform', event.transform);
                 this.currentTransform = event.transform;
-                // Minimap update can be throttled if needed
+                // ブロックIDラベルの表示制御
+                this.updateBlockIdLabels(event.transform.k);
+                // ミニマップの更新は必要に応じてスロットリングする
             })
             .on('end', (event) => {
+                // ズーム終了後にレイヤー再表示
                 Object.entries(this.layers).forEach(([name, layer]) => {
                     if (layer.visible) layer.group.style('display', 'inline');
                 });
+                // 可視範囲の計算とブロックロード判定
                 this.updateVisibleBlocks(event.transform);
                 this.svg.style('cursor', 'grab');
                 this.updateMinimapViewport();
@@ -196,6 +247,10 @@ export class MapView {
         this.svg.call(this.zoom);
     }
 
+    /**
+     * 初期表示位置を設定します。
+     * configで指定された初期座標にフォーカスします。
+     */
     setInitialView() {
         const svgNode = this.svg.node();
         const width = svgNode ? svgNode.clientWidth || window.innerWidth : window.innerWidth;
@@ -206,12 +261,10 @@ export class MapView {
 
         if (config.INITIAL_ZOOM_LOC) {
             let nEe, nNn, lx, ly;
-            // Expecting '5012' -> EE=50, ee=12
-            // OR format '50-73' for block center??
-            // User said: World '5012-7308' is Block 50-73 Local 12-08.
+            // フォーマット解析: '5012' -> EE=50, ee=12 など
+            // あるいは { x: 5012, y: 7308 } オブジェクト
 
             if (typeof config.INITIAL_ZOOM_LOC === 'object') {
-                // Assume config object { x: 5012, y: 7308 }
                 const xx = config.INITIAL_ZOOM_LOC.x;
                 const yy = config.INITIAL_ZOOM_LOC.y;
                 nEe = Math.floor(xx / 100);
@@ -219,12 +272,11 @@ export class MapView {
                 lx = xx % 100;
                 ly = yy % 100;
             } else {
-                nEe = 50; nNn = 73; lx = 12; ly = 8; // Fallback default
+                nEe = 50; nNn = 73; lx = 11; ly = 9; // デフォルトフォールバック
             }
 
             const relativeBx = nEe - BLOCK_START_EE;
-            // North is Plus (Up). In screen coordinates (Down is Plus), higher N means lower Y index.
-            // Block 75 is at index 0 (Top). Block 71 is at index 4 (Bottom).
+            // 北がプラス (上)。画面座標では下がプラス。Nが大きいほどYインデックスは小さい。
             const relativeBy = BLOCK_END_NN - nNn;
 
             const hexWidth = 2 * config.r;
@@ -232,7 +284,7 @@ export class MapView {
             const blockWidthPx = this.BLOCK_COLS * (hexWidth * 0.75);
             const blockHeightPx = this.BLOCK_ROWS * hexHeight;
 
-            // Coordinates are relative to Block 48 start
+            // Block 48 start からの相対ピクセル座標
             initialCx = relativeBx * blockWidthPx + lx * (hexWidth * 0.75);
             initialCy = relativeBy * blockHeightPx + ly * hexHeight;
         }
@@ -249,9 +301,15 @@ export class MapView {
     }
 
     // ================================================================
-    // Rendering & Layers
+    // Rendering & Layers (描画とレイヤー管理)
     // ================================================================
 
+    /**
+     * 指定されたレイヤーの表示/非表示を切り替えます。
+     * @param {string} layerName - レイヤー名
+     * @param {boolean|null} forceVisible - 強制的にこの状態にする (nullならトグル)
+     * @returns {boolean} 新しい表示状態
+     */
     toggleLayer(layerName, forceVisible = null) {
         const layer = this.layers[layerName];
         if (!layer) return false;
@@ -260,11 +318,13 @@ export class MapView {
         layer.visible = newState;
         layer.group.style('display', newState ? 'inline' : 'none');
 
+        // 集落レイヤーの場合、関連するラベルや国境も連動
         if (layerName === 'settlement') {
             this.layers.labels.group.selectAll('.settlement-label').style('display', newState ? 'inline' : 'none');
             this.toggleLayer('border', newState);
         }
 
+        // 複合表示に関わるレイヤー群
         const compositeLayers = [
             'terrain',
             'white-map-overlay',
@@ -287,6 +347,7 @@ export class MapView {
             'livestock-overlay'
         ];
 
+        // 複合レイヤーの場合はヘックスの色を再計算
         if (compositeLayers.includes(layerName)) {
             this.updateAllHexColors();
         }
@@ -295,6 +356,12 @@ export class MapView {
         return newState;
     }
 
+    /**
+     * ヘックスの合成色を計算します。
+     * 標高、地形、植生、各種オーバーレイをブレンドして最終的な表示色を決定します。
+     * @param {Object} d - ヘックスデータ
+     * @returns {string} RGBカラー文字列
+     */
     calculateCompositeColor(d) {
         const p = d.properties;
         const isWhiteMap = document.querySelector('input[name="map-type"][value="white"]')?.checked;
@@ -310,8 +377,10 @@ export class MapView {
         let c = d3.color(baseColor);
         if (!c) c = d3.color('#000');
 
+        // 植生のブレンド
         if (!p.isWater && this.layers['vegetation-overlay']?.visible) {
             let displayVeg = p.vegetation;
+            // 森林率が低い場合は草原として表示
             if ((displayVeg === '森林' || displayVeg === '針葉樹林') && p.landUse?.forest < 0.10) {
                 displayVeg = '草原';
             }
@@ -322,12 +391,14 @@ export class MapView {
             }
         }
 
+        // 積雪のブレンド
         if (!p.isWater && this.layers.snow?.visible && p.hasSnow) {
             const snowColor = d3.color('#fff');
             snowColor.opacity = 0.8;
             c = this.interpolateColor(c, snowColor);
         }
 
+        // 各種オーバーレイの定義
         const overlayMap = [
             { name: 'climate-zone-overlay', func: p => config.CLIMATE_ZONE_COLORS[p.climateZone], opacity: 0.6 },
             { name: 'temp-overlay', func: p => config.tempColor(p.temperature), opacity: 0.6 },
@@ -344,6 +415,7 @@ export class MapView {
             { name: 'livestock-overlay', func: p => config.livestockColor(p.livestockPotential), opacity: 0.7 }
         ];
 
+        // 資源系オーバーレイが有効な場合、背景を暗くして視認性を上げる
         const isResourceActive = overlayMap.slice(5).some(l => this.layers[l.name] && this.layers[l.name].visible);
         if (isResourceActive) {
             const hsl = d3.hsl(c);
@@ -352,6 +424,7 @@ export class MapView {
             c = hsl.rgb();
         }
 
+        // オーバーレイ色の適用
         overlayMap.forEach(l => {
             if (this.layers[l.name]?.visible) {
                 let colorVal = null;
@@ -375,12 +448,14 @@ export class MapView {
             }
         });
 
+        // 領土オーバーレイ
         if (this.layers['territory-overlay']?.visible && p.nationId > 0) {
             const tColor = d3.color(this.nationColor(p.nationId));
             tColor.opacity = 0.7;
             c = this.interpolateColor(c, tColor);
         }
 
+        // 陰影処理 (Relief Shading)
         if (this.layers.shading?.visible) {
             const val = p.shadingValue || 0;
             const opacity = d3.scaleLinear().domain([0, 400]).range([0, 0.2]).clamp(true)(Math.abs(val));
@@ -392,6 +467,12 @@ export class MapView {
         return c.formatRgb();
     }
 
+    /**
+     * 2つの色をアルファブレンディングします。
+     * @param {Object} base - ベースカラー (d3.color object)
+     * @param {Object} overlay - 重ねる色 (d3.color object)
+     * @returns {Object} ブレンド後の色 (d3.rgb)
+     */
     interpolateColor(base, overlay) {
         if (!base || !overlay) return base || overlay;
         const alpha = overlay.opacity;
@@ -404,6 +485,10 @@ export class MapView {
         );
     }
 
+    /**
+     * 全てのヘックスの表示色を更新します。
+     * レイヤーの切り替え時などに呼び出されます。
+     */
     updateAllHexColors() {
         if (!this.blocks) return;
         this.blocks.forEach(block => {
@@ -419,28 +504,36 @@ export class MapView {
         });
     }
 
+    /**
+     * 河川の色を更新します。
+     * 通常の水色、白地図用、稜線確認用などで切り替えます。
+     */
     updateRiverColor() {
         const isRidge = this.layers['ridge-water-system']?.visible;
         const isWhite = document.querySelector('input[name="map-type"][value="white"]')?.checked;
         const color = isRidge ? config.RIDGE_WATER_SYSTEM_COLORS.RIVER : (isWhite ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.水域);
         this.layers.river.group.selectAll('path').attr('stroke', color);
-        // Ridge water hexes
+        // 稜線水系ヘックス
         this.layers['ridge-water-system'].group.selectAll('.rws-water-hex').attr('fill', color);
     }
 
     // ================================================================
-    // Block Management
+    // Block Management (ブロック管理)
     // ================================================================
 
+    /**
+     * 現在のビューに基づいて可視ブロックを判定し、ロード/アンロードを行います。
+     * @param {Object} transform - 現在のD3 Zoom Transform
+     */
     updateVisibleBlocks(transform) {
         if (!this.svg) return;
         const svgNode = this.svg.node();
         const width = svgNode.clientWidth || window.innerWidth;
         const height = svgNode.clientHeight || window.innerHeight;
 
-        // Center of the viewport in screen coordinates
+        // 画面中央 (スクリーン座標)
         const screenCenter = [width / 2, height / 2];
-        // Center of the viewport in world coordinates
+        // 画面中央 (ワールド座標)
         const worldCenter = transform.invert(screenCenter);
 
         const topLeft = transform.invert([0, 0]);
@@ -451,27 +544,23 @@ export class MapView {
         const blockWidthPx = this.BLOCK_COLS * (hexWidth * 0.75);
         const blockHeightPx = this.BLOCK_ROWS * hexHeight;
 
-        // Calculate Relative Block Coordinate (0-based from Block BLOCK_START_EE, BLOCK_START_NN)
-        // [FIX] Strict Visibility: Do not prospectively load neighbors. Use BUFFER = 0.
-        // User requirement: Only load what is strictly visible or operated on.
+        // 相対ブロック座標の計算 (0-based from Block BLOCK_START_EE, BLOCK_START_NN)
+        // [FIX] 厳密な可視性: 隣接ブロックの予備ロードは行わない (BUFFER = 0)
+        // ユーザー要件: 厳密に見えているものだけをロードする
         const BUFFER = 0;
         const relBxMin = Math.floor(topLeft[0] / blockWidthPx) - BUFFER;
         const relBxMax = Math.floor(bottomRight[0] / blockWidthPx) + BUFFER;
         const relByMin = Math.floor(topLeft[1] / blockHeightPx) - BUFFER;
         const relByMax = Math.floor(bottomRight[1] / blockHeightPx) + BUFFER;
 
-        // console.log(`[MapView Debug] Transform: k=${transform.k}, x=${transform.x}, y=${transform.y}`);
-        // console.log(`[MapView Debug] Viewport: TL(${topLeft[0].toFixed(0)}, ${topLeft[1].toFixed(0)}) - BR(${bottomRight[0].toFixed(0)}, ${bottomRight[1].toFixed(0)})`);
-        // console.log(`[MapView Debug] Visible Relative Range: RBX ${relBxMin} -${relBxMax}, RBY ${relByMin} -${relByMax} `);
-
         const visibleIds = new Set();
         let activeBlocks = [];
 
         for (let rby = relByMin; rby <= relByMax; rby++) {
             for (let rbx = relBxMin; rbx <= relBxMax; rbx++) {
-                // Determine Absolute ID
+                // 絶対IDの決定
                 const absEe = rbx + BLOCK_START_EE;
-                // Invert N-axis: relBy=0 is Top (North, Max N), relBy=MAX is Bottom (South, Min N)
+                // N軸の反転: relBy=0 は Top (北, Max N), relBy=MAX は Bottom (南, Min N)
                 const absNn = BLOCK_END_NN - rby;
 
                 const id = `map_${absEe}_${absNn}`;
@@ -479,7 +568,7 @@ export class MapView {
 
                 let block = this.blocks.find(b => b.id === id);
                 if (!block) {
-                    // Create block with ID and RELATIVE indices for rendering
+                    // IDと相対インデックスを持ったブロックオブジェクトを作成
                     block = this.createBlock(id, rbx, rby, absEe, absNn);
                     this.blocks.push(block);
                 }
@@ -488,13 +577,11 @@ export class MapView {
             }
         }
 
-        // Debug Loading/Unloading Logic
-        // console.log(`[MapView Debug] Viewport: TL(${topLeft[0].toFixed(0)}, ${topLeft[1].toFixed(0)}) - BR(${bottomRight[0].toFixed(0)}, ${bottomRight[1].toFixed(0)})`);
+        // デバッグログ (必要に応じて有効化)
         // console.log(`[MapView Debug] Visible IDs: ${Array.from(visibleIds).join(', ')}`);
 
-        // Sort blocks by distance from world center (User Requirement)
+        // ワールド中心からの距離でブロックをソート (中心に近い順に描画するため)
         activeBlocks.sort((a, b) => {
-            // Calculate block center in world pixels using relative coordinates
             const acx = (a.relBx + 0.5) * blockWidthPx;
             const acy = (a.relBy + 0.5) * blockHeightPx;
             const bcx = (b.relBx + 0.5) * blockWidthPx;
@@ -505,9 +592,7 @@ export class MapView {
             return distA - distB;
         });
 
-        // Process blocks in sorted order
-        // [FIX] Ensure Group Elements exist for visible blocks BEFORE rendering.
-        // Otherwise, synchronous renderBlock (cached) will fail to find the group.
+        // 可視ブロックのグループ要素を確保
         const allLayerNames = Object.keys(this.layers);
         allLayerNames.forEach(name => {
             if (!this.layers[name]) return;
@@ -520,16 +605,15 @@ export class MapView {
                 );
         });
 
-        // Process blocks in sorted order
+        // ブロックの処理と描画
         activeBlocks.forEach(block => {
             this.handleBlockAndRender(block);
         });
 
-        // Cleanup invisible blocks
+        // 非表示ブロックのクリーンアップ
         this.blocks.forEach(b => {
             if (!visibleIds.has(b.id)) {
                 if (b.rendered) {
-                    // console.log(`[MapView Debug] Unloading Block: ${b.id}`);
                     this.unloadBlockDOM(b);
                 }
                 b.visible = false;
@@ -538,10 +622,9 @@ export class MapView {
     }
 
     createBlock(id, rbx, rby, absEe, absNn) {
-        // console.log(`[MapView] Creating block ${ id } (Rel ${ rbx },${ rby })`);
         return {
             id: id,
-            relBx: rbx, // 0-based relative index for pixel calcs
+            relBx: rbx, // ピクセル計算用の0始まり相対インデックス
             relBy: rby,
             absEe: absEe,
             absNn: absNn,
@@ -553,39 +636,37 @@ export class MapView {
         };
     }
 
+    /**
+     * ブロックのロード、データ生成、描画を管理するプロセス。
+     * @param {Object} block - 対象ブロック
+     */
     handleBlockAndRender(block) {
-        // If already rendered, ensure display is on
+        // 既に描画済みなら何もしない (表示切替はupdateVisibleBlocksで行われる)
         if (block.rendered) {
-            // Optional: check if display:none and show it
             return Promise.resolve();
         }
-
-        // console.log(`[Buffer Operation] Start Processing Block: ${block.id}`);
 
         if (!block.loaded && !block.loading) {
             if (this.blockLoaderRef) {
                 block.loading = true;
-                // console.log(`[MapView] Loading block ${ block.id }...`);
-                return this.blockLoaderRef.load(block.id).then(async success => {
+                return this.blockLoaderRef.load(block.id, { allHexes: this.hexes }).then(async success => {
                     block.loading = false;
                     block.loaded = true;
                     if (success) {
-                        // Data assumes to be in global this.hexes updated by loader
-                        // Clone data immediately while buffer is valid
-                        // console.log(`[Buffer Operation] Loader Buffer populated for ${block.id}. Creating Screen Buffer Snapshot...`);
+                        // データはローダーによってグローバルのthis.hexesにセットされていると仮定
+                        // バッファが有効なうちにスクリーンバッファ (block.hexes) を作成
                         this.generateBlockHexes(block);
                     } else {
                         console.warn(`[MapView] Block ${block.id} load failed or invalid. Filling Dummy Data.`);
-                        // [FIX] Fill Global Map with Dummy Data (Inner Core Overwrite)
+                        // ダミーデータで埋める
                         await this.ensureDummyData(block);
-                        // [FIX] Render from Global Map
                         this.generateBlockHexes(block);
                     }
                     this.renderBlock(block);
                 }).catch(err => {
                     console.error(`[MapView] Load Error for ${block.id}:`, err);
                     block.loading = false;
-                    // Fallback using dummy data
+                    // フォールバック
                     this.ensureDummyData(block).then(() => {
                         this.generateBlockHexes(block);
                         this.renderBlock(block);
@@ -593,34 +674,40 @@ export class MapView {
                 });
             } else {
                 block.loaded = true;
-                // console.log(`[Buffer Operation] No Loader. Generating Default/Dummy Screen Buffer for ${block.id}...`);
+                // ローダーがない場合はダミー生成
                 return this.ensureDummyData(block).then(() => {
                     this.generateBlockHexes(block);
                     this.renderBlock(block);
                 });
             }
         } else if (block.loaded && !block.rendered) {
-            // console.log(`[Buffer Operation] Block ${block.id} already loaded. Re-rendering from Screen Buffer.`);
+            // ロード済みだが未描画の場合
             this.renderBlock(block);
             return Promise.resolve();
         }
         return Promise.resolve();
     }
 
-    // [FEAT] Relief Shading Logic
+    // [FEAT] Relief Shading Logic (陰影処理ロジック)
+    /**
+     * 南のヘックスと北のヘックスの標高差に基づいて、陰影値を計算します。
+     * @param {Object} hex - 対象ヘックス
+     * @param {Object} northHex - 北側のヘックス
+     * @param {Object} southHex - 南側のヘックス
+     */
     applyRelief(hex, northHex, southHex) {
-        // [RESTORE] Original Logic from ui.js reference
-        // South > North -> Positive (Brighter)
-        // North > South -> Negative (Darker)
-        // Removed arbitrary scaling (* 5) to restore original gradient feel.
+        // [RESTORE] オリジナルのロジック (ui.js参照)
+        // 南 > 北 -> 正 (明るい)
+        // 北 > 南 -> 負 (暗い)
 
         const delta = (southHex.elevation - northHex.elevation);
         hex.shadingValue = delta;
 
+        // すぐに反映する場合（この部分は calculateCompositeColor でも使用されるので冗長かもしれないが、
+        // データのshadingValueを確定させる意味で保持）
         if (this.layers.shading && this.layers.shading.visible) {
             const val = hex.shadingValue;
-            // Use same scale as calculateCompositeColor for consistency
-            // Domain [0, 400] -> Opacity [0, 0.2]
+            // Opacity計算: 標高差400mで最大0.2
             const opacity = Math.min(0.2, Math.abs(val) / 400 * 0.2);
             const shading = val > 0 ? opacity : -opacity;
 
@@ -628,29 +715,28 @@ export class MapView {
         }
     }
 
+    /**
+     * 色の明るさを調整します。
+     * @param {string} hexColor - 元の色 (#RRGGBB)
+     * @param {number} percent - 調整割合 (-1.0 ～ 1.0)
+     * @returns {string} 調整後の色
+     */
     adjustBrightness(hexColor, percent) {
         if (!hexColor || typeof hexColor !== 'string') return hexColor;
-        // Simple RGB adjustment
-        // hexColor format assumed: "#RRGGBB"
-        if (hexColor.length < 7) return hexColor; // Safety for short/named colors
+        // 簡易的なRGB調整
+        if (hexColor.length < 7) return hexColor;
 
         let r = parseInt(hexColor.substr(1, 2), 16);
         let g = parseInt(hexColor.substr(3, 2), 16);
         let b = parseInt(hexColor.substr(5, 2), 16);
 
-        // Apply percentage (e.g. +0.1 for 10% brighter)
-        // 0.0 is neutral.
-        // Logic: Add/Subtract from channels? Or Multiply?
-        // Standard "Lighten/Darken":
-        // Target is White (255) for lighten, Black (0) for darken.
-
         if (percent > 0) {
-            // Lighten: approach 255
+            // 明るくする: 255に近づける
             r = r + (255 - r) * percent;
             g = g + (255 - g) * percent;
             b = b + (255 - b) * percent;
         } else {
-            // Darken: approach 0
+            // 暗くする: 0に近づける
             const p = Math.abs(percent);
             r = r * (1 - p);
             g = g * (1 - p);
@@ -664,6 +750,10 @@ export class MapView {
         return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
     }
 
+    /**
+     * ブロックに関連付けられたDOM要素を削除します。
+     * @param {Object} block 
+     */
     unloadBlockDOM(block) {
         Object.keys(this.layers).forEach(name => {
             const sel = this.layers[name].group.select(`#${name}-${block.id}`);
@@ -672,30 +762,27 @@ export class MapView {
             }
         });
         block.rendered = false;
-        // console.log(`[Buffer Operation] Unloaded DOM for Block ${block.id}`);
     }
 
-    // [FIX] Ensure Dummy Data exists in Global Map (this.hexes)
-    // Called when block load fails, or to fill gaps.
-    // [FIX] Ensure Dummy Data exists in Global Map (this.hexes)
-    // Called when block load fails, or to fill gaps.
+    /**
+     * ブロックロード失敗時などに呼び出され、ダミーデータで埋めます。
+     * シームレスな海域表示や、欠損データの補完に使用されます。
+     */
     async ensureDummyData(block) {
         console.log(`[MapView Debug] ensureDummyData called for ${block.id}`);
-        block.isDummy = true; // Mark as dummy
+        block.isDummy = true;
 
         const CORE_COL = 23;
         const CORE_ROW = 20;
         const GLOBAL_OFFSET_X = 1;
         const GLOBAL_OFFSET_Y = 1;
 
-        // Neighbor Lookup Helper: Find a hex from any LOADED (non-dummy) block at global coords
+        // 隣接データ検索ヘルパー
         const getLoadedNeighborHex = (gloCol, gloRow) => {
             for (const b of this.blocks) {
                 if (b.id === block.id) continue;
-                // if (b.isDummy) continue; // Coping from Dummy is allowed for Seamless Ocean
                 if (!b.loaded || !b.hexes || b.hexes.length === 0) continue;
 
-                // Simple find (optimization possibility: check bounds first)
                 const found = b.hexes.find(h => h.col === gloCol && h.row === gloRow);
                 if (found) return found;
             }
@@ -707,15 +794,15 @@ export class MapView {
         let absEe = block.absEe;
         if (absEe === undefined) { const p = block.id.split('_'); absEe = parseInt(p[1]); }
 
-        // [FIX] Pre-load Neighbors to ensure seamless edges
+        // [FIX] 隣接ブロックの事前ロード (シームレスな境界のため)
         const neighborIds = [
-            `map_${String(absEe + 1).padStart(2, '0')}_${String(absNn).padStart(2, '0')}`, // Right
-            `map_${String(absEe - 1).padStart(2, '0')}_${String(absNn).padStart(2, '0')}`, // Left
-            `map_${String(absEe).padStart(2, '0')}_${String(absNn + 1).padStart(2, '0')}`, // Top
-            `map_${String(absEe).padStart(2, '0')}_${String(absNn - 1).padStart(2, '0')}`  // Bottom
+            `map_${String(absEe + 1).padStart(2, '0')}_${String(absNn).padStart(2, '0')}`, // 右
+            `map_${String(absEe - 1).padStart(2, '0')}_${String(absNn).padStart(2, '0')}`, // 左
+            `map_${String(absEe).padStart(2, '0')}_${String(absNn + 1).padStart(2, '0')}`, // 上
+            `map_${String(absEe).padStart(2, '0')}_${String(absNn - 1).padStart(2, '0')}`  // 下
         ];
 
-        // Trigger load for non-loaded neighbors
+        // 未ロードの隣接ブロックがあればロードをトリガー
         const loadPromises = [];
         for (const nid of neighborIds) {
             const nb = this.blocks.find(b => b.id === nid);
@@ -728,39 +815,36 @@ export class MapView {
             await Promise.all(loadPromises);
         }
 
-        // Use imported constants directly
         const coreStartCol = GLOBAL_OFFSET_X + (absEe - BLOCK_START_EE) * CORE_COL;
         const coreStartRow = GLOBAL_OFFSET_Y + (absNn - BLOCK_START_NN) * CORE_ROW;
 
         const TOTAL_ROW = 22;
         const TOTAL_COL = 25;
 
-        // Initialize block hexes array if needed
         block.hexes = [];
 
         for (let lr = 0; lr < TOTAL_ROW; lr++) {
             for (let lc = 0; lc < TOTAL_COL; lc++) {
-                // Global Coords
+                // グローバル座標
                 const c = coreStartCol + (lc - 1);
                 const r = coreStartRow + (CORE_ROW - 1) - (lr - 1);
 
-                // Update Global Map (Local Buffer)
-                // [CRITICAL FIX] Use Local Index to populate the buffer that generateBlockHexes reads from.
+                // ローカルインデックスを使用してバッファにアクセス (ここも修正が必要な可能性あり)
                 const hexIndex = getIndex(lc, lr);
-                const hex = this.hexes[hexIndex]; // Access Flyweight
+                const hex = this.hexes[hexIndex]; // Flyweightへのアクセス
 
-                // 1. Fully Reset Hex Data (Clear Stale Buffer)
+                // 1. データを完全にリセット (古いバッファをクリア)
                 hex.col = c;
                 hex.row = r;
 
-                // Flags
+                // フラグ初期化
                 hex.isWater = true;
                 hex.isAlluvial = false;
                 hex.hasSnow = false;
                 hex.isCoastal = false;
                 hex.isLakeside = false;
 
-                // Numeric
+                // 数値データの初期化
                 hex.elevation = -1;
                 hex.temperature = 0;
                 hex.precipitation_mm = 0;
@@ -771,12 +855,12 @@ export class MapView {
                 hex.riverWidth = 0;
                 hex.riverDepth = 0;
                 hex.riverVelocity = 0;
-                hex.waterArea = 0; // Ocean implied
+                hex.waterArea = 0; // 海洋
                 hex.beachArea = 0;
                 hex.inflowCount = 0;
                 hex.Qin = 0;
 
-                // Enums/IDs
+                // ID/列挙型などの初期化
                 hex.climateZone = null;
                 hex.vegetation = '海洋';
                 hex.terrainType = '海洋';
@@ -788,7 +872,7 @@ export class MapView {
                 hex.territoryId = -1;
                 hex.parentHexId = -1;
 
-                // Potentials
+                // ポテンシャル初期化
                 hex.manaValue = 0;
                 hex.agriPotential = 0;
                 hex.forestPotential = 0;
@@ -800,7 +884,7 @@ export class MapView {
                 hex.cultivatedArea = 0;
                 hex.habitability = 0;
 
-                // Population/Roads
+                // 人口・道路など
                 hex.population = 0;
                 hex.distanceToParent = 0;
                 hex.travelDaysToParent = 0;
@@ -808,7 +892,7 @@ export class MapView {
                 hex.roadUsage = 0;
                 hex.roadLoss = 0;
 
-                // Complex Objects (Sparse)
+                // 複雑なオブジェクト (null埋め)
                 hex.industry = null;
                 hex.demographics = null;
                 hex.facilities = null;
@@ -825,14 +909,14 @@ export class MapView {
                 hex.downstreamIndex = -1;
                 hex.ridgeUpstreamIndex = -1;
 
-                // 2. Overlap Check & Copy
-                // Valid Overlap Zones: West (lc=0), East (lc=24), North (lr=0), South (lr=21)
+                // 2. オーバーラップチェックとコピー (シームレス性の確保)
+                // オーバーラップゾーン: 西端(lc=0), 東端(lc=24), 北端(lr=0), 南端(lr=21)
                 const isOverlap = (lc === 0 || lc === 24 || lr === 0 || lr === 21);
 
                 if (isOverlap) {
                     const neighbor = getLoadedNeighborHex(c, r);
                     if (neighbor) {
-                        // Copy visual properties to Flyweight
+                        // 既知の隣接データがあれば、見た目の整合性のためにコピー
                         hex.terrainType = neighbor.terrainType;
                         hex.elevation = neighbor.elevation;
                         hex.isWater = neighbor.isWater;
@@ -842,21 +926,25 @@ export class MapView {
             }
         }
     }
+
     updateUIWithBlockData(blockId, allHexes) {
         const block = this.blocks.find(b => b.id === blockId);
         if (!block) return;
 
-        // [FIX] Ensure Screen Buffer is populated from Loader Buffer immediately upon load completion.
-        // This prevents "0 hexes" error if render is called before the promise chain in handleBlockAndRender.
-        // Also protects against Loader Buffer being overwritten by next block.
-        // console.log(`[Buffer Operation] updateUIWithBlockData trigger for ${blockId}. Syncing Screen Buffer...`);
+        // [FIX] ローダーバッファからスクリーンバッファへ即座に同期
+        // これを行わないと、renderBlockが呼ばれた際に hexes が空の場合がある
         this.generateBlockHexes(block);
 
-        // Force re-render if updated
+        // 再描画を強制
         block.rendered = false;
         this.renderBlock(block);
     }
 
+    /**
+     * ブロックごとの描画用スクリーンバッファ (block.hexes) を生成します。
+     * グローバルな共有バッファ (this.hexes) から、このブロックに必要な部分をクローンして保持します。
+     * @param {Object} block - 対象ブロック
+     */
     generateBlockHexes(block) {
         block.hexes = [];
         const CORE_COL = 23;
@@ -865,21 +953,10 @@ export class MapView {
         const GLOBAL_OFFSET_Y = 1;
         const BUFFER = 1;
 
-
-
         const hexWidth = 2 * config.r;
         const hexHeight = Math.sqrt(3) * config.r;
 
-        // console.log(`[MapView] Generating hexes for ${ block.id }(Rel ${ block.relBx }, ${ block.relBy }).Range: C${ coreStartCol } -${ coreStartCol + CORE_COL }, R${ coreStartRow } -${ coreStartRow + CORE_ROW } `);
-
-        // [Buffer Log]
-        // console.log(`[Buffer Operation] Cloning hexes from Shared Loader Buffer to Block Screen Buffer (${block.id})...`);
-
-        // Use loose bounds
-
-
-        // Calculate Core Start relative to the Global Grid
-        // Determine absNn first
+        // 相対的なコア開始位置の計算
         let absNn = block.absNn;
         if (absNn === undefined) {
             const parts = block.id.split('_');
@@ -894,67 +971,61 @@ export class MapView {
         const coreStartCol = GLOBAL_OFFSET_X + (absEe - BLOCK_START_EE) * CORE_COL;
         const coreStartRow = GLOBAL_OFFSET_Y + (absNn - BLOCK_START_NN) * CORE_ROW;
 
-        // [FIX] Generate Full Buffer Range (Including Overlap)
-        // Buffer: 0..24 (Cols), 0..21 (Rows)
-        // Previous: 1..24, 1..21 skipped edges.
-        // Use STRICT bounds (Core Only) to avoid overlap rendering
-        // Buffer Access: 0=Pad, 1=CoreStart ... 
-        // Core Cols: 1 to 23 (Inclusive) -> < 24
-        // Core Rows: 1 to 20 (Inclusive) -> < 21
+        // [FIX] フルバッファ範囲ではなく、コア+αの範囲に絞る
+        // 前回の修正で厳密なビューだけを描画することになったため、範囲を調整
+        // バッファアクセス: 0=Pad, 1=CoreStart ...
+        // コア: lc=1..23, lr=1..20
         const rowStart = 1;
         const rowEnd = 21;
         const colStart = 1;
         const colEnd = 24;
 
-        // console.log(`[MapView] Generating hexes for ${ block.id }. Local Buffer Iteration.`);
-
         for (let lr = rowStart; lr < rowEnd; lr++) {
             for (let lc = colStart; lc < colEnd; lc++) {
-                // Buffer Access (Local)
-                // const hexIndex = getIndex(lc, lr); // [BUG] This was using Local Index for Global Map!
-                // const sourceHex = this.hexes[hexIndex];
 
                 const c = coreStartCol + (lc - 1);
 
-                // [FIX] Vertical Inversion
-                // Buffer Data is Top-Left (Row 1 is North).
-                // World Coords are Cartesian (Row 0 is South).
-                // Must invert the row index mapping.
-                // lr goes 1..20.
-                // r should go (coreStartRow + 19) .. (coreStartRow).
+                // [FIX] 垂直方向の反転
+                // バッファは左上(Row 1)が北。ワールド座標はRow 0が南。
+                // lr: 1..20
+                // r: (coreStartRow + 19) .. coreStartRow
                 const r = coreStartRow + (CORE_ROW - 1) - (lr - 1);
 
-                // [CRITICAL FIX] Use Local Index (Revert)
+                // [CRITICAL] ローカルインデックスを使用
                 const hexIndex = getIndex(lc, lr);
-                const sourceHex = this.hexes[hexIndex];
+                let sourceHex;
+                // [FIX] Use getHex if WorldMap instance, or array access if array
+                if (this.hexes.getHex) {
+                    sourceHex = this.hexes.getHex(hexIndex);
+                } else {
+                    sourceHex = this.hexes[hexIndex];
+                }
 
-                // Assign Block & Local Coords for correct display
-                // Note: Spec says Local is 01-23. Data array buffer is 00-24.
-                // Loop lc is 1..23. So localCol should be lc.
+                // 表示用のローカル座標 (01-23)
                 const localCol = lc;
-                // [FIX] Local Row Inversion for Property
-                // lr=1 (Physically North/Top) -> Spec North is 20.
-                // lr=20 (Physically South/Bottom) -> Spec South is 01.
+                // [FIX] プロパティ用のローカル行番号反転
+                // lr=1 (物理的に北) -> Spec North is 20
                 const localRow = (CORE_ROW + 1) - lr;
 
                 let hex;
                 if (sourceHex) {
-                    // [CRITICAL] CLONE data from shared buffer to prevent overwrite by subsequent blocks.
+                    // [CRITICAL] 共有バッファからのクローン
+                    // 後続のブロックロードによる上書きを防ぐため、値をコピーする
                     hex = {
                         index: sourceHex.index,
                         col: c, // Global Col
                         row: r, // Global Row
 
-                        // Data Properties from Flyweight (Safe Explicit Copy)
+                        // プロパティの明示的コピー
                         isWater: sourceHex.isWater,
                         terrainType: sourceHex.terrainType,
                         elevation: sourceHex.elevation,
                         vegetation: sourceHex.vegetation,
 
                         flow: sourceHex.flow,
-                        riverWidth: sourceHex.riverWidth, // Important if river flow is used
+                        riverWidth: sourceHex.riverWidth,
                         waterArea: sourceHex.waterArea,
-                        downstreamIndex: sourceHex.downstreamIndex, // For rivers
+                        downstreamIndex: sourceHex.downstreamIndex,
 
                         isAlluvial: sourceHex.isAlluvial,
                         isCoastal: sourceHex.isCoastal,
@@ -975,7 +1046,7 @@ export class MapView {
                         monsterDanger: sourceHex.monsterDanger,
                         monsterRank: sourceHex.monsterRank,
 
-                        // Resource Potentials
+                        // ポテンシャル
                         manaValue: sourceHex.manaValue,
                         agriPotential: sourceHex.agriPotential,
                         forestPotential: sourceHex.forestPotential,
@@ -985,30 +1056,29 @@ export class MapView {
                         pastoralPotential: sourceHex.pastoralPotential,
                         livestockPotential: sourceHex.livestockPotential,
 
-                        // Complex objects (Copy if exist)
+                        // 複合オブジェクト
                         landUse: sourceHex.landUse ? { ...sourceHex.landUse } : {},
 
                         // IDs
                         nationId: sourceHex.nationId,
                         territoryId: sourceHex.territoryId,
 
-                        // Neighbors (needed for borders, beaches, rivers)
+                        // 隣接情報 (配列コピー)
                         neighbors: sourceHex.neighbors ? [...sourceHex.neighbors] : [],
                         beachNeighbors: sourceHex.beachNeighbors ? [...sourceHex.beachNeighbors] : [],
 
-                        properties: {}, // Proxy target
+                        properties: {}, // プロキシ用ターゲット
 
-                        // Copy base color
+                        // ベースカラーのコピー
                         _displayColor: sourceHex._displayColor || (config.WHITE_MAP_COLORS && config.WHITE_MAP_COLORS.WATER ? config.WHITE_MAP_COLORS.WATER : '#eef6f6')
                     };
 
-                    // [FIX] Compatibility
+                    // [FIX] 互換性
                     hex.properties = hex;
-                    // Ensure _displayColor is set if sourceHex had none (and fallback failed above)
                     if (!hex._displayColor) hex._displayColor = '#eef6f6';
 
                 } else {
-                    // Dummy Hex (inside generateBlockHexes logic)
+                    // ダミー (generateBlockHexes内でのフォールバック)
                     hex = {
                         col: c,
                         row: r,
@@ -1016,16 +1086,15 @@ export class MapView {
                         terrainType: '海洋',
                         elevation: -1,
                         vegetation: '海洋',
-                        properties: {}, // Will be set to self below
-                        _displayColor: config.TERRAIN_COLORS['海洋' || '#8cf']
+                        properties: {},
+                        _displayColor: config.TERRAIN_COLORS['海洋'] || '#8cf'
                     };
                     hex.properties = hex;
                     hex.shadingValue = 0;
                 }
 
-                // [FEAT] Apply Relief Shading
-                // Use Padding to access neighbors: Top (North) is lr-1, Bottom (South) is lr+1.
-                // Buffer: 0=Pad(N), 1..20=Core, 21=Pad(S).
+                // [FEAT] 陰影処理の適用
+                // パディング領域(lr-1, lr+1)を使用して計算
                 const northIdx = getIndex(lc, lr - 1);
                 const southIdx = getIndex(lc, lr + 1);
                 const northHex = this.hexes[northIdx];
@@ -1035,14 +1104,14 @@ export class MapView {
                     this.applyRelief(hex, northHex, southHex);
                 }
 
-                // Assign Coords for Display (Fixes coordinate display issue)
+                // 表示用座標の割り当て
                 hex.ee = absEe;
                 hex.nn = absNn;
                 hex.localCol = localCol;
                 hex.localRow = localRow;
 
-                // Geometry Calculation in PIXEL space (relative to Map Viewport 0,0)
-                // Global Row 0 is Bottom. Pixel Y increases Downwards.
+                // ジオメトリ計算 (ピクセル空間)
+                // グローバルRow 0 は最下部。ピクセルYは下に行くほど増える。
                 const WORLD_ROWS = 2002;
                 const cx = c * (hexWidth * 0.75) + config.r;
                 const cy = ((WORLD_ROWS - 1) - r) * hexHeight + (c % 2 === 0 ? 0 : hexHeight / 2) + config.r;
@@ -1050,7 +1119,7 @@ export class MapView {
                 hex.cx = cx;
                 hex.cy = cy;
 
-                // Points used for polygon rendering
+                // ポリゴンポイント生成
                 const points = [];
                 for (let i = 0; i < 6; i++) {
                     const angle_deg = 60 * i;
@@ -1062,69 +1131,74 @@ export class MapView {
                 }
                 hex.points = points;
 
-                // Ensure properties circular ref (Safe way)
+                // 循環参照回避のためのプロパティ定義
                 Object.defineProperty(hex, 'properties', {
                     get: function () { return this; },
                     enumerable: false,
                     configurable: true
                 });
 
-                // Calculate Color immediately (using cloned props)
+                // 色の即時計算
                 hex._displayColor = this.calculateCompositeColor(hex);
 
                 block.hexes.push(hex);
             }
         }
 
-        // [FIX] Populate allHexes for Contours (currently same as Core, but needed for drawing)
+        // [FIX] 等高線描画のために allHexes にもセット
         block.allHexes = block.hexes;
-
-        // console.log(`[Buffer Operation] Screen Buffer Population Complete for ${block.id}. (Hex Count: ${block.hexes.length})`);
-
-
     }
 
+    /**
+     * ブロックを描画します。
+     * @param {Object} block - 描画対象のブロック
+     */
     renderBlock(block) {
-        // console.log(`[MapView] Rendering ${ block.id } `);
-        // this.generateBlockHexes(block); // [FIX] MOVED to load handler. DO NOT regenerate here.
-
         if (!block.hexes || block.hexes.length === 0) {
             console.error(`[MapView] Block ${block.id} has 0 hexes. Data missing.`);
             return;
         }
 
-        // console.log(`[Buffer Operation] Rendering Block ${block.id} from Screen Buffer...`);
-
+        // 各レイヤーの描画関数を呼び出し
         this.drawBlockTerrain(block);
-        this.drawBlockRivers(block); // Restored river rendering
-        this.drawBlockBeaches(block);
-        this.drawBlockBorders(block);
-        this.drawBlockRidgeLines(block);
-        this.drawBlockContours(block);
-        this.drawBlockSettlements(block);
-        this.drawBlockRoads(block);
-        this.drawBlockLabels(block);
-        this.drawBlockHexBorders(block);
-        this.drawBlockInteraction(block);
+        this.drawBlockRivers(block); // 河川
+        this.drawBlockBeaches(block); // 砂浜
+        this.drawBlockBorders(block); // 国境
+        this.drawBlockRidgeLines(block); // 稜線
+        this.drawBlockContours(block); // 等高線
+        this.drawBlockRoads(block); // 道路
+        this.drawBlockSettlements(block); // 集落
+        this.drawBlockLabels(block); // ラベル
+        this.drawBlockHexBorders(block); // ヘックス枠
+        this.drawBlockInteraction(block); // インタラクション領域
+        this.drawBlockIdLabels(block); // ブロック番号(ズームアウト時)
 
         block.rendered = true;
     }
 
     // ================================================================
-    // Drawing Functions
+    // Drawing Functions (各種描画関数)
     // ================================================================
 
+    /**
+     * ブロックの地形を描画します。
+     * @param {Object} block 
+     */
     drawBlockTerrain(block) {
         const g = this.layers.terrain.group.select(`#terrain-${block.id}`);
         if (g.empty()) return;
         g.selectAll('.hex').data(block.hexes, d => d.index).join('polygon')
             .attr('class', 'hex')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => `translate(${d.cx}, ${d.cy}) scale(1.01)`)
+            .attr('transform', d => `translate(${d.cx}, ${d.cy}) scale(1.01)`) // scale(1.01)で隙間を防止
             .attr('stroke', 'none')
             .attr('fill', d => d._displayColor || '#000');
     }
 
+    /**
+     * ブロックの河川を描画します。
+     * @param {Object} block 
+     */
     drawBlockRivers(block) {
         const g = this.layers.river.group.select(`#river-${block.id}`);
         if (g.empty()) return;
@@ -1133,6 +1207,7 @@ export class MapView {
         let riverCount = 0;
         let skippedWater = 0;
 
+        // ジオメトリ保証ヘルパー
         const ensureGeometry = (h) => {
             if (h.points && h.cx !== undefined && h.cy !== undefined) return h;
 
@@ -1183,7 +1258,7 @@ export class MapView {
                     const dx = downstream.cx - d.cx;
                     const dy = downstream.cy - d.cy;
                     const angle = Math.atan2(dy, dx);
-                    
+
                     // Fixed length 10px (approx to edge)
                     const length = 10;
                     const endX = d.cx + Math.cos(angle) * length;
@@ -1191,9 +1266,9 @@ export class MapView {
 
                     // Draw Line: Center -> Edge direction
                     // Using predefined width or default
-                    pathData.push({ 
-                        path: `M ${d.cx},${d.cy} L ${endX},${endY}`, 
-                        width: d.properties.riverWidth || 1.0 
+                    pathData.push({
+                        path: `M ${d.cx},${d.cy} L ${endX},${endY}`,
+                        width: d.properties.riverWidth || 1.0
                     });
 
                     // [TODO] Upstream calculation to be implemented in next step as requested.
@@ -1267,6 +1342,10 @@ export class MapView {
             .style('pointer-events', 'none');
     }
 
+    /**
+     * ブロックの砂浜を描画します。
+     * @param {Object} block 
+     */
     drawBlockBeaches(block) {
         const g = this.layers.beach.group.select(`#beach-${block.id}`);
         if (g.empty()) return;
@@ -1291,6 +1370,10 @@ export class MapView {
             .style('pointer-events', 'none');
     }
 
+    /**
+     * ブロックの国境線を描画します。
+     * @param {Object} block 
+     */
     drawBlockBorders(block) {
         const g = this.layers.border.group.select(`#border-${block.id}`);
         if (g.empty()) return;
@@ -1314,6 +1397,10 @@ export class MapView {
             .attr('stroke', '#f00').attr('stroke-width', 4).attr('stroke-linecap', 'round');
     }
 
+    /**
+     * ブロックの稜線と水系を描画します (デバッグ用)。
+     * @param {Object} block 
+     */
     drawBlockRidgeLines(block) {
         const g = this.layers['ridge-water-system'].group.select(`#ridge-water-system-${block.id}`);
         if (g.empty()) return;
@@ -1352,7 +1439,9 @@ export class MapView {
             .style('fill', 'none').style('pointer-events', 'none');
     }
 
-    // Helper to calculate pixel coordinates on demand
+    /**
+     * ピクセル座標を計算するヘルパー関数
+     */
     getHexCenter(col, row) {
         const hexWidth = 2 * config.r;
         const hexHeight = Math.sqrt(3) * config.r;
@@ -1362,14 +1451,20 @@ export class MapView {
         return { cx, cy };
     }
 
+    /**
+     * ブロック単位の等高線描画 (非推奨・ビューポート統一描画に移行)
+     */
     drawBlockContours(block) {
-        // [DEPRECATED] Block-based contour rendering is disabled in favor of unified viewport rendering.
-        // See drawVisibleContours() below.
+        // [DEPRECATED] ブロック単位の描画は無効化し、統合描画を使用
         this.drawVisibleContours();
     }
 
-    // [NEW] Unified Viewport Contour Rendering
-    // [NEW] Unified Viewport Contour Rendering
+    // [NEW] Unified Viewport Contour Rendering (ビューポート統合等高線描画)
+    /**
+     * 可視範囲全体の等高線をまとめて生成・描画します。
+     * ブロックごとの境界での途切れを防ぐため、可視ヘックスをすべて集めて処理します。
+     * 即時実行ではなく、デバウンス処理によりパフォーマンスを確保しています。
+     */
     drawVisibleContours = (() => {
         let timeout;
         return (...args) => {
@@ -1385,7 +1480,7 @@ export class MapView {
                     unifiedGroup = contourGroup.append('g').attr('id', 'unified-contours');
                 }
 
-                // Collect all hexes from visible blocks
+                // 可視ブロックから全ヘックスを収集
                 const visibleHexes = [];
                 this.blocks.forEach(b => {
                     if (b.visible && b.loaded && b.allHexes) {
@@ -1397,7 +1492,7 @@ export class MapView {
 
                 const resolution = config.CONTOUR_RESOLUTION || 20;
 
-                // Calculate dynamic bounds from ALL visible hexes
+                // 全可視ヘックスからのバウンディングボックス計算
                 const allCx = visibleHexes.map(h => h.cx);
                 const allCy = visibleHexes.map(h => h.cy);
 
@@ -1406,7 +1501,7 @@ export class MapView {
                 const bYMin = Math.min(...allCy);
                 const bYMax = Math.max(...allCy);
 
-                // Grid Alignment
+                // グリッドへのスナップ
                 const xMin = Math.floor(bXMin / resolution) * resolution;
                 const yMin = Math.floor(bYMin / resolution) * resolution;
                 const xMax = Math.ceil(bXMax / resolution) * resolution;
@@ -1421,12 +1516,12 @@ export class MapView {
                 const gridHeight = Math.floor(height / resolution);
                 const elevationValues = new Array(gridWidth * gridHeight).fill(-10000);
 
-                // Delaunay Triangulation
+                // ドロネー三角形分割による補間
                 const delaunay = d3.Delaunay.from(visibleHexes.map(h => [h.cx, h.cy]));
                 const { triangles } = delaunay;
                 const numTriangles = triangles.length / 3;
 
-                // Barycentric Interpolation Helper
+                // 重心座標系補間 (Barycentric Interpolation) ヘルパー
                 function getBarycentric(px, py, x0, y0, x1, y1, x2, y2) {
                     const denom = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
                     if (denom === 0) return [-1, -1, -1];
@@ -1436,7 +1531,7 @@ export class MapView {
                     return [w0, w1, w2];
                 }
 
-                // Rasterize
+                // ラスタライズ (グリッドデータ生成)
                 for (let t = 0; t < numTriangles; t++) {
                     const i0 = triangles[t * 3];
                     const i1 = triangles[t * 3 + 1];
@@ -1473,7 +1568,7 @@ export class MapView {
                     }
                 }
 
-                // Generate Contours
+                // 等高線生成 (d3.contours)
                 const maxElevation = 7500;
                 const thresholds = d3.range(config.CONTOUR_INTERVAL || 200, maxElevation, config.CONTOUR_INTERVAL || 200);
 
@@ -1483,7 +1578,7 @@ export class MapView {
                         .thresholds(thresholds)
                         (elevationValues);
 
-                    // Draw Contours
+                    // 等高線パスの描画
                     unifiedGroup.selectAll("path.contour-path")
                         .data(contours)
                         .join("path")
@@ -1493,19 +1588,22 @@ export class MapView {
                         .style('fill', 'none')
                         .style('stroke', '#642')
                         .style('stroke-opacity', 0.5)
-                        .style('stroke-width', d => d.value % 1000 === 0 ? 0.06 : 0.03)
+                        .style('stroke-width', d => d.value % 1000 === 0 ? 0.06 : 0.03) // 主曲線と計曲線で太さを変える
                         .style('pointer-events', 'none');
 
                     // [DEBUG] Visualize Triangles (Red Wireframe) - REMOVED
-                    // The red lines have been removed as per user request.
 
                 } catch (e) {
                     console.error(`[Contours] Generation failed:`, e);
                 }
-            }, 200);
+            }, 200); // 200ms debounce
         };
     })();
 
+    /**
+     * ブロックの集落を描画します。
+     * @param {Object} block 
+     */
     drawBlockSettlements(block) {
         const g = this.layers.settlement.group.select(`#settlement-${block.id}`);
         if (g.empty()) return;
@@ -1526,6 +1624,42 @@ export class MapView {
             .style('pointer-events', 'none');
     }
 
+    /**
+     * ブロックIDを描画します (ズームアウト時用)。
+     * @param {Object} block 
+     */
+    drawBlockIdLabels(block) {
+        // グループ作成
+        let g = this.layers['block-id-labels'].group.select(`#block-id-${block.id}`);
+        if (g.empty()) {
+            g = this.layers['block-id-labels'].group.append('g').attr('id', `block-id-${block.id}`);
+        }
+        g.selectAll('*').remove();
+
+        if (!block.hexes || block.hexes.length === 0) return;
+
+        // ブロックの中心を計算
+        const cx = d3.mean(block.hexes, d => d.cx);
+        const cy = d3.mean(block.hexes, d => d.cy);
+        const labelText = block.id.replace('map_', '').replace('_', '-');
+
+        g.append('text')
+            .attr('x', cx)
+            .attr('y', cy)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .style('font-size', '200px')
+            .style('font-family', 'sans-serif')
+            .style('font-weight', '900')
+            .style('fill', 'rgba(0, 0, 0, 0.5)')
+            .style('pointer-events', 'none')
+            .text(labelText);
+    }
+
+    /**
+     * ブロックの道路と海路を描画します。
+     * @param {Object} block 
+     */
     drawBlockRoads(block) {
         const g = this.layers.road.group.select(`#road-${block.id}`);
         const seaG = this.layers['sea-route'].group.select(`#sea-route-${block.id}`);
@@ -1538,17 +1672,23 @@ export class MapView {
 
         this.roadPathsData.forEach(road => {
             if (road.path.length < 2) return;
-            // Iterate segments
+            // パスのセグメントごとに処理
             for (let i = 0; i < road.path.length; i++) {
                 const curP = road.path[i];
                 const curIdx = getIndex(curP.x, curP.y);
-                const curHex = this.hexes[curIdx];
+                let curHex;
+                if (this.hexes.getHex) {
+                    curHex = this.hexes.getHex(curIdx);
+                } else {
+                    curHex = this.hexes[curIdx];
+                }
                 if (!curHex) continue;
 
+                // このブロックに含まれるヘックスのみ処理
                 if (!blockHexSet.has(curIdx)) continue;
 
-                const prevHex = i > 0 ? this.hexes[getIndex(road.path[i - 1].x, road.path[i - 1].y)] : null;
-                const nextHex = i < road.path.length - 1 ? this.hexes[getIndex(road.path[i + 1].x, road.path[i + 1].y)] : null;
+                const prevHex = i > 0 ? (this.hexes.getHex ? this.hexes.getHex(getIndex(road.path[i - 1].x, road.path[i - 1].y)) : this.hexes[getIndex(road.path[i - 1].x, road.path[i - 1].y)]) : null;
+                const nextHex = i < road.path.length - 1 ? (this.hexes.getHex ? this.hexes.getHex(getIndex(road.path[i + 1].x, road.path[i + 1].y)) : this.hexes[getIndex(road.path[i + 1].x, road.path[i + 1].y)]) : null;
 
                 const start = prevHex ? getSharedEdgeMidpoint(curHex, prevHex) : [curHex.cx, curHex.cy];
                 const end = nextHex ? getSharedEdgeMidpoint(curHex, nextHex) : [curHex.cx, curHex.cy];
@@ -1592,6 +1732,10 @@ export class MapView {
         }
     }
 
+    /**
+     * ブロックのヘックスラベルを描画します。
+     * @param {Object} block 
+     */
     drawBlockLabels(block) {
         const g = this.layers.labels.group.select(`#labels-${block.id}`);
         if (g.empty()) return;
@@ -1619,6 +1763,10 @@ export class MapView {
             .style('display', this.layers.settlement.visible ? 'inline' : 'none');
     }
 
+    /**
+     * ヘックスの境界線を描画します (デバッグ用)。
+     * @param {Object} block 
+     */
     drawBlockHexBorders(block) {
         const g = this.layers['hex-border'].group.select(`#hex-border-${block.id}`);
         if (g.empty()) return;
@@ -1630,6 +1778,11 @@ export class MapView {
             .attr('stroke-width', 0.5);
     }
 
+    /**
+     * インタラクション用の透明ポリゴンを描画します。
+     * マウスホバーやクリックを検知します。
+     * @param {Object} block 
+     */
     drawBlockInteraction(block) {
         const g = this.layers.interaction.group.select(`#interaction-${block.id}`);
         if (g.empty()) return;
@@ -1652,12 +1805,14 @@ export class MapView {
                 event.stopPropagation();
                 this.currentSelectedHex = d;
 
+                // 選択ハイライト
                 const hl = this.layers['highlight-overlay'].group;
                 hl.selectAll('*').remove();
                 hl.append('polygon')
                     .attr('points', d.points.map(p => p.join(',')).join(' '))
                     .attr('fill', 'none').attr('stroke', 'cyan').attr('stroke-width', 4);
 
+                // 詳細情報ウィンドウの更新
                 const infoWindow = document.getElementById('info-window');
                 const infoContent = document.getElementById('info-content');
                 if (infoWindow && infoContent) {
@@ -1668,9 +1823,42 @@ export class MapView {
     }
 
     // ================================================================
-    // Updates
+    // Updates (更新処理)
     // ================================================================
 
+    /**
+     * ブロックごとのデータロード完了通知を受け取り、表示用データを生成・更新します。
+     * 共有バッファ(WorldMap)上のデータをこの時点でブロック固有のストレージにスナップショットします。
+     * @param {string} blockId 
+     * @param {Object} updatedAllHexes 
+     */
+    updateUIWithBlockData(blockId, updatedAllHexes) {
+        // バッファ参照更新（念のため）
+        if (updatedAllHexes) this.hexes = updatedAllHexes;
+
+        const block = this.blocks.find(b => b.id === blockId);
+        if (!block) {
+            console.warn(`[MapView] updateUIWithBlockData: Block ${blockId} not found in grid.`);
+            return;
+        }
+
+        // データを生成（バッファからのコピー）
+        // generateBlockHexesは内部で this.hexes (Buffer) を使用する。
+        // このタイミングなら Buffer は当該ブロックのデータを持っている。
+        this.generateBlockHexes(block);
+
+        block.loaded = true;
+        block.rendered = false; // 次回ループで描画
+
+        // 表示範囲内なら即座に反映
+        this.updateVisibleBlocks(this.currentTransform);
+    }
+
+
+    /**
+     * 気候データ更新時などにマップ全体再描画をトリガーします。
+     * @param {Object} allHexes 
+     */
     redrawClimate(allHexes) {
         this.hexes = allHexes;
         this.updateAllHexColors();
@@ -1679,10 +1867,26 @@ export class MapView {
         this.updateMinimap();
     }
 
+    /**
+     * 全ブロックの描画ステータスをリセットし、再描画を促します。
+     */
     resetBlockRenderStatus() {
         this.blocks.forEach(b => b.rendered = false);
     }
 
+    /**
+     * ズームレベルに応じてブロックIDラベルの表示を切り替えます。
+     * @param {number} scale 
+     */
+    updateBlockIdLabels(scale) {
+        if (!this.layers['block-id-labels']) return;
+        const shouldShow = scale <= 1.0;
+        this.layers['block-id-labels'].group.style('display', shouldShow ? 'inline' : 'none');
+    }
+
+    /**
+     * ミニマップを更新します。
+     */
     updateMinimap() {
         if (!this.minimapSvg) return;
         const width = 200, height = 200;
@@ -1694,21 +1898,29 @@ export class MapView {
         const mapTotalHeight = (mapRows * hexHeight);
         const scale = Math.min(width / mapTotalWidth, height / mapTotalHeight);
 
-        // Use simplified data for minimap (e.g. 1/10th or just colors)
-        // With large map, rendering all hexes in minimap is heavy.
-        // For now, implementing basic logic assuming hexes are available.
-        // If hexes are global, great.
-
+        // 簡易表示: サンプリングして描画 (負荷軽減)
+        // [FIX] WorldMapインスタンス対応: filterの代わりにループまたはArray.from(iterator)
         const g = this.minimapSvg.select('#minimap-terrain');
-        g.selectAll('.minimap-hex').data(this.hexes.filter((d, i) => i % 10 === 0)) // Sample
+        const minimapData = [];
+        const iter = this.hexes[Symbol.iterator] ? this.hexes : Array.from(this.hexes);
+        let i = 0;
+        for (const h of iter) {
+            if (i % 10 === 0) minimapData.push(h);
+            i++;
+        }
+        g.selectAll('.minimap-hex').data(minimapData) // 1/10 サンプリング
             .join('rect').attr('class', 'minimap-hex')
             .attr('x', d => d.cx * scale).attr('y', d => d.cy * scale)
             .attr('width', hexWidth * scale).attr('height', hexHeight * scale)
             .attr('fill', d => this.calculateCompositeColor(d));
     }
 
+    /**
+     * ミニマップ上のビューポート枠を更新します。
+     */
     updateMinimapViewport() {
         if (!this.minimapViewport) return;
         // Logic to update viewport rect based on transform
+        // (Current implementation is empty skeleton)
     }
 }

@@ -1,6 +1,12 @@
 // ================================================================
 // GeoForge System - メインスクリプト (v2.2 - 分割生成モデル)
 // ================================================================
+// 解説:
+// アプリケーションのエントリーポイント。
+// 各生成ステップの制御、UIイベントのハンドリング、およびデータの保存・読み込み（圧縮・解凍）を担当する。
+// 全体的な処理フロー:
+// 1. 大陸生成 (物理マップ) -> 2. 気候/植生 -> 3. 文明/集落 -> 4. 国家/道路 -> 5. 保存
+// ================================================================
 
 import * as d3 from 'd3';
 import * as config from './config.js';
@@ -13,22 +19,27 @@ import { getIndex, initGlobalRandom, globalRandom, getNeighborIndices } from './
 import { WorldMap } from './WorldMap.js';
 import { assignRoadPatterns, assignRiverPatterns, splitWorldIntoBlocks } from './MapSplitter.js';
 import * as blockUtils from './BlockUtils.js';
-// GASのデプロイで取得したウェブアプリのURL
+
+// [NEW] BlockIO モジュールのインポート
+import { blockManager, compressWorldData, processLoadedData, createCompressedData } from './BlockIO.js';
+
+// GASのデプロイで取得したウェブアプリのURL (データのクラウド保存用)
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyS8buNL8u2DK9L3UZRtQqLWgDLvuj0WE5ZrzzdXNXSWH3bnGo-JsiO9KSrHp6YOjmtvg/exec';
 
+// DOM要素の参照
 const loadingOverlay = document.getElementById('loading-overlay');
 const logContainer = document.getElementById('loading-log');
 const progressBarContainer = document.getElementById('progress-bar-container');
 
-// 分割生成のための状態管理変数
+// 分割生成のためのグローバル状態管理変数
 let worldData = {
-    allHexes: null,
-    roadPaths: null,
-    seed: 0
+    allHexes: null, // 全ヘックスデータを格納する WorldMap インスタンス (または配列)
+    roadPaths: null, // 生成された道路・交易路のリスト
+    seed: 0 // 再現性のための乱数シード
 };
-let uiInitialized = false;
+let uiInitialized = false; // UIが初期化済みかどうかのフラグ
 
-// ボタン要素を取得
+// 操作ボタン要素の取得
 const step1Btn = document.getElementById('step1-continent-btn');
 const step2Btn = document.getElementById('step2-climate-btn');
 const step3Btn = document.getElementById('step3-settlement-btn');
@@ -39,8 +50,14 @@ const loadGasBtn = document.getElementById('load-gas-btn');
 const regenerateBtn = document.getElementById('force-regenerate-btn');
 
 
+// ユーティリティ: 指定ミリ秒待機する (非同期処理の合間にUI描画を挟むため)
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * ログメッセージを画面に出力する
+ * @param {string} message - 表示するメッセージ
+ * @param {string|null} id - (任意) メッセージ要素に付与するID。後で書き換える場合に指定。
+ */
 async function addLogMessage(message, id = null) {
     console.log(message);
     let entry;
@@ -60,23 +77,28 @@ async function addLogMessage(message, id = null) {
         logContainer.appendChild(entry);
     }
 
+    // 常に最新のログが見えるようにスクロール
     logContainer.scrollTop = logContainer.scrollHeight;
-    await sleep(id ? 1 : 20);
+    await sleep(id ? 1 : 20); // 描画時間を確保
 }
 
-// ボタンの有効/無効を管理する関数
+/**
+ * ステップ進行状況に応じてボタンの有効/無効を切り替える
+ * @param {number} currentStep - 完了したステップ番号 (0-4)
+ */
 function updateButtonStates(currentStep) {
-    step1Btn.disabled = false; // 大陸生成はいつでも可能
+    step1Btn.disabled = false; // 大陸生成はいつでも可能（リセット）
     step2Btn.disabled = currentStep < 1;
     step3Btn.disabled = currentStep < 2;
     step4Btn.disabled = currentStep < 3;
     step5Btn.disabled = currentStep < 4;
     downloadJsonBtn.disabled = currentStep < 4;
-    loadGasBtn.disabled = false; // 常時有効
+    loadGasBtn.disabled = false; // ロードはいつでも可能
 }
 
 /**
  * 世界とUIの状態を完全にリセットする関数
+ * 新規生成の開始時に呼び出される。
  */
 function resetWorld() {
     // D3.jsで描画された古いSVG要素を全て削除
@@ -94,18 +116,23 @@ function resetWorld() {
 
     // UI要素を初期状態に戻す
     updateButtonStates(0); // ボタンの状態もリセット
+    blockManager.reset(); // BlockManagerもリセット
 }
+
+
 
 // ================================================================
 // ■ 各生成ステップの関数
 // ================================================================
 
 // ステップ1: 大陸・河川生成
+// 概要: パーリンノイズを用いて地形の高さ(elevation)を生成し、海・陸・山などを決定する。
+// また、降水による浸食シミュレーションを行い、河川(flow)を形成する。
 async function runStep1_Continent() {
     resetWorld();
 
-    // [DEBUG] Diagnosing options passed to processLoadedData
-    console.log(`[processLoadedData] Loaded Options:`, JSON.stringify(options));
+    // [DEBUG] オプション確認用ログ
+    console.log(`[processLoadedData] Loaded Options:`, JSON.stringify(typeof options !== 'undefined' ? options : {}));
 
     const startTime = performance.now();
     // シード生成とPRNG初期化
@@ -118,8 +145,7 @@ async function runStep1_Continent() {
     logContainer.innerHTML = '';
     await addLogMessage("ステップ1: 大陸の土台を生成しています...");
 
-    // 物理マップ生成のみを呼び出す
-    // 途中経過を描画するためのコールバック関数
+    // 物理マップ生成中の途中経過を描画するためのコールバック関数
     const redrawFn = async (currentHexes) => {
         if (!uiInitialized) {
             await addLogMessage("初回描画を準備しています...");
@@ -128,16 +154,17 @@ async function runStep1_Continent() {
         } else {
             // 既に初期化されている場合は、データと色を更新して再描画
             await redrawMap(currentHexes);
-            // UI更新のために少し待機
+            // UI更新のために少し待機 (ブロッキング回避)
             await new Promise(resolve => setTimeout(resolve, 10));
         }
     };
 
+    // 地形生成の実行 (continentGenerator.js)
     worldData.allHexes = await generatePhysicalMap(addLogMessage, redrawFn);
 
     if (!uiInitialized) {
         await addLogMessage("初回描画を準備しています...");
-        // この時点では植生データは不完全だが、エラーにはならない
+        // この時点では植生データは不完全だが、地形のみで表示を行う
         await setupUI(worldData.allHexes, [], addLogMessage);
         uiInitialized = true;
     }
@@ -147,12 +174,14 @@ async function runStep1_Continent() {
 }
 
 // ステップ2: 気候・植生生成
+// 概要: 標高、緯度、風向き（偏西風など）から気温と降水量をシミュレーションする。
+// その結果に基づき、ケッペン気候区分に近いロジックで植生（砂漠、森林、草原など）を決定する。
 async function runStep2_Climate() {
     loadingOverlay.style.display = 'flex';
     logContainer.innerHTML = '';
     await addLogMessage("ステップ2: 気候と植生を計算しています...");
 
-    // ステップ1のデータに気候・植生情報を追加する
+    // ステップ1のデータに気候・植生情報を追加する (continentGenerator.js)
     worldData.allHexes = await generateClimateAndVegetation(worldData.allHexes, addLogMessage);
 
     await addLogMessage("気候と植生を再描画しています...");
@@ -172,14 +201,18 @@ async function runStep2_Climate() {
 }
 
 // ステップ3: 集落生成
+// 概要: 農業適性、居住適性スコアを算出し、人口を配置する。
+// 人口が集中する地点を「集落（村～首都）」として認定する。
+// また、魔物の分布や狩猟・牧畜のポテンシャルなど、文明の基礎データを生成する。
 async function runStep3_Settlements() {
     loadingOverlay.style.display = 'flex';
     logContainer.innerHTML = '';
     await addLogMessage("ステップ3: 文明を生成しています...");
 
+    // 文明生成 (civilizationGenerator.js)
     const civResult = await generateCivilization(worldData.allHexes, addLogMessage);
     worldData.allHexes = civResult.allHexes;
-    worldData.roadPaths = civResult.roadPaths; // この時点ではまだ空に近い
+    worldData.roadPaths = civResult.roadPaths; // この時点ではまだ空に近い（初期道路などがあれば）
 
     await addLogMessage("生態系（魔物）の分布を計算しています...");
     worldData.allHexes = generateMonsterDistribution(worldData.allHexes);
@@ -193,13 +226,14 @@ async function runStep3_Settlements() {
     await addLogMessage("集落と人口分布を再描画しています...");
     await redrawSettlements(worldData.allHexes);
 
-    // populationDisplay.style.display = 'block';
-
     updateButtonStates(3);
     loadingOverlay.style.display = 'none';
 }
 
 // ステップ4: 道路・国家生成
+// 概要: 首都・都市・集落を結ぶ道路網（交易路、下位道路）を生成する。
+// 道路網に基づき、各都市の「支配領域（テリトリー）」を確定し、国家（Nation）を定義する。
+// 最後に、人口・資源・インフラに基づく詳細な経済シミュレーションを実行する。
 async function runStep4_Nations() {
     loadingOverlay.style.display = 'flex';
     logContainer.innerHTML = '';
@@ -207,18 +241,21 @@ async function runStep4_Nations() {
 
     // 必要なデータを取得
     const allHexes = worldData.allHexes;
+    // 集落区分に基づき都市リストを抽出
     const cities = allHexes.filter(h => h.properties.settlement === '都市' || h.properties.settlement === '首都' || h.properties.settlement === '領都');
     const capitals = cities.filter(h => h.properties.settlement === '首都');
 
-    // STEP 0: 各首都間を結ぶ「通商路」を最優先で確定する
+    // STEP 0: 各首都間を結ぶ「基幹通商路」を最優先で確定する
+    // (A*アルゴリズムを用いて、地形コストを考慮した最短パスを生成)
     const mainTradeRoutePaths = await generateMainTradeRoutes(capitals, allHexes, addLogMessage);
     let allRoadPaths = mainTradeRoutePaths; // 最終的な道路リストをまず通商路で初期化
 
-    // 通商路の情報をヘックスに書き込み、後のA*探索でコストが下がるようにする
+    // 通商路の情報をヘックスに書き込み、後のA*探索でコストが下がるようにする (既存道路の利用促進)
     mainTradeRoutePaths.forEach(route => {
         route.path.forEach(pos => {
             const hex = allHexes[getIndex(pos.x, pos.y)];
             if (hex && !hex.properties.isWater) {
+                // 道路レベル6: 基幹街道
                 if (!hex.properties.roadLevel || hex.properties.roadLevel < 6) {
                     hex.properties.roadLevel = 6;
                 }
@@ -228,13 +265,15 @@ async function runStep4_Nations() {
 
     // STEP 1: 全都市間の「交易路」の候補を探索
     await addLogMessage("都市間の交易路の可能性を探索しています...");
-    // generateTradeRoutesは、内部のコスト関数が通商路を優先するため、より効率的なルートを見つける
+    // generateTradeRoutesは、内部のコスト関数が既存道路(通商路)を優先するため、より効率的なルートを見つける
     const { routeData: allTradeRoutes } = await generateTradeRoutes(cities, allHexes, addLogMessage);
 
-    // STEP 2: 領都の決定
+    // STEP 2: 領都の決定と領土割り当て
+    // 交易路で結ばれ、かつ移動日数が近い都市を、首都の支配下（領都）として割り当てる
     await addLogMessage("交易路網に基づき、首都の初期領土を割り当てています...");
     const { regionalCapitals } = assignTerritoriesByTradeRoutes(cities, capitals, allTradeRoutes, allHexes);
 
+    // 領都と首都の距離・日数を計算 (統治コスト計算用)
     regionalCapitals.forEach(rc => {
         const capitalId = rc.properties.parentHexId;
         const regionalCapitalId = getIndex(rc.col, rc.row);
@@ -257,10 +296,11 @@ async function runStep4_Nations() {
     });
 
     // STEP 3: 交易路の選別
+    // 生成された全ルート候補から、有効な交易路のみを確定リストに残す
     const finalTradeRoutes = [];
     const guaranteedRoutes = new Set();
 
-    // 手順2: 領都から直上の首都までのルートを必ず確保する
+    // 手順3-1: 領都から直上の首都までのルートを必ず確保する（国家の結合維持のため）
     regionalCapitals.forEach(rc => {
         const capitalId = rc.properties.parentHexId;
         const regionalCapitalId = getIndex(rc.col, rc.row);
@@ -270,7 +310,7 @@ async function runStep4_Nations() {
             (r.fromId === capitalId && r.toId === regionalCapitalId)
         );
         if (route) {
-            // ルートデータ自体に国籍情報を付与
+            // ルートデータ自体に国籍情報を付与 (国内交易路)
             route.nationId = rc.properties.nationId;
             finalTradeRoutes.push(route);
             const routeKey = Math.min(route.fromId, route.toId) + '-' + Math.max(route.fromId, route.toId);
@@ -278,13 +318,13 @@ async function runStep4_Nations() {
         }
     });
 
-    // 手順3: それ以外の交易路は、30日以上かかるものを削除する
+    // 手順3-2: それ以外の交易路は、30日以上かかるものを削除する (遠すぎる交易は成立しない)
     allTradeRoutes.forEach(route => {
         const routeKey = Math.min(route.fromId, route.toId) + '-' + Math.max(route.fromId, route.toId);
         // 保証済みのルートではなく、かつ30日未満のルートのみを追加
         if (!guaranteedRoutes.has(routeKey) && route.travelDays < config.MAX_TRADE_ROUTE_DAYS) {
-            // 未所属の交易路として国籍ID:0 を設定
-            route.nationId = 0; // 中立的な交易路
+            // 未所属の交易路として国籍ID:0 を設定 (中立路)
+            route.nationId = 0;
             finalTradeRoutes.push(route);
         }
     });
@@ -297,15 +337,16 @@ async function runStep4_Nations() {
     });
     allRoadPaths.push(...finalTradeRoutePaths);
 
-    // 交易路の情報をヘックスに書き込む (通商路を上書きしないように)
+    // 交易路の情報をヘックスに書き込む (基幹通商路を上書きしないようにレベルチェック)
     finalTradeRoutes.forEach(route => {
         route.path.forEach(pos => {
             const hex = allHexes[getIndex(pos.x, pos.y)];
             if (hex && !hex.properties.isWater) {
+                // 道路レベル5: 交易路
                 if (!hex.properties.roadLevel || hex.properties.roadLevel < 5) {
                     hex.properties.roadLevel = 5;
                 }
-                // ヘックスの国籍も更新
+                // ヘックスの国籍も更新 (道路が通る場所は影響力下とみなす)
                 if (route.nationId > 0) {
                     hex.properties.nationId = route.nationId;
                 }
@@ -314,36 +355,44 @@ async function runStep4_Nations() {
     });
 
     // STEP 4: 階層的な下位道路の生成
+    // 「街」「町」「村」を、上位の集落（ハブ）や既存の道路網に接続する
     await addLogMessage("集落を結ぶ下位道路網を建設しています...");
     const hubs = [...capitals, ...regionalCapitals];
     const streets = allHexes.filter(h => h.properties.settlement === '街');
     const towns = allHexes.filter(h => h.properties.settlement === '町');
     const villages = allHexes.filter(h => h.properties.settlement === '村');
 
-    // generateFeederRoadsは、更新されたcreateCostFunctionを内部で使うため、自動的に交易路を優先する
+    // 街 -> ハブ (createCostFunctionが更新され、交易路を利用しやすくなっている)
     const streetRoads = await generateFeederRoads(streets, hubs, allHexes, '街', addLogMessage);
     allRoadPaths.push(...streetRoads);
 
-    // ... (町道、村道の生成も同様) ...
+    // 町 -> ハブ + 街
     const townRoads = await generateFeederRoads(towns, [...hubs, ...streets], allHexes, '町', addLogMessage);
     allRoadPaths.push(...townRoads);
 
+    // 村 -> ハブ + 街 + 町
     const villageRoads = await generateFeederRoads(villages, [...hubs, ...streets, ...towns], allHexes, '村', addLogMessage);
     allRoadPaths.push(...villageRoads);
 
+    // 海路の生成 (港湾を持つ都市間のルート)
     const seaRoutePaths = await generateSeaRoutes(worldData.allHexes, addLogMessage);
     allRoadPaths.push(...seaRoutePaths);
 
-    // roadPaths を worldData に保存
+    // 確定した道路データを worldData に保存
     worldData.roadPaths = allRoadPaths;
 
-    // ④ 領都の最終決定、経済シミュレーションを実行
+    // STEP 5: 経済シミュレーションと国境・領土の最終確定
+    // 道路網に基づき、影響範囲(Territory)を再計算する
     worldData.allHexes = await determineTerritories(worldData.allHexes, addLogMessage);
 
-    // [CRITICAL] 経済シミュレーションの前に必ずシードをリセットし、再現性を保証する
+    // [CRITICAL] 経済シミュレーションの前に必ずシードをリセットし、結果の再現性を保証する
     initGlobalRandom(worldData.seed);
+
+    // 経済シミュレーション実行 (人口推移、産業、物資需給など) (economySimulator.js)
     worldData.allHexes = await simulateEconomy(worldData.allHexes, addLogMessage);
+    // 領土ごとの統計データを集計
     worldData.allHexes = await calculateTerritoryAggregates(worldData.allHexes, addLogMessage);
+    // 道路の交通量を計算
     worldData.allHexes = await calculateRoadTraffic(worldData.allHexes, worldData.roadPaths, addLogMessage);
 
     await addLogMessage("道路網、国境、経済情報を再描画しています...");
@@ -354,6 +403,7 @@ async function runStep4_Nations() {
 }
 
 // ステップ5: 保存
+// 概要: 生成されたワールドデータを圧縮し、GAS(Google Apps Script)のウェブアプリにPOST送信して保存する。
 async function runStep5_Save() {
     loadingOverlay.style.display = 'flex';
     logContainer.innerHTML = '';
@@ -362,12 +412,13 @@ async function runStep5_Save() {
     if (GAS_WEB_APP_URL.startsWith('https://script.google.com')) {
         try {
             await addLogMessage('生成した世界をデータベースに保存しています...');
+            // compressWorldData() でデータをV2形式に圧縮して送信 (BlockIO.jsからインポート)
             fetch(GAS_WEB_APP_URL, {
                 method: 'POST',
                 mode: 'no-cors',
                 cache: 'no-cache',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(compressWorldData()),
+                body: JSON.stringify(compressWorldData(worldData)),
                 redirect: 'follow'
             });
             await addLogMessage('保存リクエストを送信しました。');
@@ -382,475 +433,13 @@ async function runStep5_Save() {
     loadingOverlay.style.display = 'none';
 }
 
-// ================================================================
-// ■ データ圧縮・解凍ロジック (V2)
-// ================================================================
-
-// プロパティ名の短縮マッピング
-const KEY_MAP = {
-    // 基本プロパティ
-    isWater: 'w',
-    elevation: 'el',
-    temperature: 't',
-    precipitation_mm: 'pm',
-    precipitation: 'p',
-    climate: 'c',
-    climateZone: 'cz',
-    vegetation: 'v',
-    terrainType: 'tt',
-    flow: 'fl',
-    isAlluvial: 'ia',
-    hasSnow: 'hs',
-    isLakeside: 'il',
-    beachNeighbors: 'bn',
-
-    // マナ・資源・魔物
-    manaValue: 'mv',
-    manaRank: 'mr',
-    resourceRank: 'rr',
-    monsterRank: 'mor',
-
-    // ポテンシャル・評価
-    agriPotential: 'ap',
-    forestPotential: 'fp',
-    miningPotential: 'mp',
-    fishingPotential: 'fip',
-    huntingPotential: 'hp',
-    pastoralPotential: 'pp',
-    livestockPotential: 'lp',
-    cultivatedArea: 'ca',
-    habitability: 'hab',
-
-    // 人口・集落・産業
-    population: 'pop',
-    settlement: 's',
-    industry: 'ind',
-    surplus: 'sur',
-    shortage: 'sho',
-    territoryData: 'tdat',
-    nationId: 'n',
-    parentHexId: 'ph',
-    territoryId: 'ti',
-    distanceToParent: 'dp',
-    travelDaysToParent: 'td',
-
-    // 道路
-    roadLevel: 'rl',
-    roadUsage: 'ru',
-    roadLoss: 'rlo',
-    landUsage: 'lu',
-    waterUsage: 'wu',
-
-    // landUse (フラット化)
-    'landUse.river': 'lu_r',
-    'landUse.desert': 'lu_d',
-    'landUse.barren': 'lu_b',
-    'landUse.grassland': 'lu_g',
-    'landUse.forest': 'lu_f',
-
-    // 社会構成
-    demographics: 'dem',
-    facilities: 'fac',
-    livingConditions: 'lc',
-    logistics: 'log',
-    vegetationAreas: 'va'
-};
-
-// 逆マッピング（解凍用）
-const REVERSE_KEY_MAP = Object.fromEntries(Object.entries(KEY_MAP).map(([k, v]) => [v, k]));
-
-// 辞書化対象のキー
-const DICTIONARY_KEYS = ['cz', 'v', 'tt', 's', 'mr', 'rr'];
-
-// 産業・領土データのキー短縮マップ
-const INDUSTRY_ITEM_MAP = {
-    // 第一次
-    '雑穀': 'mi', '大麦': 'ba', '小麦': 'wh', '稲': 'ri', '果物': 'fr', '薬草': 'he',
-    '魚介類': 'fi', '木材': 'wo', '鉱石': 'or', '魔鉱石': 'mo',
-    '牧畜肉': 'mp', '乳製品': 'da', '革': 'le', '魔獣素材': 'mt',
-    '家畜肉': 'ml', '狩猟肉': 'mh',
-    // 第二次
-    '武具・道具': 'tl', '織物': 'tx', 'ポーション・魔導具': 'mg',
-    '酒(穀物)': 'ag', '酒(果実)': 'af', '建築': 'bd',
-    // 第三次
-    '商業・交易': 'cm', '宿屋・酒場': 'in', '医療・教会': 'md', '運送・交通': 'tr',
-    // 第四次
-    '魔法研究': 'rs', '学問・歴史': 'ac', '戦略・軍事': 'mil', '情報・予言': 'it',
-    // 第五次
-    '行政・税収': 'ad', 'ギルド統括': 'gu', '芸術・文化': 'ar', '世界儀式': 'rt',
-    // 領土データ用
-    'population': 'pop', 'cultivatedArea': 'ca', 'production': 'prod', 'settlementCounts': 'sc',
-    '都市': 'cit', '領都': 'reg', '街': 'str', '町': 'twn', '村': 'vil', '首都': 'cap',
-    // 人口構成
-    '貴族': 'nob', '騎士': 'kni', '正規兵': 'sol', '衛兵・自警団': 'gua', '傭兵': 'mer',
-    '農夫': 'far', '木こり': 'lum', '鉱夫': 'min', '漁師': 'fis', '牧畜民': 'pas', '狩人': 'hun',
-    '職人': 'art', '商人': 'tra', '学者': 'sch', '官僚': 'bur', '神官・医師・薬師': 'pri', '冒険者': 'adv', '浮浪者': 'vag',
-    '錬金術師': 'alc',
-    // 施設
-    '商会・商店': 'shp', '行商・露店': 'ped', '宿屋': 'inn', '酒場・食堂': 'tav',
-    '鍛冶屋': 'smi', '工房': 'wor', '診療所': 'cli', '教会': 'chu', '運送屋': 'car', '厩舎': 'sta',
-    '研究所': 'lab', '学校': 'col', '兵舎': 'bar', '砦': 'for', '役所': 'off', 'ギルド': 'gui',
-    '劇場・美術館': 'the', '儀式場': 'rit', '魔道具店': 'mag',
-    // 施設(港湾)
-    '大型港湾': 'lpt', '港': 'prt', '船着き場': 'dck', '桟橋': 'pie', '渡し場': 'fer', '造船所': 'shy',
-    // 物流
-    'wagons': 'wag', 'animals': 'ani', 'ships': 'shp_l', 'drivers': 'dri',
-    '馬': 'hrs', '牛': 'ox', 'ラクダ': 'cam', 'トナカイ': 'rei', '水牛': 'buf', '象': 'ele', 'ラバ': 'mul', '犬': 'dog',
-    'dinghy': 'din', 'small_trader': 's_tr', 'coastal_trader': 'c_tr', 'medium_merchant': 'm_mr', 'large_sailing_ship': 'l_ss',
-    '小舟': 's_bt', '商船': 'm_bt', '大型帆船': 'l_bt',
-    // 生活水準
-    'hunger': 'hun', 'poverty': 'pov', 'luxury': 'lux', 'security': 'sec', 'prices': 'prc',
-    'tax': 'tax', 'happiness': 'hap', 'food': 'fd', 'necessities': 'nec',
-    // 植生エリア (v3.4)
-    'desert': 'des', 'wasteland': 'was', 'grassland': 'gra', 'wetland': 'wet',
-    'temperateForest': 't_for', 'subarcticForest': 's_for', 'tropicalRainforest': 'tr_for',
-    'alpine': 'alp', 'tundra': 'tun', 'savanna': 'sav', 'steppe': 'ste', 'coastal': 'coa', 'water': 'wat',
-
-    // Road/River Patterns (v2.2 Block-Based)
-    'roadPatterns': 'rp',
-    'riverPatterns': 'rv'
-};
-const REVERSE_INDUSTRY_ITEM_MAP = Object.fromEntries(Object.entries(INDUSTRY_ITEM_MAP).map(([k, v]) => [v, k]));
-
-// 産業階層の短縮キー
-const INDUSTRY_LEVEL_MAP = {
-    'primary': 'p', 'secondary': 's', 'tertiary': 't', 'quaternary': 'q4', 'quinary': 'q5'
-};
-const REVERSE_INDUSTRY_LEVEL_MAP = Object.fromEntries(Object.entries(INDUSTRY_LEVEL_MAP).map(([k, v]) => [v, k]));
-
-/**
- * ヘルパー: ネストされたオブジェクトの圧縮 (x1000整数化 + キー短縮)
- */
-const compressNestedObject = (obj) => {
-    if (!obj) return null;
-    const compressed = {};
-    Object.entries(obj).forEach(([k, v]) => {
-        const shortKey = INDUSTRY_ITEM_MAP[k] || k;
-        if (typeof v === 'number') {
-            compressed[shortKey] = Math.round(v * 1000);
-        } else if (typeof v === 'object' && v !== null) {
-            compressed[shortKey] = compressNestedObject(v);
-        } else {
-            compressed[shortKey] = v;
-        }
-    });
-    if (Object.keys(compressed).length === 0) return null;
-    return compressed;
-};
-
-/**
- * Creates a compressed data object (dictionaries + hexes) from a list of hexes.
- * @param {Array} hexList List of hex objects (or BlockHex objects)
- * @returns {Object} { dictionaries, hexes }
- */
-function createCompressedData(hexList) {
-    if (!hexList) return null;
-
-    // 1. 辞書の作成
-    const dictionaries = {};
-    DICTIONARY_KEYS.forEach(k => dictionaries[k] = []);
-
-    const getDictIndex = (key, value) => {
-        if (value === null || value === undefined) return null;
-        let idx = dictionaries[key].indexOf(value);
-        if (idx === -1) {
-            idx = dictionaries[key].length;
-            dictionaries[key].push(value);
-        }
-        return idx;
-    };
-
-    // 2. ヘックスデータの圧縮
-    const compressedHexes = hexList.map(h => {
-        const cHex = {};
-
-        // Hexクラスのゲッターは列挙されないため、KEY_MAPとlandUseからキーリストを作成して反復
-        const keysToProcess = Object.keys(KEY_MAP).filter(k => !k.includes('.'));
-        keysToProcess.push('landUse');
-        keysToProcess.push('blockId');
-
-        keysToProcess.forEach(key => {
-            let value = h[key];
-            if (value === undefined && h.properties) {
-                value = h.properties[key];
-            }
-            if (value === undefined) return;
-
-            // Special handling for blockId
-            if (key === 'blockId') {
-                cHex['bid'] = value;
-                return;
-            }
-
-            // Special handling for patterns
-            if (key === 'roadPatterns' || key === 'riverPatterns') {
-                if (Array.isArray(value)) {
-                    cHex[KEY_MAP[key]] = value;
-                }
-                return;
-            }
-
-            // landUseの特別処理 (フラット化)
-            if (key === 'landUse' && value) {
-                if (value.river > 0) cHex[KEY_MAP['landUse.river']] = parseFloat(value.river.toFixed(2));
-                if (value.desert > 0) cHex[KEY_MAP['landUse.desert']] = parseFloat(value.desert.toFixed(2));
-                if (value.barren > 0) cHex[KEY_MAP['landUse.barren']] = parseFloat(value.barren.toFixed(2));
-                if (value.grassland > 0) cHex[KEY_MAP['landUse.grassland']] = parseFloat(value.grassland.toFixed(2));
-                if (value.forest > 0) cHex[KEY_MAP['landUse.forest']] = parseFloat(value.forest.toFixed(2));
-                return;
-            }
-
-            const shortKey = KEY_MAP[key];
-            if (!shortKey) return;
-
-            // 辞書対象のキーか判定
-            if (DICTIONARY_KEYS.includes(shortKey)) {
-                const idx = getDictIndex(shortKey, value);
-                if (idx !== null) cHex[shortKey] = idx;
-            } else if (typeof value === 'number') {
-                // 浮動小数点の丸め (座標などはそのまま)
-                if (Number.isInteger(value)) {
-                    cHex[shortKey] = value;
-                } else {
-                    cHex[shortKey] = parseFloat(value.toFixed(3));
-                }
-            } else if (typeof value === 'object' && value !== null) {
-                // 産業・社会データ (v3.2)
-                if (key === 'industry' || key === 'demographics' || key === 'territoryData' ||
-                    key === 'facilities' || key === 'livingConditions' || key === 'logistics' || key === 'vegetationAreas') {
-                    cHex[shortKey] = compressNestedObject(value);
-                }
-            } else {
-                cHex[shortKey] = value;
-            }
-        });
-
-        // Coordinates
-        cHex.c = h.col;
-        cHex.r = h.row;
-        if (h.x !== undefined) cHex.x = h.x;
-        if (h.y !== undefined) cHex.y = h.y;
-
-        return cHex;
-    });
-
-    return {
-        dictionaries: dictionaries,
-        hexes: compressedHexes
-    };
-}
-
-/**
- * 世界データを圧縮形式に変換する共通関数
- */
-function compressWorldData() {
-    if (!worldData || !worldData.allHexes) return null;
-
-    // [DEBUG] 保存前のデータ検証
-    /*
-    const missingVeg = worldData.allHexes.filter(h => !h.properties.vegetation).length;
-    if (missingVeg > 0) {
-        console.warn(`[WARN] Compressing data but ${missingVeg} hexes are missing vegetation.`);
-    }
-    */
-
-    // 0. ブロック情報の付与 (V2.2 Block-Based)
-    assignRoadPatterns(worldData.allHexes, worldData.roadPaths);
-    assignRiverPatterns(worldData.allHexes);
-
-    // Assign BlockID to all hexes
-    worldData.allHexes.forEach(h => {
-        h.properties.blockId = blockUtils.getBlockIdFromGlobal(h.col, h.row);
-    });
-
-    // 1. 辞書の作成
-    const dictionaries = {};
-    DICTIONARY_KEYS.forEach(k => dictionaries[k] = []);
-
-    const getDictIndex = (key, value) => {
-        if (value === null || value === undefined) return null;
-        let idx = dictionaries[key].indexOf(value);
-        if (idx === -1) {
-            idx = dictionaries[key].length;
-            dictionaries[key].push(value);
-        }
-        return idx;
-    };
-
-    // ヘルパー: ネストされたオブジェクトの圧縮 (x1000整数化 + キー短縮)
-    const compressNestedObject = (obj) => {
-        if (!obj) return null;
-        const compressed = {};
-        Object.entries(obj).forEach(([k, v]) => {
-            const shortKey = INDUSTRY_ITEM_MAP[k] || k;
-            if (typeof v === 'number') {
-                // 1000倍して整数化 (小数点以下3桁まで保持)
-                compressed[shortKey] = Math.round(v * 1000);
-            } else if (typeof v === 'object' && v !== null) {
-                compressed[shortKey] = compressNestedObject(v);
-            } else {
-                compressed[shortKey] = v;
-            }
-        });
-        // 空オブジェクトならnullを返す（さらに削減）
-        if (Object.keys(compressed).length === 0) return null;
-        return compressed;
-    };
-
-    // 2. ヘックスデータの圧縮
-    const compressedHexes = worldData.allHexes.map(h => {
-        const cHex = {};
-
-        // Hexクラスのゲッターは列挙されないため、KEY_MAPとlandUseからキーリストを作成して反復
-        const keysToProcess = Object.keys(KEY_MAP).filter(k => !k.includes('.'));
-        keysToProcess.push('landUse');
-
-        keysToProcess.forEach(key => {
-            let value = h.properties[key];
-
-            // blockId (No short key yet, manual handling)
-            if (key === 'blockId') {
-                // No short key defined in KEY_MAP yet?
-                // Let's add it or use raw key if not mapped.
-                // We will add it to KEY_MAP or just treat unmapped keys as raw?
-                // Current logic: `const shortKey = KEY_MAP[key]; if (!shortKey) return;`
-                // So we MUST map it or handle it separately.
-
-                // Handle separately below or add to internal temporary map?
-                // Let's handle special props that might not be in KEY_MAP
-                return;
-            }
-
-            // roadPatterns / riverPatterns handling
-            if (key === 'roadPatterns' || key === 'riverPatterns') return; // Handle later
-
-            // landUseの特別処理 (フラット化)
-            if (key === 'landUse' && value) {
-                if (value.river > 0) cHex[KEY_MAP['landUse.river']] = parseFloat(value.river.toFixed(2));
-                if (value.desert > 0) cHex[KEY_MAP['landUse.desert']] = parseFloat(value.desert.toFixed(2));
-                if (value.barren > 0) cHex[KEY_MAP['landUse.barren']] = parseFloat(value.barren.toFixed(2));
-                if (value.grassland > 0) cHex[KEY_MAP['landUse.grassland']] = parseFloat(value.grassland.toFixed(2));
-                if (value.forest > 0) cHex[KEY_MAP['landUse.forest']] = parseFloat(value.forest.toFixed(2));
-                return;
-            }
-
-            // 容量削減: ロード時に再計算可能なデータは保存しない (v3.0.1: サイズ最適化)
-            if (key === 'industry' || key === 'livingConditions' || key === 'demographics' || key === 'facilities' || key === 'logistics' || key === 'vegetationAreas' || key === 'ships' || key === 'isCoastal' || key === 'isLakeside') return;
-
-            // industryの特別処理 (ネスト圧縮)
-            if (key === 'industry' && value) {
-                // ... (Logic removed for optimization, but block retained for structure consistency if reverted)
-                return;
-            }
-
-            // territoryDataの特別処理 (ネスト圧縮)
-            if (key === 'territoryData' && value) {
-                const cTdat = compressNestedObject(value);
-                if (cTdat) cHex[KEY_MAP['territoryData']] = cTdat;
-                return;
-            }
-
-            // ... (Other nested objects logic same as before) ...
-
-            // LivingConditions, etc are skipped above.
-
-            const shortKey = KEY_MAP[key];
-            if (!shortKey) return;
-
-            // デフォルト値の省略
-            if (value === null || value === undefined) return;
-            if (key === 'roadLevel' && value === 0) return;
-            if (key === 'nationId' && (value === 0 || isNaN(value))) return;
-
-            if (key === 'isWater') {
-                if (!value) return;
-                if (h.properties.elevation <= 0) return;
-            }
-            if (key === 'flow' && value === 0) return;
-            if (key === 'population' && value === 0) return;
-
-            // 値の変換・圧縮
-            if (DICTIONARY_KEYS.includes(shortKey)) {
-                cHex[shortKey] = getDictIndex(shortKey, value);
-            } else if (typeof value === 'number') {
-                if (Number.isInteger(value)) {
-                    cHex[shortKey] = value;
-                } else {
-                    cHex[shortKey] = parseFloat(value.toFixed(2));
-                }
-            } else {
-                cHex[shortKey] = value;
-            }
-        });
-
-        // --- NEW PROPERTIES ---
-        // blockId
-        if (h.properties.blockId) {
-            cHex['bid'] = h.properties.blockId;
-        }
-
-        // roadPatterns (Array of {pattern, level})
-        if (h.properties.roadPatterns && h.properties.roadPatterns.length > 0) {
-            // Simplify: [p, l, p, l...]
-            cHex['rp'] = h.properties.roadPatterns.flatMap(x => [x.pattern, x.level]);
-        }
-
-        // riverPatterns (Array of {pattern, width})
-        if (h.properties.riverPatterns && h.properties.riverPatterns.length > 0) {
-            // Simplify: [p, w, p, w...]
-            cHex['rv'] = h.properties.riverPatterns.flatMap(x => [x.pattern, parseFloat(x.width.toFixed(2))]);
-        }
-
-        // downstreamIndexの保存
-        if (h.downstreamIndex !== undefined && h.downstreamIndex !== -1) {
-            cHex[KEY_MAP['downstreamIndex']] = h.downstreamIndex;
-        }
-
-        return cHex;
-    });
-
-    // 3. 道路データの圧縮 (座標リストをフラット化)
-    const compressedRoads = worldData.roadPaths ? worldData.roadPaths.map(r => {
-        const cr = {
-            l: r.level,
-            n: r.nationId,
-            p: r.path.flatMap(p => [
-                Number.isInteger(p.x) ? p.x : parseFloat(p.x.toFixed(2)),
-                Number.isInteger(p.y) ? p.y : parseFloat(p.y.toFixed(2))
-            ])
-        };
-
-        // Attach blockId to road if possible?
-        // Roads span multiple hexes.
-        // We assigned roads to blocks in MapSplitter based on Start Point.
-        // Let's do the same logic here.
-        if (r.path.length > 0) {
-            const start = r.path[0];
-            // Global Coords -> Block ID
-            const sx = Math.round(start.x);
-            const sy = Math.round(start.y);
-            cr['bid'] = blockUtils.getBlockIdFromGlobal(sx, sy);
-        }
-        return cr;
-    }) : [];
-
-    return {
-        version: 2,
-        seed: worldData.seed || globalRandom.initialSeed || Date.now(),
-        cols: config.COLS,
-        rows: config.ROWS,
-        dicts: dictionaries,
-        hexes: compressedHexes, // Includes 'bid', 'rp', 'rv'
-        roads: compressedRoads  // Includes 'bid'
-    };
-}
-
-
 
 // ================================================================
 // ■ メイン処理とイベントハンドラ
 // ================================================================
 
+// 世界の新規生成プロセスを一括実行
+// (ボタンから「全ステップ実行」された場合や、初回ロード時にデータがない場合に使用)
 async function generateNewWorld() {
     // 再生成の通知を送信 (非同期で実行し、完了を待たない)
     notifyRegenerationAttempt();
@@ -861,6 +450,7 @@ async function generateNewWorld() {
     logContainer.innerHTML = '';
 
     // 全ステップを連続実行
+    // ステップ間でawaitすることで、順番通りに処理が進むことを保証する
     await runStep1_Continent();
     await runStep2_Climate();
     await runStep3_Settlements();
@@ -871,6 +461,7 @@ async function generateNewWorld() {
 
 /**
  * ロードしたデータに対し、距離と日数を再計算する関数
+ * 保存データに道路網が含まれている場合、それに基づいて集落間の接続関係を復元する。
  */
 async function recalculateDistances(worldData) {
     await addLogMessage("集落間の距離を再計算しています...");
@@ -948,6 +539,7 @@ async function recalculateEconomyMetrics(worldData) {
     return allHexes;
 }
 
+// 既存データ（保存された世界）の読み込みフロー制御
 async function loadExistingWorld() {
     try {
         await addLogMessage('既存の世界データを読み込み中...');
@@ -955,14 +547,43 @@ async function loadExistingWorld() {
 
         let loadedData = null;
 
-        // 0. ブロックデータの確認 (V2.2)
-        const blockLoaded = await loadBlockBasedWorld();
-        if (blockLoaded) {
-            await addLogMessage('ブロックベースのロードが完了しました。');
-            return;
+        // 0. ブロックデータの確認 (V2.2 priority)
+        // ブロックマネージャーを使用して初期ブロックをロード
+        // 設定された初期ズーム位置周辺のブロックID
+        let initialBlockId = 'map_50_73'; // デフォルト
+        if (config.INITIAL_ZOOM_LOC && typeof config.INITIAL_ZOOM_LOC === 'object') {
+            const iEe = Math.floor(config.INITIAL_ZOOM_LOC.x / 100);
+            const iNn = Math.floor(config.INITIAL_ZOOM_LOC.y / 100);
+            initialBlockId = `map_${iEe}_${iNn}`;
+        }
+
+        // WorldMap初期化 (ない場合)
+        if (!worldData.allHexes) {
+            worldData.allHexes = new WorldMap(config.COLS, config.ROWS);
+        }
+
+        try {
+            await addLogMessage(`初期ブロック(${initialBlockId})を読み込み中...`);
+            const loaded = await blockManager.load(initialBlockId, worldData);
+            if (loaded) {
+                await addLogMessage('ブロックベースのロードが完了しました。');
+                await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage, blockManager);
+                uiInitialized = true;
+                
+                // [FIX] Initial block data is in buffer but MapView missed the update event (before init).
+                // Force sync for the initial block.
+                updateUIWithBlockData(initialBlockId, worldData.allHexes);
+
+                loadingOverlay.style.display = 'none';
+                progressBarContainer.style.display = 'none';
+                return;
+            }
+        } catch (e) {
+            console.warn("Block load failed:", e);
         }
 
         // 1. 静的ファイル (world_data.json)
+        // 従来の単一ファイル保存がある場合のフォールバック
         try {
             const staticRes = await fetch('./world_data.json');
             if (staticRes.ok) {
@@ -971,16 +592,17 @@ async function loadExistingWorld() {
             }
         } catch (e) { /* 無視 */ }
 
-        // 2. GASフォールバック
-        // if (!loadedData) {
-        //    await loadFromGAS();
-        //    return;
-        // }
-
-
-        await processLoadedData(loadedData);
-        await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage, blockManager);
-        uiInitialized = true;
+        if (loadedData) {
+            // 従来のモノリシックロード
+            const loadedWorld = await processLoadedData(loadedData);
+            worldData = loadedWorld;
+            await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage, blockManager);
+            uiInitialized = true;
+        } else {
+            // データが見つからない場合のフォールバック（ダミー生成など）は blockManager.load 内や generateNewWorld で処理されるべきだが
+            // ここまで来たら「新規作成」を促す
+            console.log("No data found, prompting creation.");
+        }
 
     } catch (error) {
         console.error(error);
@@ -989,6 +611,7 @@ async function loadExistingWorld() {
     }
 }
 
+// GASデータベースからのデータ読み込み (クラウド保存対応)
 async function loadFromGAS() {
     try {
         loadingOverlay.style.display = 'flex';
@@ -1006,7 +629,13 @@ async function loadFromGAS() {
         if (!response.ok) throw new Error(`サーバーからの応答が不正です (ステータス: ${response.status})`);
 
         const loadedData = await response.json();
-        await processLoadedData(loadedData);
+        // BlockIO.js の関数を使用
+        const loadedWorld = await processLoadedData(loadedData);
+        worldData = loadedWorld;
+
+        await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage, blockManager);
+        uiInitialized = true;
+
 
     } catch (error) {
         console.error(error);
@@ -1015,712 +644,10 @@ async function loadFromGAS() {
     }
 }
 
-// [New] Block Manager for Dynamic Loading
-const blockManager = {
-    loading: new Set(),
-    loaded: new Set(),
-    queue: Promise.resolve(),
-
-    async load(blockId) {
-        if (this.loading.has(blockId) || this.loaded.has(blockId)) return true;
-
-        // Chain the load request to the queue to ensure sequential processing
-        // This prevents race conditions on the single shared WorldMap buffer.
-        this.queue = this.queue.then(async () => {
-            // Re-check status inside the queue execution
-            if (this.loading.has(blockId) || this.loaded.has(blockId)) return true;
-            this.loading.add(blockId);
-
-            try {
-                console.log(`[BlockManager] Starting load for ${blockId}`);
-                // await addLogMessage(`${blockId}を読み込み中...`);
-                const res = await fetch(`./map/${blockId}.json`);
-
-                const contentType = res.headers.get("content-type");
-                if (contentType && contentType.includes("text/html")) {
-                    throw new Error("Received HTML instead of JSON (likely 404)");
-                }
-                if (!res.ok) throw new Error("Not found");
-
-                const data = await res.json();
-
-                // processLoadedData will handle merging and padding skipping
-                await processLoadedData(data, { skipCalculations: true, blockId: blockId });
-
-                // [FIX] Update UI global hexes array with new data to ensure neighbors are valid for rendering
-                updateUIWithBlockData(blockId, worldData.allHexes);
-
-                this.loaded.add(blockId);
-                this.loading.delete(blockId);
-                return true;
-            } catch (e) {
-                // [Silent Handling for Missing Blocks]
-                console.warn(`[BlockManager] Failed to load ${blockId}:`, e);
-                this.loading.delete(blockId);
-                return false;
-            }
-        });
-
-        return this.queue;
-    },
-
-    unload(blockId) {
-        if (!this.loaded.has(blockId)) return;
-
-        const parts = blockId.split('_');
-        if (parts.length < 3) return;
-        const ee = parseInt(parts[1]);
-        const nn = parseInt(parts[2]);
-
-        // Clear Core Hexes (1..23, 1..20)
-        // Spec: Block Data 25x22. Core is 23x20.
-        // We use LOCAL coordinates directly because WorldMap is a local buffer (25x22).
-        for (let r = 1; r <= 20; r++) {
-            for (let c = 1; c <= 23; c++) {
-                // Use local indices directly
-                const idx = getIndex(c, r);
-                const hex = worldData.allHexes.getHex(idx);
-
-                if (hex) {
-                    // Reset to Default Ocean
-                    // We reset properties to basic "Ocean" state
-                    hex.properties.isWater = true;
-                    hex.properties.elevation = 0;
-                    hex.properties.vegetation = '海洋';
-                    hex.properties.landUse = {};
-                    hex.properties.settlement = null;
-                    hex.properties.population = 0;
-                    hex.properties.roadLevel = 0;
-                    hex.properties.flow = 0;
-                }
-            }
-        }
-        this.loaded.delete(blockId);
-    }
-};
-
-/**
- * ブロックベースの初期ロード (map_50_73.jsonのみ)
- */
-async function loadBlockBasedWorld() {
-    // Initial Load: Center Block Only
-    // [FIX] Load Initial Block based on config.INITIAL_ZOOM_LOC
-    let initialBlockId = 'map_50_73'; // Default
-    if (config.INITIAL_ZOOM_LOC && typeof config.INITIAL_ZOOM_LOC === 'object') {
-        const iEe = Math.floor(config.INITIAL_ZOOM_LOC.x / 100);
-        const iNn = Math.floor(config.INITIAL_ZOOM_LOC.y / 100);
-        initialBlockId = `map_${iEe}_${iNn}`;
-    }
-
-    await addLogMessage(`初期ブロック(${initialBlockId})を読み込み中...`);
-    try {
-        const result = await blockManager.load(initialBlockId);
-        if (result) {
-            await addLogMessage('中央ブロック読み込み完了。周囲はスクロール時に読み込まれます。');
-            return true;
-        }
-    } catch (e) {
-        console.warn("Initial block load failed", e);
-    }
-    // Block load failed (missing file) -> functionality handles it via Dummy Generation.
-    // So we treat this as "Block System Active".
-    await addLogMessage('初期ブロックが見つかりません。ダミーとして生成・表示します。');
-    return true;
-
-}
-
-async function processLoadedData(loadedData, options = {}) {
-    // シードの復元とPRNG初期化
-    if (loadedData.seed) {
-        worldData.seed = loadedData.seed;
-        initGlobalRandom(loadedData.seed);
-        // [FIX] ノイズ関数も初期化する (砂浜生成などに必要)
-        initializeNoiseFunctions(worldData.seed);
-        await addLogMessage(`シード値を復元しました: ${loadedData.seed}`);
-    } else {
-        await addLogMessage(`[WARN] 保存データにシードが含まれていません。再現性が保証されません。`);
-        initGlobalRandom(Date.now());
-        initializeNoiseFunctions(Date.now());
-    }
-
-    // Determine target block ID (if passed in options or from data)
-    let targetBlockEE = null;
-    let targetBlockNN = null;
-    let blockIdForLoad = options.blockId || loadedData.id;
-
-    if (blockIdForLoad && blockIdForLoad.startsWith("map_")) {
-        const parts = blockIdForLoad.split('_');
-        if (parts.length >= 3) {
-            targetBlockEE = parseInt(parts[1]);
-            targetBlockNN = parseInt(parts[2]);
-            // console.log(`[processLoadedData] Loading Block ${blockIdForLoad} (EE:${targetBlockEE}, NN:${targetBlockNN})`);
-        }
-    }
-
-    // V2フォーマット (圧縮版) の場合
-    if (loadedData.version === 2 || loadedData.version === "2.1" || loadedData.version === "2.2") {
-        await addLogMessage(`圧縮データ(V${loadedData.version})を展開しています...`);
-
-        // 辞書の復元
-        const dicts = loadedData.dictionaries || loadedData.dicts;
-        const getDictValue = (key, idx) => {
-            if (idx === null || idx === undefined) return null;
-            return dicts[key][idx];
-        };
-
-        // ヘルパー: ネストされたオブジェクトの解凍 (x1000復元 + キー復元)
-        const decompressNestedObject = (obj) => {
-            if (!obj) return null;
-            const decompressed = {};
-            Object.entries(obj).forEach(([k, v]) => {
-                const originalKey = REVERSE_INDUSTRY_ITEM_MAP[k] || k;
-                if (typeof v === 'number') {
-                    // 1000で割って元のスケールに戻す
-                    decompressed[originalKey] = v / 1000;
-                } else if (typeof v === 'object' && v !== null) {
-                    decompressed[originalKey] = decompressNestedObject(v);
-                } else {
-                    decompressed[originalKey] = v;
-                }
-            });
-            return decompressed;
-        };
-
-        // ヘックスデータの展開
-        // [FIX] Incremental Loading Support
-        if (!worldData.allHexes) {
-            // [FIX] Force Global Config Dimensions for World Map
-            // Block data usually has small cols/rows (25x22), but we need the Global size (117x102)
-            const cols = config.COLS;
-            const rows = config.ROWS;
-
-            const realWorldMap = new WorldMap(cols, rows);
-            worldData.allHexes = new Proxy(realWorldMap, {
-                get: (target, prop) => {
-                    if (typeof prop === 'string' && !isNaN(prop)) {
-                        return target.getHex(parseInt(prop));
-                    }
-                    if (prop === 'length') {
-                        return target.size;
-                    }
-                    return target[prop];
-                }
-            });
-            worldData.allHexes.cols = cols;
-            worldData.allHexes.rows = rows;
-        }
-
-        // Parse Block ID if available (e.g. "map_50_73" -> ee=50, nn=73)
-        let blockEE = null;
-        let blockNN = null;
-        if (loadedData.id && loadedData.id.startsWith("map_")) {
-            const parts = loadedData.id.split('_');
-            if (parts.length >= 3) {
-                blockEE = parseInt(parts[1]);
-                blockNN = parseInt(parts[2]);
-            }
-        }
-
-        if (loadedData.hexes) {
-            await addLogMessage('地形データを配置しています...');
-            loadedData.hexes.forEach((h, index) => {
-                // [REVERT] Use raw index to restore original map layout.
-                // The remapping caused visual scrambling. We accept the data as-is.
-                let idx = index;
-
-                // Fallback check
-                if (idx < 0 || idx >= worldData.allHexes.size) return;
-
-                const hex = worldData.allHexes.getHex(idx);
-                if (!hex) return;
-
-                // Restore Coordinates - SKIPPED (Handled by Final Fix Loop)
-                // if (globalCol !== undefined) hex.col = globalCol;
-                // if (globalRow !== undefined) hex.row = globalRow;
-
-                // プロパティの展開 (Decompression)
-                const props = {};
-
-                // landUseの再構築
-                const landUse = {};
-                let hasLandUse = false;
-
-                Object.entries(h).forEach(([k, v]) => {
-                    const originalKey = REVERSE_KEY_MAP[k] || k;
-                    if (!originalKey) return;
-
-                    // landUse関連
-                    if (originalKey.startsWith('landUse.')) {
-                        const subKey = originalKey.split('.')[1];
-                        landUse[subKey] = v;
-                        hasLandUse = true;
-                        return;
-                    }
-
-                    // industry (ネスト解凍)
-                    if (originalKey === 'industry') {
-                        const ind = {};
-                        Object.entries(v).forEach(([lvl, data]) => {
-                            const originalLvl = REVERSE_INDUSTRY_LEVEL_MAP[lvl] || lvl;
-                            ind[originalLvl] = decompressNestedObject(data);
-                        });
-                        // 空の階層も初期化しておく（安全性のため）
-                        ['primary', 'secondary', 'tertiary', 'quaternary', 'quinary'].forEach(l => {
-                            if (!ind[l]) ind[l] = {};
-                        });
-                        props.industry = ind;
-                        // production互換性
-                        props.production = { ...ind.primary };
-                        return;
-                    }
-
-                    // territoryData (ネスト解凍)
-                    if (originalKey === 'territoryData') {
-                        props.territoryData = decompressNestedObject(v);
-                        return;
-                    }
-
-                    // demographics (ネスト解凍)
-                    if (originalKey === 'demographics') {
-                        props.demographics = decompressNestedObject(v);
-                        return;
-                    }
-
-                    // facilities (ネスト解凍)
-                    if (originalKey === 'facilities') {
-                        props.facilities = decompressNestedObject(v);
-                        return;
-                    }
-
-                    // logistics (ネスト解凍)
-                    if (originalKey === 'logistics') {
-                        props.logistics = decompressNestedObject(v);
-                        return;
-                    }
-
-                    // livingConditions (ネスト解凍)
-                    if (originalKey === 'livingConditions') {
-                        props.livingConditions = decompressNestedObject(v);
-                        return;
-                    }
-
-                    // vegetationAreas (ネスト解凍)
-                    if (originalKey === 'vegetationAreas') {
-                        props.vegetationAreas = decompressNestedObject(v);
-                        return;
-                    }
-
-                    // 辞書参照
-                    if (DICTIONARY_KEYS.includes(k)) {
-                        props[originalKey] = getDictValue(k, v);
-                    } else {
-                        props[originalKey] = v;
-                    }
-                });
-
-                if (hasLandUse) {
-                    props.landUse = {
-                        river: landUse.river || 0,
-                        desert: landUse.desert || 0,
-                        barren: landUse.barren || 0,
-                        grassland: landUse.grassland || 0,
-                        forest: landUse.forest || 0
-                    };
-                }
-
-                // デフォルト値の復元
-                // 海水域の推定: フラグがない場合、標高0以下なら水域とする
-                if (props.isWater === undefined) props.isWater = (props.elevation <= 0);
-                if (props.roadLevel === undefined) props.roadLevel = 0;
-                if (props.nationId === undefined || props.nationId === null || isNaN(props.nationId)) props.nationId = 0;
-                if (props.flow === undefined) props.flow = 0;
-                if (props.population === undefined) props.population = 0;
-                if (props.settlement === undefined) props.settlement = null;
-                if (props.roadUsage === undefined) props.roadUsage = 0;
-                if (props.roadLoss === undefined) props.roadLoss = 0;
-                if (!props.landUse) {
-                    props.landUse = {
-                        river: 0,
-                        desert: 0,
-                        barren: 0,
-                        grassland: 0,
-                        forest: 0
-                    };
-                }
-                if (!props.industry) props.industry = { primary: {}, secondary: {}, tertiary: {}, quaternary: {}, quinary: {} };
-                if (!props.production) props.production = {};
-                if (!props.surplus) props.surplus = {};
-                if (!props.shortage) props.shortage = {};
-
-                // Hexオブジェクトにプロパティを適用
-                // [FIX] Object.assign would fail on read-only getters (x, y, cx, cy) if they exist in props
-                // So we manually assign valid properties or filter.
-                Object.keys(props).forEach(key => {
-                    // Skip Read-Only / Computed Properties
-                    if (['x', 'y', 'cx', 'cy', 'points', 'index', 'col', 'row'].includes(key)) return;
-
-                    try {
-                        hex.properties[key] = props[key];
-                    } catch (e) {
-                        // Ignore setter errors for readonly props if any slip through
-                        // console.warn(`Skipping READ-ONLY property: ${key}`);
-                    }
-                });
-
-                // downstreamIndexの復元
-                if (h[KEY_MAP['downstreamIndex']] !== undefined) {
-                    hex.downstreamIndex = h[KEY_MAP['downstreamIndex']];
-                } else {
-                    hex.downstreamIndex = -1;
-                }
-            });
-        }
-        if (loadedData.roads) {
-            worldData.roadPaths = loadedData.roads.map(r => {
-                const path = [];
-                for (let i = 0; i < r.p.length; i += 2) {
-                    path.push({ x: r.p[i], y: r.p[i + 1] });
-                }
-                return {
-                    level: r.l,
-                    nationId: r.n,
-                    path: path
-                };
-            });
-        } else {
-            // ブロックロード時は個別のRoadPath配列が無い場合がある
-            if (!worldData.roadPaths) worldData.roadPaths = [];
-        }
-
-        // [CRITICAL] 配列にcols/rowsプロパティを付与 (UI等で使用)
-        // [CRITICAL] 配列にcols/rowsプロパティを付与 (UI等で使用)
-        worldData.allHexes.cols = loadedData.cols || config.COLS;
-        worldData.allHexes.rows = loadedData.rows || config.ROWS;
-
-    } else {
-        // V1 (旧形式)
-        worldData = loadedData;
-        // V1でもプロパティがない場合はconfigから補完（サイズ不一致リスクあり）
-        if (!worldData.allHexes.cols) worldData.allHexes.cols = loadedData.cols || config.COLS;
-        if (!worldData.allHexes.rows) worldData.allHexes.rows = loadedData.rows || config.ROWS;
-
-        await addLogMessage('旧形式のデータを読み込みました。');
-    }
-    // コンフィグ更新 (必要なら)
-    // neighborsの完全再計算
-    const mapCols = worldData.allHexes.cols;
-    const mapRows = worldData.allHexes.rows;
-
-    // [CRITICAL FIX] Calculate Block Offset for Global Coordinates
-    let globalOffsetX = 0;
-    let globalOffsetY = 0;
-
-    if (options.blockId) {
-        const parts = options.blockId.split('_');
-        const ee = parseInt(parts[1], 10);
-        const nn = parseInt(parts[2], 10);
-
-        const BLOCK_START_EE = 0;
-        const BLOCK_START_NN = 0;
-        const CORE_COL = 23;
-        const CORE_ROW = 20;
-        const GLOBAL_OFFSET_X = 1;
-        const GLOBAL_OFFSET_Y = 1;
-
-        globalOffsetX = GLOBAL_OFFSET_X + (ee - BLOCK_START_EE) * CORE_COL;
-        globalOffsetY = GLOBAL_OFFSET_Y + (nn - BLOCK_START_NN) * CORE_ROW;
-
-        console.log(`[Geo Coord Debug] Block=${options.blockId} EE=${ee} NN=${nn} -> OffsetX=${globalOffsetX} OffsetY=${globalOffsetY}`);
-    }
-
-    worldData.allHexes.forEach(h => {
-        // [FIX] グローバル座標ではなく、バッファ内のローカル座標を使用して隣接関係を計算する
-        // Global coordinates (e.g. 5012) will fail bounds check against mapCols (25).
-        const localCol = h.index % mapCols;
-        const localRow = Math.floor(h.index / mapCols);
-        h.neighbors = getNeighborIndices(localCol, localRow, mapCols, mapRows);
-
-        // グローバル座標の適用
-        if (blockIdForLoad) {
-            h.col = globalOffsetX + (localCol - 1);
-            h.row = globalOffsetY + (localRow - 1);
-
-            if (h.index === 0 || h.index === 300) {
-                console.log(`[Geo Coord Loop Debug] Hex[${h.index}] Local(${localCol},${localRow}) -> Assigned Global(${h.col},${h.row})`);
-            }
-        }
-    });
-
-    // 既存のgetIndex関数を利用
-    worldData.allHexes.forEach(h => {
-        // ユーザー要件: "w"は湖沼のみ保存。標高がマイナスなら海洋。
-
-        // 英語→日本語マッピング (Legacy data support)
-        const LEGACY_VEG_MAP = {
-            'grassland': '草原',
-            'forest': '森林',
-            'temperateForest': '温帯林',
-            'subarcticForest': '亜寒帯林',
-            'tropicalRainforest': '熱帯雨林',
-            'desert': '砂漠',
-            'wetland': '湿地',
-            'tundra': 'ツンドラ',
-            'ice': '氷雪帯',
-            'savanna': 'サバンナ',
-            'steppe': 'ステップ',
-            'alpine': 'アルパイン',
-            'wasteland': '荒れ地',
-            'coastal': '沿岸植生',
-            'ocean': '海洋',
-            'deep_ocean': '深海',
-            'lake': '湖沼'
-        };
-
-        if (LEGACY_VEG_MAP[h.properties.vegetation]) {
-            h.properties.vegetation = LEGACY_VEG_MAP[h.properties.vegetation];
-        }
-
-        const veg = h.properties.vegetation;
-        const w = h.properties.w || h.properties.isWater;
-
-        if (h.properties.elevation <= 0) {
-            h.properties.isWater = true;
-            // 植生が未設定または不整合なら補正
-            // v3.2: '湖沼'はelevation <= 0でもあり得るので上書きしない
-            if (!veg || (veg !== '海洋' && veg !== '深海' && veg !== '湖沼')) {
-                if (h.properties.elevation < -500) h.properties.vegetation = '深海';
-                else h.properties.vegetation = '海洋';
-            }
-        } else if (w === true || veg === '湖沼') {
-            h.properties.isWater = true;
-            if (!veg) h.properties.vegetation = '湖沼';
-        } else {
-            h.properties.isWater = false;
-        }
-
-    });
-
-    // 簡易的なneighbors再構築ブロックは除去 (utils.jsのgetNeighborIndicesを用いた正確なロジックに置き換えたため)
-    // 以前のコードがここで上書きしていたため、バグが再発していた。
-
-    // [MOVED] 水域植生の初期化 (沿岸判定の前に必須)
-    initializeWaterVegetation(worldData.allHexes);
-
-    // [MOVED] 地理的フラグ（沿岸・湖岸）の再計算
-    recalculateGeographicFlags(worldData.allHexes);
-
-    // データ補完: 河川プロパティの再計算
-    // downstreamIndexが保存されていない(V2初期)場合、または河川が表示されない場合は再構築が必要
-    // [CRITICAL FIX] 河川データの補完は計算スキップオプションに関わらず実行する
-    // downstreamIndexが保存されていない(V2初期)場合、または河川が表示されない場合は再構築が必要
-    const riverHexes = worldData.allHexes.filter(h => h.properties.flow > 0);
-    const missingRivers = riverHexes.some(h => h.downstreamIndex === -1);
-
-    // [DEBUG] 河川データの状態確認
-    // console.log(`[River Debug] Flow > 0 hexes: ${riverHexes.length}`);
-    // console.log(`[River Debug] Missing downstreamIndex: ${riverHexes.filter(h => h.downstreamIndex === -1).length}`);
-
-    // データ救済措置: flowデータが全くない場合は再生成する (v3.Xデータ消失対応)
-    if (riverHexes.length === 0 && !options.skipCalculations) {
-        // 全く新規生成の場合は重いのでスキップフラグに従うか...? 
-        // いや、河川がないとマップとして成立しないのでやるべきだが、初期ロード以外では危険かもしれない
-        // ここでは skipCalculations が false (初期ロード) の場合のみ完全再生成を許可する
-        await addLogMessage("河川データが検出されません。河川システムを再生成します...");
-        initializeNoiseFunctions();
-        generateWaterSystems(worldData.allHexes);
-
-        // 再生成後のステータス更新
-        recalculateRiverProperties(worldData.allHexes);
-
-    } else if (missingRivers) {
-        // await addLogMessage(`河川接続データ欠損を検出: ${riverHexes.filter(h => h.downstreamIndex === -1).length}箇所`);
-
-        // 簡易復元: flowがある全ヘックスについて、最も標高が低い隣接ヘックスを下流とみなす
-        let restoredCount = 0;
-        worldData.allHexes.forEach(h => {
-            if (h.properties.flow > 0 && h.downstreamIndex === -1 && !h.properties.isWater) {
-                let minElev = h.properties.elevation;
-                let targetIndex = -1;
-
-                // 隣接ヘックスを走査
-                h.neighbors.forEach(nIndex => {
-                    // [SAFETY] Ignore neighbors that are too far (index diff > width + padding).
-                    // This prevents "Teleport Rivers" caused by invalid neighbor data.
-                    if (Math.abs(nIndex - h.index) > mapCols + 2) return;
-
-                    const n = worldData.allHexes.getHex(nIndex);
-                    if (n && n.properties.elevation < minElev) {
-                        minElev = n.properties.elevation;
-                        targetIndex = nIndex;
-                    }
-                });
-
-                // 下流が見つかれば接続
-                if (targetIndex !== -1) {
-                    h.downstreamIndex = targetIndex;
-                    restoredCount++;
-                    // [DEBUG VALIDATION]
-                    if (restoredCount <= 5) {
-                        console.log(`[River Restore Check] Hex[${h.index}] (Global ${h.col},${h.row}) -> Downstream Index: ${h.downstreamIndex} (Target Local: ${targetIndex})`);
-                    }
-                }
-            }
-        });
-
-        console.log(`[River Debug] Restored connections: ${restoredCount}`);
-        if (restoredCount > 0) {
-            await addLogMessage(`${restoredCount}箇所の河川接続を復元しました`);
-        }
-
-        // [FINAL FIX] 座標系の強制再適用
-        // JSON読み込みなどで座標が上書きされるケースを防ぐため、最後に正しいGlobal座標を確定させます。
-        if (blockIdForLoad) {
-            worldData.allHexes.forEach(h => {
-                const localCol = h.index % config.COLS;
-                const localRow = Math.floor(h.index / config.COLS);
-                h.col = globalOffsetX + (localCol - 1);
-                h.row = globalOffsetY + (localRow - 1);
-            });
-        }
-
-        recalculateRiverProperties(worldData.allHexes);
-    } else {
-        // データが正常でもプロパティ再計算は念のため行う（軽い処理なので）
-        recalculateRiverProperties(worldData.allHexes);
-    }
-
-
-
-    // [MOVED] generateRidgeLines called later after seed init
-
-
-
-    // [DEBUG] Diagnosing why Coastal becomes 0
-    /*
-    // [DEBUG] Diagnosing why Coastal becomes 0
-    let waterCount = 0;
-    // ...
-    if (sampleLand) {
-        console.log(`[Geo Flag Debug] Sample Land Hex [${sampleLand.col},${sampleLand.row}] Neighbors:`, sampleLand.neighbors);
-        sampleLand.neighbors.forEach(ni => {
-            const n = worldData.allHexes[ni];
-            console.log(`  - Neighbor ${ni}: isWater=${n.properties.isWater}, Veg=${n.properties.vegetation}`);
-        });
-    }
-    */
-
-
-
-    // 植生エリアデータが欠落している場合の再計算
-    const missingVegAreas = worldData.allHexes.filter(h => !h.properties.vegetationAreas && !h.properties.isWater).length;
-
-    // データが欠落しているか、あるいは念のため常に再計算/復元する
-    if (missingVegAreas > 0) {
-        await addLogMessage(`植生詳細データ(${missingVegAreas}件)を再計算しています...`);
-    } else {
-        await addLogMessage(`地形特性を復元しています...`);
-    }
-
-    // [OPTIMIZATION] Skip heavy recalculations for Block Loading (Scrolling) to prevent freeze
-    if (!options.skipCalculations) {
-        // ノイズ関数の再初期化
-        // initGlobalRandomでシードを設定してからinitializeNoiseFunctionsを呼ぶ必要があります
-
-        // 稜線データの再生成 (シード初期化後に実行)
-        // generateRidgeLines calls globalRandom, so it MUST be here
-        generateRidgeLines(worldData.allHexes);
-
-        // 地理的フラグ（沿岸・湖岸）の再計算 (念のため再実行 - 正確なvegetationが必要)
-        recalculateGeographicFlags(worldData.allHexes);
-
-        // 砂浜の形成 (再計算)
-        generateBeaches(worldData.allHexes, loadedData.cols, loadedData.rows);
-
-        // 最終プロパティ計算 (植生、産業ポテンシャル)
-        // ノイズ関数が正しく初期化されているので、ここで正しい値になるはず
-        calculateFinalProperties(worldData.allHexes, loadedData.cols, loadedData.rows, { preserveVegetation: true });
-
-        // 距離の再計算
-        await recalculateDistances(worldData);
-    } else {
-        // Minimal restoration for rendering if needed
-        console.log("[processLoadedData] Skipping heavy geometric recalculations.");
-    }
-
-    // 人口データの復元チェック (散居対応)
-    // 保存データを使用し、未設定(0またはnull)のもののみ補完する。
-    // ただし、意図的に0の荒野などは上書きしないよう注意が必要だが、
-    // ここでは settlement が '散居' と定義されているが人口がないケースなどを救済する
-    let popRestored = 0;
-    worldData.allHexes.forEach(h => {
-        const p = h.properties;
-        if (p.isWater) return; // 水域には人口なし
-
-        // 人口が正しくロードされている場合はスキップ
-        if (p.population > 0) return;
-
-        // settlementタイプがあり、かつ人口がない場合のみ復元
-        // (本来は保存されるべきだが、圧縮で消えている場合など)
-        if (p.settlement && p.settlement !== 'none') {
-            let basePop = 0;
-            const sType = p.settlement;
-
-            if (sType === '首都') basePop = 15000 + Math.floor(globalRandom.next() * 10000);
-            else if (sType === '都市' || sType === '領都') basePop = 8000 + Math.floor(globalRandom.next() * 5000);
-            else if (sType === '街') basePop = 3000 + Math.floor(globalRandom.next() * 2000);
-            else if (sType === '町') basePop = 1000 + Math.floor(globalRandom.next() * 1000);
-            else if (sType === '村') basePop = 200 + Math.floor(globalRandom.next() * 300);
-            else if (sType === '散居') {
-                basePop = 20 + Math.floor(globalRandom.next() * 50);
-            }
-
-            if (basePop > 0) {
-                p.population = basePop;
-                popRestored++;
-            }
-        }
-    });
-
-    if (popRestored > 0) {
-        await addLogMessage(`${popRestored}箇所の集落人口を復元しました`);
-    }
-
-    // 経済指標の再計算 (不足データの補完 - 船舶数などもここ)
-    if (!options.skipCalculations) {
-        await recalculateEconomyMetrics(worldData);
-    } else {
-        console.log("[processLoadedData] Skipping economy metrics calculation.");
-    }
-
-    // UI初期化・再描画
-    if (!uiInitialized) {
-        console.log("[processLoadedData] Initializing UI...");
-        await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage, blockManager);
-        uiInitialized = true;
-        console.log("[processLoadedData] UI Initialized.");
-    } else {
-        console.log("[processLoadedData] Redrawing Roads and Nations...");
-        await redrawRoadsAndNations(worldData.allHexes, worldData.roadPaths);
-    }
-
-
-    // ミニマップの強制更新 (UI初期化後に実行)
-    // 色分けデータが正しく反映されているか確認
-    setTimeout(() => {
-        // updateMinimap(worldData.allHexes);
-        // console.log("[Minimap] Forced update triggered.");
-    }, 500);
-
-    updateButtonStates(4);
-    loadingOverlay.style.display = 'none';
-}
-
-
-
 async function main() {
     loadingOverlay.style.display = 'flex';
     const loaded = await loadExistingWorld();
-    if (!worldData.allHexes) { // worldData.allHexes が null のままならロード失敗
+    if (!worldData.allHexes || worldData.allHexes.size === 0) { // worldData.allHexes が null または空
         await addLogMessage('新しい世界を創造します。「① 大陸・河川生成」ボタンを押してください。');
         updateButtonStates(0);
         loadingOverlay.style.display = 'none';
@@ -1734,19 +661,19 @@ step3Btn.addEventListener('click', runStep3_Settlements);
 step4Btn.addEventListener('click', runStep4_Nations);
 step5Btn.addEventListener('click', runStep5_Save);
 downloadJsonBtn.addEventListener('click', downloadWorldData);
-// --- 統合: ブロックベースのダウンロードロジック ---
 
+// --- ブロックベースのダウンロード関数 ---
 async function downloadWorldData() {
     if (!worldData || !worldData.allHexes) return;
 
     await addLogMessage("世界データをブロックに分割中...");
 
-    // Split into 25 blocks
+    // 25個のブロックに分割
     const blocks = splitWorldIntoBlocks(worldData);
 
     await addLogMessage(`${blocks.length}個のブロックデータを生成しました。ZIP圧縮中...`);
 
-    // Use JSZip
+    // JSZipの使用
     if (typeof JSZip === 'undefined') {
         await addLogMessage("エラー: JSZipライブラリが見つかりません。");
         return;
@@ -1754,11 +681,8 @@ async function downloadWorldData() {
 
     const zip = new JSZip();
 
-    // Add each block to zip
+    // 各ブロックをJSON化してZIPに追加
     blocks.forEach(block => {
-        // block.id is expected to be "map_EE_NN" or just "EE_NN"
-        // BlockUtils.getBlockId usually returns "map_EE_NN"
-        // Let's ensure no double prefix.
         let filename;
         if (block.id.startsWith('map_')) {
             filename = `${block.id}.json`;
@@ -1766,7 +690,7 @@ async function downloadWorldData() {
             filename = `map_${block.id}.json`;
         }
 
-        // Compress the block hexes
+        // ブロック内データの圧縮 (BlockIO.js function)
         const compressedBlock = createCompressedData(block.hexes);
 
         const blockJson = {
@@ -1780,10 +704,9 @@ async function downloadWorldData() {
         zip.file(filename, JSON.stringify(blockJson));
     });
 
-    // Generate ZIP
+    // ZIP生成とダウンロード
     const content = await zip.generateAsync({ type: "blob" });
 
-    // Download
     const a = document.createElement('a');
     a.href = URL.createObjectURL(content);
     a.download = `world_data_blocks_${Date.now()}.zip`;
@@ -1794,9 +717,8 @@ async function downloadWorldData() {
 
 loadGasBtn.addEventListener('click', loadFromGAS);
 regenerateBtn.addEventListener('click', generateNewWorld);
-
-// 初期ロード
 window.addEventListener('load', main);
+
 
 // --- 通知送信用のヘルパー関数 ---
 async function notifyRegenerationAttempt() {
@@ -1827,5 +749,3 @@ async function notifyRegenerationAttempt() {
         console.warn("通知送信に失敗しましたが、処理は続行します。", e);
     }
 }
-
-

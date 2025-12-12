@@ -1,5 +1,5 @@
 // ================================================================
-// GeoForge System - Block Utilities
+// GeoForge System - Block Utilities (ブロックユーティリティ)
 // ================================================================
 
 export const BLOCK_CORE_COLS = 23;
@@ -14,27 +14,27 @@ export const BLOCK_START_NN = 0;
 export const BLOCK_END_EE = 99;
 export const BLOCK_END_NN = 99;
 
-// Global map constraints
-// With 5x5 blocks (23x20 core), total core size is 115x100.
-// With 1-hex padding on global edges, total size is 117x102.
-export const GLOBAL_OFFSET_X = 1; // Global (0,0) is padding. (1,1) is start of core data.
+// グローバルマップの制約
+// 5x5ブロック (コアサイズ 23x20) の場合、総コアサイズは 115x100。
+// グローバルな端に1ヘックスのパディングがあるため、全体のサイズは 117x102 となる。
+export const GLOBAL_OFFSET_X = 1; // グローバル(0,0)はパディング。(1,1)がコアデータの開始位置。
 export const GLOBAL_OFFSET_Y = 1;
 
 /**
- * Returns the block ID (filename compatible) for a given block coordinate.
- * @param {number} ee Longitude index (48-52)
- * @param {number} nn Latitude index (71-75)
- * @returns {string} e.g., "map_50_73"
+ * 指定されたブロック座標からブロックID（ファイル名互換）を返します。
+ * @param {number} ee - 経度インデックス (例: 48-52)
+ * @param {number} nn - 緯度インデックス (例: 71-75)
+ * @returns {string} ID文字列 (例: "map_50_73")
  */
 export function getBlockId(ee, nn) {
     return `map_${ee}_${nn}`;
 }
 
 /**
- * Returns the block ID from global coordinates.
- * @param {number} col Global column
- * @param {number} row Global row
- * @returns {string|null} e.g., "map_50_73" or null if out of bounds
+ * グローバル座標からブロックIDを取得します。
+ * @param {number} col - グローバル列番号
+ * @param {number} row - グローバル行番号
+ * @returns {string|null} ID文字列 (例: "map_50_73")、範囲外の場合は null
  */
 export function getBlockIdFromGlobal(col, row) {
     const coords = globalToBlock(col, row);
@@ -43,65 +43,64 @@ export function getBlockIdFromGlobal(col, row) {
 }
 
 /**
- * Converts a global hex coordinate to Block coordinate system.
- * Global (0,0) is the bottom-left corner of the ENTIRE map (including global padding).
+ * グローバルヘックス座標をブロック座標系に変換します。
+ * グローバル (0,0) は、マップ全体（グローバルパディングを含む）の左下隅です。
  * 
- * @param {number} globalCol Global column index (0 to 116)
- * @param {number} globalRow Global row index (0 to 101)
- * @returns {Object|null} { ee, nn, localCol, localRow } or null if out of bounds
+ * @param {number} globalCol - グローバル列インデックス (0 から 116)
+ * @param {number} globalRow - グローバル行インデックス (0 から 101)
+ * @returns {Object|null} { ee, nn, localCol, localRow } または範囲外の場合 null
  */
 export function globalToBlock(globalCol, globalRow) {
-    // 1. Adjust for global padding to get "Core" coordinates
+    // 1. グローバルパディングを考慮して「コア」座標を取得
     const coreX = globalCol - GLOBAL_OFFSET_X;
     const coreY = globalRow - GLOBAL_OFFSET_Y;
 
-    // 2. Determine Block Index (relative to 0,0 of the block grid)
-    // Note: If coreX is -1 (left padding), it belongs to the "left ghost block" or just treated as local coord -1 in the first block?
-    // The spec says: "Share surrounding 2 hexes" - wait, "Block's surrounding 1 hex" (from my understanding of 25x22 vs 23x20).
-    // Actually the spec says "Block has 23x20 core".
-    // "Block holds 25x22 data".
-    // This means a Block includes the core AND the neighbors.
+    // 2. ブロックインデックスの決定 (ブロックグリッドの0,0に対する相対位置)
+    // 補足: coreXが-1 (左パディング) の場合、それは「左側のゴーストブロック」に属するか、
+    // あるいは最初のブロックのローカル座標 -1 として扱われるか？
+    // 仕様では「ブロックは周囲2ヘックス (実装上は1ヘックス?) を共有する」とある。
+    // 「ブロックは 23x20 のコアを持つ」「ブロックは 25x22 のデータを保持する」
+    // これは、1つのブロックにはコア部分とその隣接部分が含まれることを意味します。
 
-    // Let's implement finding the "Primary Block" for a coordinate.
-    // A coordinate might exist in multiple blocks (as padding).
-    // This function returns the "Owner" block (where this hex is part of the Core).
+    // ここでは、ある座標が属する「プライマリーブロック (Master Block)」を見つけるロジックを実装します。
+    // 座標は（パディングとして）複数のブロックに存在し得ますが、
+    // この関数は「そのヘックスがコアの一部となる」所有者ブロックを返します。
 
-    // Check bounds
-    // Core area: 0 to 114 (115 columns), 0 to 99 (100 rows)
-    // Allowed global range: 0 to 116, 0 to 101.
+    // 境界チェック
+    // コアエリア: 0〜114 (115列), 0〜99 (100行)
+    // 許容されるグローバル範囲: 0〜116, 0〜101
 
     const blockX = Math.floor(coreX / BLOCK_CORE_COLS);
     const blockY = Math.floor(coreY / BLOCK_CORE_ROWS);
 
-    // Calculate EE and NN
+    // EE と NN の計算
     const ee = BLOCK_START_EE + blockX;
-    // [FIX] NN increases SOUTH (0=North).
-    // blockY increases North (0=South of Core).
-    // So nn = 99 - blockY.
+    // [FIX] NN は南に向かって増加します (0=北)。
+    // blockY は北に向かって増加します (0=コアの南端)。
+    // したがって nn = 99 - blockY となります。
     const nn = BLOCK_END_NN - blockY;
 
-    // Calculate Local Coordinates within that block
-    // Local (0,0) is bottom-left of the 25x22 grid.
-    // Core starts at (1,1).
-    // coreX % BLOCK_CORE_COLS gives index within the core (0..22).
-    // So localCol = (coreX % BLOCK_CORE_COLS) + BLOCK_PADDING.
+    // そのブロック内でのローカル座標の計算
+    // ローカル (0,0) は 25x22 グリッドの左下です。
+    // コアは (1,1) から始まります。
+    // coreX % BLOCK_CORE_COLS はコア内のインデックス (0..22) を与えます。
+    // よって localCol = (coreX % BLOCK_CORE_COLS) + BLOCK_PADDING となります。
 
-    // Handle negative core coords (padding area)
-    // If coreX = -1, math.floor(-1/23) = -1. 
-    // This logic holds if we assume infinite pattern.
-    // But we want to map strictly to valid blocks.
+    // 負のコア座標 (パディングエリア) の処理
+    // もし coreX = -1 なら、Math.floor(-1/23) = -1 となりロジックは破綻しませんが、
+    // ここでは有効なブロックに厳密にマッピングします。
 
     let localCol = (coreX % BLOCK_CORE_COLS);
     if (localCol < 0) localCol += BLOCK_CORE_COLS;
-    localCol += BLOCK_PADDING; // Shift to skip the left padding
+    localCol += BLOCK_PADDING; // 左パディングをスキップしてシフト
 
     let localRow = (coreY % BLOCK_CORE_ROWS);
     if (localRow < 0) localRow += BLOCK_CORE_ROWS;
     localRow += BLOCK_PADDING;
 
-    // Boundary Protection
+    // 境界保護 (Boundary Protection)
     if (ee < BLOCK_START_EE || ee > BLOCK_END_EE || nn < BLOCK_START_NN || nn > BLOCK_END_NN) {
-        return null; // Outside the world
+        return null; // 世界の外側
     }
 
     return { ee, nn, localCol, localRow };
@@ -109,13 +108,13 @@ export function globalToBlock(globalCol, globalRow) {
 
 
 /**
- * Converts a Block coordinate to Global hex coordinate.
+ * ブロック座標をグローバルヘックス座標に変換します。
  * 
- * @param {number} ee 
- * @param {number} nn 
- * @param {number} localCol (0 to 24)
- * @param {number} localRow (0 to 21)
- * @returns {Object} { col, row }
+ * @param {number} ee - ブロック経度
+ * @param {number} nn - ブロック緯度
+ * @param {number} localCol - ローカル列 (0〜24)
+ * @param {number} localRow - ローカル行 (0〜21)
+ * @returns {Object} { col, row } グローバル座標
  */
 export function blockToGlobal(ee, nn, localCol, localRow) {
     const blockIndexX = ee - BLOCK_START_EE;
@@ -124,15 +123,15 @@ export function blockToGlobal(ee, nn, localCol, localRow) {
     const coreStartX = blockIndexX * BLOCK_CORE_COLS;
     const coreStartY = blockIndexY * BLOCK_CORE_ROWS;
 
-    // localCol includes padding.
-    // localCol 1 is the start of the core.
+    // localCol にはパディングが含まれます。
+    // localCol 1 がコアの開始位置です。
     const relativeCoreX = localCol - BLOCK_PADDING;
     const relativeCoreY = localRow - BLOCK_PADDING;
 
     const globalCoreX = coreStartX + relativeCoreX;
     const globalCoreY = coreStartY + relativeCoreY;
 
-    // Shift by Global Offset
+    // グローバルオフセットによるシフト
     const col = globalCoreX + GLOBAL_OFFSET_X;
     const row = globalCoreY + GLOBAL_OFFSET_Y;
 
@@ -140,38 +139,38 @@ export function blockToGlobal(ee, nn, localCol, localRow) {
 }
 
 /**
- * Calculates the pattern IDs for a road/river passing through a hex.
+ * ヘックスを通過する道路・河川のパターンIDを計算します。
  * 
- * Pattern Definition:
- * 0-5: Center-Edge (Radiant) - Connects Edge N to Center.
- * 6-11: Edge-to-Adj (Sharp) - Connects Edge N to Edge (N+1)%6.
- * 12-17: Edge-to-Skip (Gentle) - Connects Edge N to Edge (N+2)%6.
+ * パターン定義:
+ * 0-5: Center-Edge (放射状) - エッジ N と中心を接続。
+ * 6-11: Edge-to-Adj (急カーブ) - エッジ N とエッジ (N+1)%6 を接続。
+ * 12-17: Edge-to-Skip (緩カーブ) - エッジ N とエッジ (N+2)%6 を接続。
  * 
- * @param {number} inDir Direction from previous hex (0-5). If -1, it's a start node.
- * @param {number} outDir Direction to next hex (0-5). If -1, it's an end node.
- * @returns {number[]} Array of pattern IDs.
+ * @param {number} inDir - 前のヘックスからの方向 (0-5)。-1 の場合は始点。
+ * @param {number} outDir - 次のヘックスへの方向 (0-5)。-1 の場合は終点。
+ * @returns {number[]} パターンIDの配列
  */
 export function getPatternIds(inDir, outDir) {
-    // 1. Endpoint case (Start or End of path)
+    // 1. 端点の場合 (始点または終点)
     if (inDir === -1 && outDir !== -1) {
-        return [outDir]; // Center -> Out
+        return [outDir]; // 中心 -> 外
     }
     if (inDir !== -1 && outDir === -1) {
-        return [inDir]; // In -> Center
+        return [inDir]; // 外 -> 中心 (inDIrは接続元への方向ではなく、接続元からの流入方向＝中心から見たエッジ方向として扱われる前提)
+        // ※ 呼び出し元が「中心から見たエッジ方向」を渡していることを想定。
     }
     if (inDir === -1 && outDir === -1) {
-        return []; // Isolated point?
+        return []; // 孤立点
     }
 
-    // 2. Through case
-    // inDir is the direction TO the neighbor we came FROM? 
-    // Usually path is: Prev -> Curr -> Next.
-    // Neighbors input to this function should be "Direction OF the connection relative to center".
-    // So if Prev is at Direction 3, inDir=3.
+    // 2. 通過点の場合 (Through case)
+    // 通常、パスは Prev -> Curr -> Next。
+    // 入力されるneighbor方向は「中心から見た接続の方向」であるべきです。
+    // 例: Prevが方向3にあるなら、inDir=3。
 
-    // Normalize undirected connection (sorting doesn't matter for logic, but diff calc needs care)
-    // We strictly use the definition:
-    // Sharp Patterns:
+    // 無向接続として正規化 (ソートしてもロジック上の接続関係は変わらないが、差分計算には必要)
+    // 厳密な定義を使用:
+    // 急カーブ (Sharp Patterns):
     // 6: 0-1
     // 7: 1-2
     // 8: 2-3
@@ -179,7 +178,7 @@ export function getPatternIds(inDir, outDir) {
     // 10: 4-5
     // 11: 5-0 (wrap)
 
-    // Gentle Patterns:
+    // 緩カーブ (Gentle Patterns):
     // 12: 0-2
     // 13: 1-3
     // 14: 2-4
@@ -193,29 +192,29 @@ export function getPatternIds(inDir, outDir) {
     let diff = Math.abs(d1 - d2);
     if (diff > 3) diff = 6 - diff;
 
-    // A. Center-Edge (Straight)
-    if (diff === 0) return [d1]; // Same direction?? Loopback? Treat as center.
-    if (diff === 3) return [d1, d2]; // Straight through -> Two Center-Edge lines.
+    // A. Center-Edge (直線)
+    if (diff === 0) return [d1]; // 同じ方向？ ループバック？ 中心接続として扱う。
+    if (diff === 3) return [d1, d2]; // 直線通過 -> 2つのCenter-Edgeラインとして描画。
 
-    // B. Sharp Curve (Diff = 1)
+    // B. Sharp Curve (差分 = 1)
     if (diff === 1) {
-        // Find the "smaller" index taking wrap into account.
-        // Pairs are (0,1), (1,2), (2,3), (3,4), (4,5), (5,0).
-        // If (0,5), it's 5-0 -> ID 11.
+        // wrapを考慮して「小さい方」のインデックスを探す。
+        // ペアは (0,1), (1,2), (2,3), (3,4), (4,5), (5,0)。
+        // (0,5) の場合のみ 5-0 -> ID 11 となる。
 
         let min = Math.min(d1, d2);
         let max = Math.max(d1, d2);
 
-        if (min === 0 && max === 5) return [11]; // Special wrap case
+        if (min === 0 && max === 5) return [11]; // 特別な wrap ケース
 
-        // Otherwise, Base ID = 6 + min
+        // それ以外は、Base ID = 6 + min
         return [6 + min];
     }
 
-    // C. Gentle Curve (Diff = 2)
+    // C. Gentle Curve (差分 = 2)
     if (diff === 2) {
-        // Pairs are (0,2), (1,3), (2,4), (3,5), (4,0), (5,1).
-        // Wait, (4,0) is wrap. (5,1) is wrap.
+        // ペアは (0,2), (1,3), (2,4), (3,5), (4,0), (5,1)。
+        // (4,0) は wrap -> ID 16. (5,1) は wrap -> ID 17.
 
         let min = Math.min(d1, d2);
         let max = Math.max(d1, d2);
@@ -223,7 +222,7 @@ export function getPatternIds(inDir, outDir) {
         if (min === 0 && max === 4) return [16]; // 4-0
         if (min === 1 && max === 5) return [17]; // 5-1
 
-        // Otherwise, Base ID = 12 + min
+        // それ以外は、Base ID = 12 + min
         return [12 + min];
     }
 
@@ -231,15 +230,15 @@ export function getPatternIds(inDir, outDir) {
 }
 
 /**
- * Calculates determine direction from h1 to h2 (0-5 Clockwise starting N).
- * Flat-Top Hexes, Odd-Q (odd columns shifted down).
+ * h1 から h2 への方向 (0-5: 北から時計回り) を判定します。
+ * フラットトップヘックス (Flat-Top Hexes), Odd-Q (奇数列が下にずれる) 座標系。
  * 
- * @param {object} h1 - From Hex ({col, row})
- * @param {object} h2 - To Hex ({col, row})
- * @returns {number} 0:N, 1:NE, 2:SE, 3:S, 4:SW, 5:NW. Returns -1 if not neighbors.
+ * @param {object} h1 - 始点ヘックス ({col, row})
+ * @param {object} h2 - 終点ヘックス ({col, row})
+ * @returns {number} 0:N, 1:NE, 2:SE, 3:S, 4:SW, 5:NW。隣接していない場合は -1。
  */
 export function getDirection(h1, h2) {
-    // Treat inputs as simple objects with col/row if needed
+    // 必要に応じて入力オブジェクトからcol/rowを取り出す
     const c1 = h1.col !== undefined ? h1.col : h1.x;
     const r1 = h1.row !== undefined ? h1.row : h1.y;
     const c2 = h2.col !== undefined ? h2.col : h2.x;
@@ -249,9 +248,9 @@ export function getDirection(h1, h2) {
     const dr = r2 - r1;
     const isOdd = (c1 % 2 !== 0);
 
-    // Standard Odd-Q Offsets for Neighbors
-    // Even Col: N(0,-1), NE(1,-1), SE(1,0), S(0,1), SW(-1,0), NW(-1,-1)
-    // Odd Col:  N(0,-1), NE(1,0), SE(1,1), S(0,1), SW(-1,1), NW(-1,0)
+    // Odd-Q における隣接オフセットの標準
+    // 偶数列 (Even Col): N(0,-1), NE(1,-1), SE(1,0), S(0,1), SW(-1,0), NW(-1,-1)
+    // 奇数列 (Odd Col):  N(0,-1), NE(1,0), SE(1,1), S(0,1), SW(-1,1), NW(-1,0)
 
     if (dc === 0 && dr === -1) return 0; // N
     if (dc === 0 && dr === 1) return 3; // S
