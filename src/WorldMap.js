@@ -174,6 +174,87 @@ export class WorldMap {
         this.downstreamIndex = new Int32Array(this.size).fill(-1);
         this.ridgeUpstreamIndex = new Int32Array(this.size).fill(-1);
 
+        // [FIX] clearメソッドをインスタンスプロパティとして定義 (Proxy回避)
+        this.clear = () => {
+            console.log('[WorldMap] Clearing buffer... (Instance Method)');
+            this.col.fill(0);
+            this.row.fill(0);
+
+            this.isWater.fill(1);
+            this.elevation.fill(0);
+            this.temperature.fill(0);
+            this.precipitation_mm.fill(0);
+            this.precipitation.fill(0);
+            this.climate.fill(0);
+            this.flow.fill(0);
+            this.isAlluvial.fill(0);
+            this.hasSnow.fill(0);
+            this.isCoastal.fill(0);
+            this.isLakeside.fill(0);
+            this.ridgeFlow.fill(0);
+            this.riverWidth.fill(0);
+            this.riverDepth.fill(0);
+            this.riverVelocity.fill(0);
+            this.waterArea.fill(0);
+            this.Qin.fill(0);
+            this.inflowCount.fill(0);
+            this.beachArea.fill(0);
+
+            this.climateZoneId.fill(0);
+            this.vegetationId.fill(0);
+            this.terrainTypeId.fill(1);
+            this.settlementId.fill(0);
+            this.manaRankId.fill(0);
+            this.resourceRankId.fill(0);
+            this.monsterRankId.fill(0);
+
+            this.manaValue.fill(0);
+            this.agriPotential.fill(0);
+            this.forestPotential.fill(0);
+            this.miningPotential.fill(0);
+            this.fishingPotential.fill(0);
+            this.huntingPotential.fill(0);
+            this.pastoralPotential.fill(0);
+            this.livestockPotential.fill(0);
+            this.cultivatedArea.fill(0);
+            this.habitability.fill(0);
+
+            this.population.fill(0);
+            this.nationId.fill(0);
+            this.parentHexId.fill(-1);
+            this.territoryId.fill(-1);
+            this.distanceToParent.fill(0);
+            this.travelDaysToParent.fill(0);
+            this.roadLevel.fill(0);
+
+            this.landUse_river.fill(0);
+            this.landUse_desert.fill(0);
+            this.landUse_barren.fill(0);
+            this.landUse_grassland.fill(0);
+            this.landUse_forest.fill(0);
+            this.landUse_beach.fill(0);
+
+            this.neighborsBuffer.fill(-1);
+
+            this.roadUsage.fill(0);
+            this.roadLoss.fill(0);
+            this.downstreamIndex.fill(-1);
+            this.ridgeUpstreamIndex.fill(-1);
+
+            this.industry.fill(null);
+            this.demographics.fill(null);
+            this.facilities.fill(null);
+            this.production.fill(null);
+            this.surplus.fill(null);
+            this.shortage.fill(null);
+            this.territoryData.fill(null);
+            this.beachNeighbors.fill(null);
+            this.vegetationAreas.fill(null);
+            this.logistics.fill(null);
+            this.livingConditions.fill(null);
+            this.ships.fill(null);
+        };
+
         // 配列のようなアクセスを可能にするプロキシ
         return new Proxy(this, {
             get: (target, prop) => {
@@ -186,77 +267,78 @@ export class WorldMap {
                 return target[prop];
             }
         });
+
     }
 
-    /**
-     * 指定されたインデックスの Hex オブジェクト (Flyweight) を取得します。
-     * @param {number} index 
-     * @returns {Hex}
-     */
-    getHex(index) {
-        // Always create a new flyweight object
-        return new Hex(this, index);
-    }
+/**
+ * 指定されたインデックスの Hex オブジェクト (Flyweight) を取得します。
+ * @param {number} index 
+ * @returns {Hex}
+ */
+getHex(index) {
+    // Always create a new flyweight object
+    return new Hex(this, index);
+}
 
-    // Array-like iterator (イテレータ実装)
-    [Symbol.iterator]() {
-        let index = 0;
-        return {
-            next: () => {
-                if (index < this.size) {
-                    return { value: this.getHex(index++), done: false };
-                } else {
-                    return { done: true };
-                }
-            }
-        };
-    }
-
-    // Array-like methods (配列風メソッド)
-
-    forEach(callback) {
-        for (let i = 0; i < this.size; i++) {
-            callback(this.getHex(i), i, this);
-        }
-    }
-
-    map(callback) {
-        const result = [];
-        for (let i = 0; i < this.size; i++) {
-            result.push(callback(this.getHex(i), i, this));
-        }
-        return result;
-    }
-
-    filter(callback) {
-        const result = [];
-        for (let i = 0; i < this.size; i++) {
-            const hex = this.getHex(i);
-            if (callback(hex, i, this)) {
-                result.push(hex);
+// Array-like iterator (イテレータ実装)
+[Symbol.iterator]() {
+    let index = 0;
+    return {
+        next: () => {
+            if (index < this.size) {
+                return { value: this.getHex(index++), done: false };
+            } else {
+                return { done: true };
             }
         }
-        return result;
-    }
+    };
+}
 
-    find(callback) {
-        for (let i = 0; i < this.size; i++) {
-            const hex = this.getHex(i);
-            if (callback(hex, i, this)) {
-                return hex;
-            }
-        }
-        return undefined;
-    }
+// Array-like methods (配列風メソッド)
 
-    some(callback) {
-        for (let i = 0; i < this.size; i++) {
-            if (callback(this.getHex(i), i, this)) {
-                return true;
-            }
-        }
-        return false;
+forEach(callback) {
+    for (let i = 0; i < this.size; i++) {
+        callback(this.getHex(i), i, this);
     }
+}
+
+map(callback) {
+    const result = [];
+    for (let i = 0; i < this.size; i++) {
+        result.push(callback(this.getHex(i), i, this));
+    }
+    return result;
+}
+
+filter(callback) {
+    const result = [];
+    for (let i = 0; i < this.size; i++) {
+        const hex = this.getHex(i);
+        if (callback(hex, i, this)) {
+            result.push(hex);
+        }
+    }
+    return result;
+}
+
+find(callback) {
+    for (let i = 0; i < this.size; i++) {
+        const hex = this.getHex(i);
+        if (callback(hex, i, this)) {
+            return hex;
+        }
+    }
+    return undefined;
+}
+
+some(callback) {
+    for (let i = 0; i < this.size; i++) {
+        if (callback(this.getHex(i), i, this)) {
+            return true;
+        }
+    }
+    return false;
+}
 
     // [Duplicate Method Note: forEach appeared twice in original]
     // Keeping for strict integrity if needed, but safer to remove duplicate in refactor.
@@ -271,8 +353,8 @@ export class WorldMap {
     */
 
     get length() {
-        return this.size;
-    }
+    return this.size;
+}
 }
 
 
@@ -687,6 +769,7 @@ class Hex {
             ships: this.ships
         };
     }
+
 }
 
 // Iterator implementation for WorldMap (イテレータの実装)

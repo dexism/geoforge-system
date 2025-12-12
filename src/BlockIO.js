@@ -226,6 +226,24 @@ export class BlockManager {
                 // processLoadedDataを利用してデータを展開・統合する
                 // 初期ロード時以外は重い再計算処理をスキップする (skipCalculations: true)
                 // この processLoadedData は BlockIO.js 内のエクスポート関数を指す
+
+                // [FIX] 共有バッファのクリア (Ghost Data防止)
+                if (worldData) {
+                    // console.log('[BlockManager] worldData exists');
+                    if (worldData.allHexes) {
+                        // console.log('[BlockManager] worldData.allHexes exists');
+                        if (typeof worldData.allHexes.clear === 'function') {
+                            worldData.allHexes.clear();
+                        } else {
+                            console.warn('[BlockManager] worldData.allHexes.clear is NOT a function', worldData.allHexes);
+                        }
+                    } else {
+                        console.warn('[BlockManager] worldData.allHexes is missing');
+                    }
+                } else {
+                    console.warn('[BlockManager] worldData is missing');
+                }
+
                 await processLoadedData(data, { skipCalculations: true, blockId: blockId, existingWorldData: worldData });
 
                 // 新しくロードされたブロックの周囲の描画を更新するため、UI用データを更新

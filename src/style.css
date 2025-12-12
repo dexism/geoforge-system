@@ -70,9 +70,9 @@ button.active:hover {
 }
 
 #hexmap {
-    width: 120%;
-    height: 130%;
-    translate: -10% -18%;
+    width: 130%;
+    height: 140%;
+    translate: -15% -18%;
     pointer-events: auto;
     /* SVGはイベントを受け取る */
 }

@@ -218,26 +218,35 @@ export class MapView {
             .scaleExtent([0.2, 10])
             .on('start', () => {
                 this.svg.style('cursor', 'grabbing');
+                this.isZooming = true;
                 // ズーム中は重いレイヤーを非表示にする最適化
-                Object.entries(this.layers).forEach(([name, layer]) => {
-                    const isEssential = ['terrain', 'white-map-overlay', 'interaction', 'highlight-overlay', 'block-id-labels'].includes(name);
-                    if (!isEssential && layer.visible) {
-                        layer.group.style('display', 'none');
-                    }
-                });
+                // updateZoomDependentLayers が isZooming フラグを見て非表示にする
+                this.updateZoomDependentLayers(d3.zoomTransform(this.svg.node()).k);
             })
             .on('zoom', (event) => {
                 this.g.attr('transform', event.transform);
                 this.currentTransform = event.transform;
-                // ブロックIDラベルの表示制御
-                this.updateBlockIdLabels(event.transform.k);
+                // ブロックIDラベル等の表示制御
+                this.updateZoomDependentLayers(event.transform.k);
                 // ミニマップの更新は必要に応じてスロットリングする
             })
             .on('end', (event) => {
+                this.isZooming = false;
                 // ズーム終了後にレイヤー再表示
+                // [FIX] ズーム依存レイヤーはこの後の updateZoomDependentLayers で制御するため、ここでは復帰させない
+                // ここで復帰させてしまうと、updateZoomDependentLayers での「状態変化検知」が働かず、再描画トリガーが発火しない
+                const zoomDependentLayers = ['contour', 'labels', 'block-id-labels', 'settlement'];
                 Object.entries(this.layers).forEach(([name, layer]) => {
-                    if (layer.visible) layer.group.style('display', 'inline');
+                    if (!zoomDependentLayers.includes(name) && layer.visible) {
+                        layer.group.style('display', 'inline');
+                    }
                 });
+
+                // [FIX] 再表示後にズーム依存の表示制限を適用する
+                // これを行わないと、initZoomのon('end')が強制的にdisplay: inlineにしてしまい、
+                // updateZoomDependentLayersの制限（倍率1.0以下非表示など）が上書きされてしまう。
+                this.updateZoomDependentLayers(event.transform.k);
+
                 // 可視範囲の計算とブロックロード判定
                 this.updateVisibleBlocks(event.transform);
                 this.svg.style('cursor', 'grab');
@@ -316,7 +325,14 @@ export class MapView {
 
         const newState = forceVisible !== null ? forceVisible : !layer.visible;
         layer.visible = newState;
-        layer.group.style('display', newState ? 'inline' : 'none');
+
+        // ズーム依存レイヤーの場合は、updateZoomDependentLayersに描画判定を委譲
+        if (['contour', 'labels', 'block-id-labels'].includes(layerName)) {
+            const currentScale = this.currentTransform ? this.currentTransform.k : 1.0;
+            this.updateZoomDependentLayers(currentScale);
+        } else {
+            layer.group.style('display', newState ? 'inline' : 'none');
+        }
 
         // 集落レイヤーの場合、関連するラベルや国境も連動
         if (layerName === 'settlement') {
@@ -619,6 +635,11 @@ export class MapView {
                 b.visible = false;
             }
         });
+
+        // [FIX] Unified Contours Update
+        // ビューポートが変わった（パン/ズーム）ので、可視範囲の等高線を再生成するようリクエスト
+        // （各ブロックの描画がスキップされた場合でも、等高線だけは更新する必要があるため）
+        this.drawVisibleContours();
     }
 
     createBlock(id, rbx, rby, absEe, absNn) {
@@ -1473,6 +1494,9 @@ export class MapView {
                 const layerName = 'contour';
                 if (!this.layers[layerName]) return;
 
+                // [FIX] Lazy Rendering: 表示されていない場合は計算しない
+                if (this.layers[layerName].group.style('display') === 'none') return;
+
                 const contourGroup = this.layers[layerName].group;
 
                 let unifiedGroup = contourGroup.select('#unified-contours');
@@ -1607,7 +1631,13 @@ export class MapView {
     drawBlockSettlements(block) {
         const g = this.layers.settlement.group.select(`#settlement-${block.id}`);
         if (g.empty()) return;
+
+        // [FIX] Lazy Rendering
+        if (this.layers.settlement.group.style('display') === 'none') return;
+
         const data = block.hexes.filter(d => d.properties.settlement);
+
+        // 1. Draw Icons (Polygons)
         g.selectAll('.settlement-hex').data(data, d => d.index).join('polygon')
             .attr('class', 'settlement-hex')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
@@ -1622,8 +1652,30 @@ export class MapView {
             }[d.properties.settlement] || '#fff'))
             .style('fill-opacity', 0.8)
             .style('pointer-events', 'none');
+
+        // 2. Draw Labels (Moved from drawBlockLabels)
+        // These are controlled separately by .settlement-label class in updateZoomDependentLayers
+
+        // [FIX] Initial Visibility: Check current scale to determine if they should be shown immediately
+        const currentScale = d3.zoomTransform(this.svg.node()).k;
+        const initialDisplay = (currentScale > 1.0) ? 'inline' : 'none';
+
+        g.selectAll('.settlement-label').data(data, d => d.index).join('text')
+            .attr('class', 'settlement-label')
+            .attr('x', d => d.cx)
+            .attr('y', d => d.cy)
+            .text(d => d.properties.settlement)
+            // .attr('text-anchor', 'middle')
+            // .attr('dominant-baseline', 'middle')
+            // .style('font-size', '10px')
+            // .style('fill', '#000')
+            .style('display', initialDisplay);
     }
 
+    /**
+     * ブロックIDを描画します (ズームアウト時用)。
+     * @param {Object} block 
+     */
     /**
      * ブロックIDを描画します (ズームアウト時用)。
      * @param {Object} block 
@@ -1634,6 +1686,10 @@ export class MapView {
         if (g.empty()) {
             g = this.layers['block-id-labels'].group.append('g').attr('id', `block-id-${block.id}`);
         }
+
+        // [FIX] Lazy Rendering
+        if (this.layers['block-id-labels'].group.style('display') === 'none') return;
+
         g.selectAll('*').remove();
 
         if (!block.hexes || block.hexes.length === 0) return;
@@ -1654,6 +1710,77 @@ export class MapView {
             .style('fill', 'rgba(0, 0, 0, 0.5)')
             .style('pointer-events', 'none')
             .text(labelText);
+    }
+
+    /**
+     * ズーム倍率に応じてレイヤーの表示/非表示を切り替えます。
+     * @param {number} scale 
+     */
+    updateZoomDependentLayers(scale) {
+        // [FIX] Scroll Optimization: Ensure expensive layers remain hidden during zoom/pan
+        // They will be revealed by on('end') -> updateZoomDependentLayers call.
+        const isScrolling = this.isZooming;
+
+        // 1. Block ID Labels: Visible if scale <= 1.0 (Zoomed Out)
+        // Lightweight, so we can update during scroll
+        const blockIdGroups = this.g.selectAll('.block-id-labels');
+        const showBlockId = (scale <= 1.0);
+        const blockIdDisplay = showBlockId ? 'inline' : 'none';
+
+        if (!blockIdGroups.empty()) {
+            if (blockIdGroups.style('display') !== blockIdDisplay) {
+                blockIdGroups.style('display', blockIdDisplay);
+                if (showBlockId) {
+                    this.blocks.forEach(b => { if (b.rendered) this.drawBlockIdLabels(b); });
+                }
+            }
+        }
+
+        // 2. Contour Lines: Visible if scale > 1.0
+        const contourGroups = this.g.selectAll('.contour');
+        const isContourZoomVisible = (scale > 1.0);
+        const contourLayerRef = this.layers['contour'];
+        const isContourSwitchOn = contourLayerRef ? contourLayerRef.visible : true;
+        const showContour = isContourSwitchOn && isContourZoomVisible && !isScrolling; // Hide during scroll
+        const contourDisplay = showContour ? 'inline' : 'none';
+
+        if (!contourGroups.empty()) {
+            if (contourGroups.style('display') !== contourDisplay) {
+                contourGroups.style('display', contourDisplay);
+                if (showContour) {
+                    this.drawVisibleContours();
+                }
+            }
+        }
+
+        // 3. Hex Labels: Visible if scale >= 2.0
+        const labelLayer = this.layers['labels'];
+        const showLabels = (scale >= 2.0) && !isScrolling; // Hide during scroll
+        const labelDisplay = showLabels ? 'inline' : 'none';
+
+        if (labelLayer) {
+            if (labelLayer.group.style('display') !== labelDisplay) {
+                labelLayer.group.style('display', labelDisplay);
+                // Reveal Trigger
+                if (showLabels) {
+                    this.blocks.forEach(b => { if (b.rendered) this.drawBlockLabels(b); });
+                }
+            }
+        }
+
+        // 4. Settlement Labels: Visible if scale > 1.0 (Distinct from icons?)
+        // User requested: "Settlement labels disappear... hide <= 1.0"
+        const settlementLabelGroups = this.g.selectAll('.settlement-label');
+        if (!settlementLabelGroups.empty()) {
+            // Assuming settlement layer visible check is implicit via group visibility? 
+            // But we moved them to settlement group. If settlement group is hidden, these are hidden.
+            // But we want to hide them SPECIFICALLY if scale <= 1.0, even if group is visible.
+            const showSettlementLabels = (scale > 1.0) && !isScrolling;
+            const slDisplay = showSettlementLabels ? 'inline' : 'none';
+            if (settlementLabelGroups.style('display') !== slDisplay) {
+                settlementLabelGroups.style('display', slDisplay);
+            }
+        }
     }
 
     /**
@@ -1740,31 +1867,37 @@ export class MapView {
         const g = this.layers.labels.group.select(`#labels-${block.id}`);
         if (g.empty()) return;
 
+        // [FIX] Lazy Rendering
+        if (this.layers.labels.group.style('display') === 'none') return;
+
+
         const grps = g.selectAll('.hex-label-group').data(block.hexes, d => d.index).join('g').attr('class', 'hex-label-group');
         grps.selectAll('*').remove();
 
-        grps.append('text')
+        const text = grps.append('text')
+            .attr('x', d => d.cx)
+            .attr('y', d => d.cy)
+            .attr('class', 'hex-label')
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle');
+
+        // Line 1: Coords
+        text.append('tspan')
             .attr('x', d => d.cx)
             .attr('y', d => d.cy + config.r * 0.5)
-            // .attr('text-anchor', 'middle')
-            .attr('class', 'hex-label')
-            .text(d => formatLocation(d, 'coords'))
+            .text(d => formatLocation(d, 'coords'));
+
+        // Line 2: Elevation (H/D)
+        text.append('tspan')
+            .attr('x', d => d.cx)
+            .attr('dy', '1.0em')
+            .text(d => formatLocation(d, 'elevation'));
         // .style('font-size', '5px')
         // .style('fill', '#000');
-
-        grps.filter(d => d.properties.settlement)
-            .append('text').attr('x', d => d.cx).attr('y', d => d.cy)
-            .attr('class', 'settlement-label')
-            .text(d => d.properties.settlement)
-            // .attr('text-anchor', 'middle')
-            // .attr('dominant-baseline', 'middle')
-            // .style('font-size', '10px')
-            // .style('fill', '#000')
-            .style('display', this.layers.settlement.visible ? 'inline' : 'none');
     }
 
     /**
-     * ヘックスの境界線を描画します (デバッグ用)。
+     * ヘックスの境界線を描画します。
      * @param {Object} block 
      */
     drawBlockHexBorders(block) {
@@ -1774,7 +1907,7 @@ export class MapView {
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
             .attr('transform', d => `translate(${d.cx}, ${d.cy})`)
             .attr('fill', 'none')
-            .attr('stroke', '#fff8')
+            .attr('stroke', '#fff4')
             .attr('stroke-width', 0.5);
     }
 
