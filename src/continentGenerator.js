@@ -913,7 +913,7 @@ export function generateRidgeLines(allHexes) {
 /**
  * 植生分布計算 (ヘルパー)
  */
-function allocateVegetation({
+export function allocateVegetation({
     T, P, H, waterHa,
     flatness, soilFert, D,
     coastalDist, oceanicity,

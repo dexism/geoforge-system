@@ -94,7 +94,7 @@ export class MapView {
                 safety++;
             }
         }
-        
+
         const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺境';
         bodyText += `\n${nationName}`;
 
@@ -1199,6 +1199,9 @@ export class MapView {
                         neighbors: sourceHex.neighbors ? [...sourceHex.neighbors] : [],
                         beachNeighbors: sourceHex.beachNeighbors ? [...sourceHex.beachNeighbors] : [],
 
+                        resourceRank: sourceHex.resourceRank,
+                        manaRank: sourceHex.manaRank,
+
                         properties: {}, // プロキシ用ターゲット
 
                         // ベースカラーのコピー
@@ -1803,7 +1806,7 @@ export class MapView {
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
             .attr('transform', d => {
                 const p = this.coordSys.toView(d.cx, d.cy);
-                return `translate(${p.x}, ${p.y}) scale(0.5)`;
+                return `translate(${p.x}, ${p.y - 1}) scale(0.5)`;
             })
             .attr('fill', d => ({
                 '首都': '#f0f',
@@ -2149,9 +2152,9 @@ export class MapView {
 
                 // 詳細情報ウィンドウの更新
                 const infoWindow = document.getElementById('info-window');
-                const infoContent = document.getElementById('info-content');
+                const infoContent = document.getElementById('info-window-content');
                 if (infoWindow && infoContent) {
-                    infoContent.innerHTML = getInfoText(d);
+                    infoContent.innerHTML = getInfoText(d, this.hexes);
                     infoWindow.classList.remove('hidden');
                 }
             });

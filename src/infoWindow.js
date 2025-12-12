@@ -8,6 +8,8 @@
 import * as d3 from 'd3';
 import * as config from './config.js';
 import { getIndex, formatLocation } from './utils.js';
+import { allocateVegetation } from './continentGenerator.js';
+import { calculateHexIndustry, calculateHexDemographics, calculateHexFacilities, calculateHexShipOwnership } from './economyHelpers.js';
 
 // --- モジュールスコープ変数 ---
 export let childrenMap = new Map();
@@ -179,7 +181,71 @@ export function updateOverallInfo(allHexes) {
  * @param {object} d - ヘックスデータ
  * @returns {string} - 整形された情報テキスト (HTML)
  */
-export function getInfoText(d) {
+export function getInfoText(d, allHexes) {
+    // [FIX] Lazy Restoration of missing data
+    // d is a POJO (display data). We need to access the WorldMap/Buffer to calculate details.
+    if (allHexes) {
+        // Try to get the Flyweight Hex object
+        let h = null;
+        if (typeof allHexes.getHex === 'function') {
+            h = allHexes.getHex(d.index);
+        } else if (allHexes[d.index]) {
+            h = allHexes[d.index];
+        }
+
+        if (h) {
+            const hp = h.properties;
+
+            // 1. Restore Vegetation Areas (if missing)
+            if (!hp.vegetationAreas && !hp.landUse) {
+                // Estimate stats for allocation
+                const T = hp.temperature || 0;
+                const P = hp.precipitation_mm || 0;
+                const H = hp.elevation || 0;
+                const waterHa = hp.waterArea || (hp.isWater ? config.HEX_AREA_HA : 0);
+
+                // Estimates
+                const flatness = 1.0; // Default
+                const soilFert = 0.5; // Default
+                const coastalDist = hp.isCoastal ? 0 : 20;
+                const D = 0.5; // Aridity index estimate (not critical for re-allocation of saved vegetation type)
+
+                // Oceanicity estimate
+                let oceanicity = 0.0;
+                if (hp.vegetation === '海洋' || hp.vegetation === '深海') oceanicity = 1.0;
+                else if (hp.isCoastal) oceanicity = 0.8;
+
+                const areas = allocateVegetation({
+                    T, P, H, waterHa, flatness, soilFert, D, coastalDist, oceanicity
+                });
+
+                // Persistence (Session)
+                hp.vegetationAreas = areas;
+            }
+
+            // 2. Restore Economy (if missing and populated)
+            if (hp.population > 0) {
+                // Ships (Pre-requisite for fishery)
+                if (!hp.ships) calculateHexShipOwnership(h, allHexes);
+
+                // Industry
+                if (!hp.industry) calculateHexIndustry(h, allHexes);
+
+                // Demographics
+                if (!hp.demographics) calculateHexDemographics(h, allHexes);
+
+                // Facilities
+                if (!hp.facilities) calculateHexFacilities(h, allHexes);
+            }
+
+            // Sync calculated props back to display POJO 'd'
+            // We use Object.assign to copy the properties proxy or values
+            Object.assign(d.properties, h.toObject());
+            // Note: toObject() creates a POJO with all props.
+            // This ensures d.properties has everything including the newly calculated ones.
+        }
+    }
+
     const p = d.properties;
 
     // --- ヘルパー: アイコン付き行の生成 ---
@@ -197,7 +263,10 @@ export function getInfoText(d) {
     // 位置・所属
     const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺　境';
     basicInfoHtml += createRow('flag', '所　属', nationName);
-    basicInfoHtml += createRow('place', '座　標', `E${String(d.x).padStart(3, '0')}-N${String(d.y).padStart(3, '0')}`);
+
+    // [FIX] Use col/row if available
+    // [FIX] Use col/row if available and use World Coordinate format helper
+    basicInfoHtml += createRow('place', '座　標', formatLocation(d, 'coords'));
 
     // 集落・拠点
     if (p.settlement) {

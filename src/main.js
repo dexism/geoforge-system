@@ -569,7 +569,7 @@ async function loadExistingWorld() {
                 await addLogMessage('ブロックベースのロードが完了しました。');
                 await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage, blockManager);
                 uiInitialized = true;
-                
+
                 // [FIX] Initial block data is in buffer but MapView missed the update event (before init).
                 // Force sync for the initial block.
                 updateUIWithBlockData(initialBlockId, worldData.allHexes);
@@ -598,6 +598,13 @@ async function loadExistingWorld() {
             worldData = loadedWorld;
             await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage, blockManager);
             uiInitialized = true;
+
+            // [FIX] Restore calculated data for static file load
+            initializeNoiseFunctions(worldData.seed);
+            recalculateGeographicFlags(worldData.allHexes);
+            // calculateFinalProperties(worldData.allHexes, config.COLS, config.ROWS, { preserveVegetation: true });
+            // await recalculateEconomyMetrics(worldData);
+
         } else {
             // データが見つからない場合のフォールバック（ダミー生成など）は blockManager.load 内や generateNewWorld で処理されるべきだが
             // ここまで来たら「新規作成」を促す
@@ -633,8 +640,27 @@ async function loadFromGAS() {
         const loadedWorld = await processLoadedData(loadedData);
         worldData = loadedWorld;
 
+
         await setupUI(worldData.allHexes, worldData.roadPaths, addLogMessage, blockManager);
         uiInitialized = true;
+
+        // [FIX] Restore missing calculated data (vegetationAreas, industry, etc.) for existing saves
+        await addLogMessage("データの整合性をチェックし、詳細情報を復元しています...");
+
+        // 1. ノイズ関数の再初期化
+        initializeNoiseFunctions(worldData.seed);
+
+        // 2. 地理フラグの再計算
+        recalculateGeographicFlags(worldData.allHexes);
+
+        // 3. (Restoration on Click)
+        // calculateFinalProperties(worldData.allHexes, config.COLS, config.ROWS, { preserveVegetation: true });
+
+        // 4. (Restoration on Click)
+        // await recalculateEconomyMetrics(worldData);
+
+        await addLogMessage("データの復元が完了しました。");
+
 
 
     } catch (error) {
