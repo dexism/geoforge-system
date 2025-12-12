@@ -60,23 +60,24 @@ export class MapView {
      */
     getTooltipText(d) {
         const p = d.properties;
+
         let headerText = '';
+        const locationText = formatLocation(d, 'short');
+        const settlementType = (p.settlement || '散居').padEnd(2, '　');
+        const populationText = `人口：${(p.population || 0).toLocaleString()} 人`;
+        headerText += `${settlementType}：${locationText}\n${populationText}\n`;
+
+        let bodyText = '---\n';
         const terrain = p.isWater ? '水域' : (p.terrainType || '不明');
         const vegetation = p.vegetation || 'なし';
-        headerText += `地形：${terrain}\n植生：${vegetation}\n`;
+        bodyText += `地形：${terrain}\n植生：${vegetation}\n`;
 
         const features = [];
         if (p.isAlluvial) features.push('河川');
         if (p.hasSnow) features.push('積雪');
         if (p.beachNeighbors && p.beachNeighbors.length > 0) features.push('砂浜');
-        if (features.length > 0) headerText += `特性：${features.join(', ')}\n`;
-        headerText += '---\n';
+        if (features.length > 0) bodyText += `特性：${features.join(', ')}`;
 
-        let bodyText = '';
-        const locationText = formatLocation(d, 'short');
-        const settlementType = (p.settlement || '散居').padEnd(2, '　');
-        const populationText = `人口：${(p.population || 0).toLocaleString()} 人`;
-        bodyText += `${settlementType}：${locationText}\n${populationText}`;
 
         if (p.parentHexId !== null) {
             bodyText += `\n---`;
@@ -93,6 +94,7 @@ export class MapView {
                 safety++;
             }
         }
+        
         const nationName = p.nationId > 0 && config.NATION_NAMES[p.nationId - 1] ? config.NATION_NAMES[p.nationId - 1] : '辺境';
         bodyText += `\n${nationName}`;
 
@@ -147,7 +149,7 @@ export class MapView {
         this.layers = {};
 
         const createLayer = (name, visibleByDefault = true) => {
-            const layerGroup = this.g.append('g').attr('class', `${name}-layer`);
+            const layerGroup = this.g.append('g').attr('class', `${name} -layer`);
             this.layers[name] = { group: layerGroup, visible: visibleByDefault };
             if (!visibleByDefault) {
                 layerGroup.style('display', 'none');
@@ -175,18 +177,18 @@ export class MapView {
 
         // データオーバーレイ群
         const overlays = [
-            'monster-overlay', 
-            'population-overlay', 
+            'monster-overlay',
+            'population-overlay',
             'climate-zone-overlay',
-            'temp-overlay', 
-            'precip-overlay', 
+            'temp-overlay',
+            'precip-overlay',
             'mana-overlay',
-            'agri-overlay', 
-            'forest-overlay', 
-            'mining-overlay', 
+            'agri-overlay',
+            'forest-overlay',
+            'mining-overlay',
             'fishing-overlay',
-            'hunting-overlay', 
-            'pastoral-overlay', 
+            'hunting-overlay',
+            'pastoral-overlay',
             'livestock-overlay'
         ];
         overlays.forEach(name => createLayer(name, false));
@@ -218,7 +220,7 @@ export class MapView {
      */
     initZoom() {
         this.zoom = d3.zoom()
-            .scaleExtent([0.2, 10])
+            .scaleExtent([0.7, 4.0])
             .on('start', () => {
                 this.svg.style('cursor', 'grabbing');
                 this.isZooming = true;
@@ -1798,7 +1800,6 @@ export class MapView {
         // 1. Draw Icons (Polygons)
         g.selectAll('.settlement-hex').data(data, d => d.index).join('polygon')
             .attr('class', 'settlement-hex')
-            .attr('class', 'settlement-hex')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
             .attr('transform', d => {
                 const p = this.coordSys.toView(d.cx, d.cy);
@@ -1811,9 +1812,7 @@ export class MapView {
                 '街': '#f80',
                 '町': '#ff0',
                 '村': '#0f0'
-            }[d.properties.settlement] || '#fff'))
-            .style('fill-opacity', 0.8)
-            .style('pointer-events', 'none');
+            }[d.properties.settlement] || '#fff'));
 
         // 2. Draw Labels (Moved from drawBlockLabels)
         // These are controlled separately by .settlement-label class in updateZoomDependentLayers
@@ -1875,13 +1874,13 @@ export class MapView {
 
         // 1. Block ID Labels: Visible if scale <= 1.0 (Zoomed Out)
         // Lightweight, so we can update during scroll
-        const blockIdGroups = this.g.selectAll('.block-id-labels');
+        const blockIdLayer = this.layers['block-id-labels'];
         const showBlockId = (scale <= 1.0);
         const blockIdDisplay = showBlockId ? 'inline' : 'none';
 
-        if (!blockIdGroups.empty()) {
-            if (blockIdGroups.style('display') !== blockIdDisplay) {
-                blockIdGroups.style('display', blockIdDisplay);
+        if (blockIdLayer && blockIdLayer.group) {
+            if (blockIdLayer.group.style('display') !== blockIdDisplay) {
+                blockIdLayer.group.style('display', blockIdDisplay);
                 if (showBlockId) {
                     this.blocks.forEach(b => { if (b.rendered) this.drawBlockIdLabels(b); });
                 }
@@ -1889,16 +1888,16 @@ export class MapView {
         }
 
         // 2. Contour Lines: Visible if scale > 1.0
-        const contourGroups = this.g.selectAll('.contour');
+        const contourLayer = this.layers['contour'];
         const isContourZoomVisible = (scale > 1.0);
-        const contourLayerRef = this.layers['contour'];
-        const isContourSwitchOn = contourLayerRef ? contourLayerRef.visible : true;
+        // Toggle Switch check
+        const isContourSwitchOn = contourLayer ? contourLayer.visible : true;
         const showContour = isContourSwitchOn && isContourZoomVisible && !isScrolling; // Hide during scroll
         const contourDisplay = showContour ? 'inline' : 'none';
 
-        if (!contourGroups.empty()) {
-            if (contourGroups.style('display') !== contourDisplay) {
-                contourGroups.style('display', contourDisplay);
+        if (contourLayer && contourLayer.group) {
+            if (contourLayer.group.style('display') !== contourDisplay) {
+                contourLayer.group.style('display', contourDisplay);
                 if (showContour) {
                     this.drawVisibleContours();
                 }
@@ -1910,7 +1909,7 @@ export class MapView {
         const showLabels = (scale >= 2.0) && !isScrolling; // Hide during scroll
         const labelDisplay = showLabels ? 'inline' : 'none';
 
-        if (labelLayer) {
+        if (labelLayer && labelLayer.group) {
             if (labelLayer.group.style('display') !== labelDisplay) {
                 labelLayer.group.style('display', labelDisplay);
                 // Reveal Trigger
@@ -1922,6 +1921,9 @@ export class MapView {
 
         // 4. Settlement Labels: Visible if scale > 1.0 (Distinct from icons?)
         // User requested: "Settlement labels disappear... hide <= 1.0"
+        // Note: Settlement labels are child elements of the 'settlement' layer OR 'labels' layer?
+        // They are drawn in 'settlement' layer in drawBlockSettlements.
+        // We need to toggle individual text elements because the layer itself (icons) remains visible.
         const settlementLabelGroups = this.g.selectAll('.settlement-label');
         if (!settlementLabelGroups.empty()) {
             // Assuming settlement layer visible check is implicit via group visibility? 

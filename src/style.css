@@ -1168,3 +1168,10 @@ button.active:hover {
     fill: none;
     pointer-events: none;
 }
+
+.settlement-hex {
+    fill-opacity: 0.8;
+    pointer-events: none;
+    /* 集落の六角形に影をつける */
+    filter: drop-shadow(0px 3px 3px #000);
+}
