@@ -560,7 +560,7 @@ export class MapView {
             return Promise.resolve();
         }
 
-        console.log(`[Buffer Operation] Start Processing Block: ${block.id}`);
+        // console.log(`[Buffer Operation] Start Processing Block: ${block.id}`);
 
         if (!block.loaded && !block.loading) {
             if (this.blockLoaderRef) {
@@ -572,7 +572,7 @@ export class MapView {
                     if (success) {
                         // Data assumes to be in global this.hexes updated by loader
                         // Clone data immediately while buffer is valid
-                        console.log(`[Buffer Operation] Loader Buffer populated for ${block.id}. Creating Screen Buffer Snapshot...`);
+                        // console.log(`[Buffer Operation] Loader Buffer populated for ${block.id}. Creating Screen Buffer Snapshot...`);
                         this.generateBlockHexes(block);
                     } else {
                         console.warn(`[MapView] Block ${block.id} load failed or invalid. Filling Dummy Data.`);
@@ -593,14 +593,14 @@ export class MapView {
                 });
             } else {
                 block.loaded = true;
-                console.log(`[Buffer Operation] No Loader. Generating Default/Dummy Screen Buffer for ${block.id}...`);
+                // console.log(`[Buffer Operation] No Loader. Generating Default/Dummy Screen Buffer for ${block.id}...`);
                 return this.ensureDummyData(block).then(() => {
                     this.generateBlockHexes(block);
                     this.renderBlock(block);
                 });
             }
         } else if (block.loaded && !block.rendered) {
-            console.log(`[Buffer Operation] Block ${block.id} already loaded. Re-rendering from Screen Buffer.`);
+            // console.log(`[Buffer Operation] Block ${block.id} already loaded. Re-rendering from Screen Buffer.`);
             this.renderBlock(block);
             return Promise.resolve();
         }
@@ -849,7 +849,7 @@ export class MapView {
         // [FIX] Ensure Screen Buffer is populated from Loader Buffer immediately upon load completion.
         // This prevents "0 hexes" error if render is called before the promise chain in handleBlockAndRender.
         // Also protects against Loader Buffer being overwritten by next block.
-        console.log(`[Buffer Operation] updateUIWithBlockData trigger for ${blockId}. Syncing Screen Buffer...`);
+        // console.log(`[Buffer Operation] updateUIWithBlockData trigger for ${blockId}. Syncing Screen Buffer...`);
         this.generateBlockHexes(block);
 
         // Force re-render if updated
@@ -873,7 +873,7 @@ export class MapView {
         // console.log(`[MapView] Generating hexes for ${ block.id }(Rel ${ block.relBx }, ${ block.relBy }).Range: C${ coreStartCol } -${ coreStartCol + CORE_COL }, R${ coreStartRow } -${ coreStartRow + CORE_ROW } `);
 
         // [Buffer Log]
-        console.log(`[Buffer Operation] Cloning hexes from Shared Loader Buffer to Block Screen Buffer (${block.id})...`);
+        // console.log(`[Buffer Operation] Cloning hexes from Shared Loader Buffer to Block Screen Buffer (${block.id})...`);
 
         // Use loose bounds
 
@@ -1079,7 +1079,7 @@ export class MapView {
         // [FIX] Populate allHexes for Contours (currently same as Core, but needed for drawing)
         block.allHexes = block.hexes;
 
-        console.log(`[Buffer Operation] Screen Buffer Population Complete for ${block.id}. (Hex Count: ${block.hexes.length})`);
+        // console.log(`[Buffer Operation] Screen Buffer Population Complete for ${block.id}. (Hex Count: ${block.hexes.length})`);
 
 
     }
@@ -1093,10 +1093,10 @@ export class MapView {
             return;
         }
 
-        console.log(`[Buffer Operation] Rendering Block ${block.id} from Screen Buffer...`);
+        // console.log(`[Buffer Operation] Rendering Block ${block.id} from Screen Buffer...`);
 
         this.drawBlockTerrain(block);
-        // this.drawBlockRivers(block); // User requested to skip rivers for now
+        this.drawBlockRivers(block); // Restored river rendering
         this.drawBlockBeaches(block);
         this.drawBlockBorders(block);
         this.drawBlockRidgeLines(block);
@@ -1130,30 +1130,129 @@ export class MapView {
         if (g.empty()) return;
 
         const pathData = [];
+        let riverCount = 0;
+        let skippedWater = 0;
+
+        const ensureGeometry = (h) => {
+            if (h.points && h.cx !== undefined && h.cy !== undefined) return h;
+
+            const hexWidth = 2 * config.r;
+            const hexHeight = Math.sqrt(3) * config.r;
+            const WORLD_ROWS = 2002;
+
+            const c = h.col;
+            const r = h.row;
+
+            const cx = c * (hexWidth * 0.75) + config.r;
+            const cy = ((WORLD_ROWS - 1) - r) * hexHeight + (c % 2 === 0 ? 0 : hexHeight / 2) + config.r;
+
+            const points = [];
+            for (let i = 0; i < 6; i++) {
+                const angle_rad = Math.PI / 180 * (60 * i);
+                points.push([
+                    cx + config.r * Math.cos(angle_rad),
+                    cy + config.r * Math.sin(angle_rad)
+                ]);
+            }
+            return { ...h, cx, cy, points };
+        };
+
         block.hexes.forEach(d => {
-            if (d.properties.flow > 0 && !d.properties.isWater) {
-                const downstream = d.downstreamIndex !== -1 ? this.hexes[d.downstreamIndex] : null;
-                if (!downstream) return;
+            if (d.properties.flow > 0) {
+                if (!d.properties.isWater) {
+                    riverCount++;
+                    let downstream = null;
 
-                const end = getSharedEdgeMidpoint(d, downstream);
-                if (!end) return;
+                    if (d.downstreamIndex !== -1) {
+                        // [FIX] downstreamIndex is now a LOCAL BUFFER INDEX (0-550).
+                        // Direct lookup in the hex buffer.
+                        downstream = this.hexes[d.downstreamIndex];
+                    }
 
-                const cp = [d.cx, d.cy];
-                const upstreams = (this.hexes || []).filter(h => h && h.downstreamIndex === d.index);
+                    if (!downstream) {
+                        // Only log once
+                        if (riverCount === 1) console.log(`[River Debug] Hex(${d.col},${d.row}) Flow=${d.properties.flow}: Downstream NOT FOUND. Index=${d.downstreamIndex}`);
+                        return;
+                    }
 
-                if (upstreams.length === 0) {
-                    const start = [d.cx, d.cy];
-                    pathData.push({ path: `M ${start[0]},${start[1]} Q ${cp[0]},${cp[1]} ${end[0]},${end[1]}`, width: d.properties.riverWidth });
-                } else {
-                    upstreams.forEach(u => {
-                        const start = getSharedEdgeMidpoint(d, u);
-                        if (start) {
-                            pathData.push({ path: `M ${start[0]},${start[1]} Q ${cp[0]},${cp[1]} ${end[0]},${end[1]}`, width: u.properties.riverWidth });
-                        }
+                    // Ensure downstream has geometry needed for edge calculation
+                    downstream = ensureGeometry(downstream);
+
+                    // [SIMPLIFIED MODE] User Request: "Draw 10px line towards lowest neighbor"
+                    // Direction calculation
+                    const dx = downstream.cx - d.cx;
+                    const dy = downstream.cy - d.cy;
+                    const angle = Math.atan2(dy, dx);
+                    
+                    // Fixed length 10px (approx to edge)
+                    const length = 10;
+                    const endX = d.cx + Math.cos(angle) * length;
+                    const endY = d.cy + Math.sin(angle) * length;
+
+                    // Draw Line: Center -> Edge direction
+                    // Using predefined width or default
+                    pathData.push({ 
+                        path: `M ${d.cx},${d.cy} L ${endX},${endY}`, 
+                        width: d.properties.riverWidth || 1.0 
                     });
+
+                    // [TODO] Upstream calculation to be implemented in next step as requested.
+                    /*
+                    let end = getSharedEdgeMidpoint(d, downstream);
+                    if (!end) {
+                        // [FALLBACK] If shared edge is missing (precision issue?), draw to center.
+                        // This ensures the river is visible even if geometry check fails.
+                        end = [downstream.cx, downstream.cy];
+
+                        // Log only once
+                        if (riverCount === 1) {
+                            console.log(`[River Debug] Hex(${d.col},${d.row}) -> Downstream(${downstream.col},${downstream.row}): Shared Edge NOT FOUND. Using Center fallback.`);
+                        }
+                    }
+
+                    const cp = [d.cx, d.cy];
+
+                    // Upstreams matching (Local Index)
+                    const upstreams = (this.hexes || [])
+                        .filter(h => h && h.downstreamIndex === d.index)
+                        .map(h => ensureGeometry(h));
+
+                    // [Debug Upstream Failure]
+                    if (riverCount < 3 && upstreams.length === 0) {
+                        console.log(`[River Debug] Hex(${d.col},${d.row}) Index=${d.index}: No upstreams found.`);
+                        // Check neighbors manually
+                        (d.neighbors || []).forEach(ni => {
+                            // ni is Local Index in Buffer
+                            const n = this.hexes[ni];
+                            if (n) {
+                                console.log(`  - Neighbor(${n.col},${n.row}) DS=${n.downstreamIndex} (Match? ${n.downstreamIndex === d.index})`);
+                            }
+                        });
+                    }
+
+                    if (upstreams.length === 0) {
+                        const start = [d.cx, d.cy];
+                        pathData.push({ path: `M ${start[0]},${start[1]} Q ${cp[0]},${cp[1]} ${end[0]},${end[1]}`, width: d.properties.riverWidth });
+                    } else {
+                        upstreams.forEach(u => {
+                            const start = getSharedEdgeMidpoint(d, u);
+                            if (start) {
+                                pathData.push({ path: `M ${start[0]},${start[1]} Q ${cp[0]},${cp[1]} ${end[0]},${end[1]}`, width: u.properties.riverWidth });
+                            } else {
+                                if (riverCount < 3) console.log(`[River Debug] Hex(${d.col},${d.row}) <- Upstream(${u.col},${u.row}): Shared Edge Not Found.`);
+                            }
+                        });
+                    }
+                    */
+                } else {
+                    skippedWater++;
                 }
             }
         });
+
+        if (riverCount > 0 || skippedWater > 0) {
+            console.log(`[River Debug] Block ${block.id}: Land Rivers=${riverCount}, Skipped Water=${skippedWater}, Generated Paths=${pathData.length}`);
+        }
 
         const isRidge = this.layers['ridge-water-system']?.visible;
         const isWhite = document.querySelector('input[name="map-type"][value="white"]')?.checked;
@@ -1270,7 +1369,7 @@ export class MapView {
     }
 
     // [NEW] Unified Viewport Contour Rendering
-        // [NEW] Unified Viewport Contour Rendering
+    // [NEW] Unified Viewport Contour Rendering
     drawVisibleContours = (() => {
         let timeout;
         return (...args) => {
@@ -1278,14 +1377,14 @@ export class MapView {
             timeout = setTimeout(() => {
                 const layerName = 'contour';
                 if (!this.layers[layerName]) return;
-        
-                const contourGroup = this.layers[layerName].group; 
-                
+
+                const contourGroup = this.layers[layerName].group;
+
                 let unifiedGroup = contourGroup.select('#unified-contours');
                 if (unifiedGroup.empty()) {
                     unifiedGroup = contourGroup.append('g').attr('id', 'unified-contours');
                 }
-        
+
                 // Collect all hexes from visible blocks
                 const visibleHexes = [];
                 this.blocks.forEach(b => {
@@ -1293,40 +1392,40 @@ export class MapView {
                         visibleHexes.push(...b.allHexes);
                     }
                 });
-        
+
                 if (visibleHexes.length === 0) return;
-        
+
                 const resolution = config.CONTOUR_RESOLUTION || 20;
-        
+
                 // Calculate dynamic bounds from ALL visible hexes
                 const allCx = visibleHexes.map(h => h.cx);
                 const allCy = visibleHexes.map(h => h.cy);
-                
+
                 const bXMin = Math.min(...allCx);
                 const bXMax = Math.max(...allCx);
                 const bYMin = Math.min(...allCy);
                 const bYMax = Math.max(...allCy);
-        
+
                 // Grid Alignment
                 const xMin = Math.floor(bXMin / resolution) * resolution;
                 const yMin = Math.floor(bYMin / resolution) * resolution;
                 const xMax = Math.ceil(bXMax / resolution) * resolution;
                 const yMax = Math.ceil(bYMax / resolution) * resolution;
-        
+
                 const width = xMax - xMin;
                 const height = yMax - yMin;
-        
+
                 if (width <= 0 || height <= 0) return;
-        
+
                 const gridWidth = Math.floor(width / resolution);
                 const gridHeight = Math.floor(height / resolution);
                 const elevationValues = new Array(gridWidth * gridHeight).fill(-10000);
-        
+
                 // Delaunay Triangulation
                 const delaunay = d3.Delaunay.from(visibleHexes.map(h => [h.cx, h.cy]));
                 const { triangles } = delaunay;
                 const numTriangles = triangles.length / 3;
-        
+
                 // Barycentric Interpolation Helper
                 function getBarycentric(px, py, x0, y0, x1, y1, x2, y2) {
                     const denom = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
@@ -1336,31 +1435,31 @@ export class MapView {
                     const w2 = 1 - w0 - w1;
                     return [w0, w1, w2];
                 }
-        
+
                 // Rasterize
                 for (let t = 0; t < numTriangles; t++) {
                     const i0 = triangles[t * 3];
                     const i1 = triangles[t * 3 + 1];
                     const i2 = triangles[t * 3 + 2];
-        
+
                     const h0 = visibleHexes[i0];
                     const h1 = visibleHexes[i1];
                     const h2 = visibleHexes[i2];
-        
+
                     const p0x = h0.cx, p0y = h0.cy, z0 = h0.properties.elevation;
                     const p1x = h1.cx, p1y = h1.cy, z1 = h1.properties.elevation;
                     const p2x = h2.cx, p2y = h2.cy, z2 = h2.properties.elevation;
-        
+
                     const minTx = Math.min(p0x, p1x, p2x);
                     const maxTx = Math.max(p0x, p1x, p2x);
                     const minTy = Math.min(p0y, p1y, p2y);
                     const maxTy = Math.max(p0y, p1y, p2y);
-        
+
                     const gMinX = Math.max(0, Math.floor((minTx - xMin) / resolution));
                     const gMaxX = Math.min(gridWidth - 1, Math.ceil((maxTx - xMin) / resolution));
                     const gMinY = Math.max(0, Math.floor((minTy - yMin) / resolution));
                     const gMaxY = Math.min(gridHeight - 1, Math.ceil((maxTy - yMin) / resolution));
-        
+
                     for (let y = gMinY; y <= gMaxY; y++) {
                         const py = yMin + y * resolution;
                         for (let x = gMinX; x <= gMaxX; x++) {
@@ -1373,17 +1472,17 @@ export class MapView {
                         }
                     }
                 }
-        
+
                 // Generate Contours
                 const maxElevation = 7500;
                 const thresholds = d3.range(config.CONTOUR_INTERVAL || 200, maxElevation, config.CONTOUR_INTERVAL || 200);
-        
+
                 try {
                     const contours = d3.contours()
                         .size([gridWidth, gridHeight])
                         .thresholds(thresholds)
                         (elevationValues);
-        
+
                     // Draw Contours
                     unifiedGroup.selectAll("path.contour-path")
                         .data(contours)
@@ -1396,10 +1495,10 @@ export class MapView {
                         .style('stroke-opacity', 0.5)
                         .style('stroke-width', d => d.value % 1000 === 0 ? 0.06 : 0.03)
                         .style('pointer-events', 'none');
-        
+
                     // [DEBUG] Visualize Triangles (Red Wireframe) - REMOVED
                     // The red lines have been removed as per user request.
-        
+
                 } catch (e) {
                     console.error(`[Contours] Generation failed:`, e);
                 }

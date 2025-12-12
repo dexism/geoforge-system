@@ -104,6 +104,10 @@ function resetWorld() {
 async function runStep1_Continent() {
     resetWorld();
 
+    // [DEBUG] Diagnosing options passed to processLoadedData
+    console.log(`[processLoadedData] Loaded Options:`, JSON.stringify(options));
+
+    const startTime = performance.now();
     // シード生成とPRNG初期化
     const seed = Date.now();
     initGlobalRandom(seed);
@@ -397,7 +401,6 @@ const KEY_MAP = {
     flow: 'fl',
     isAlluvial: 'ia',
     hasSnow: 'hs',
-    isCoastal: 'ic',
     isLakeside: 'il',
     beachNeighbors: 'bn',
 
@@ -1221,82 +1224,19 @@ async function processLoadedData(loadedData, options = {}) {
         if (loadedData.hexes) {
             await addLogMessage('地形データを配置しています...');
             loadedData.hexes.forEach((h, index) => {
-                let idx;
+                // [REVERT] Use raw index to restore original map layout.
+                // The remapping caused visual scrambling. We accept the data as-is.
+                let idx = index;
 
-                // [FIX] Coordinate Handling for Block Data
-                // If we know the Block ID, we map Global Coords in JSON to Local Buffer Index.
-                // V2.2 Block JSON uses 'c'/'r' for Global Coords (or 'col'/'row').
-                const globalCol = h.c !== undefined ? h.c : h.col;
-                const globalRow = h.r !== undefined ? h.r : h.row;
-
-                if (blockEE !== null && blockNN !== null && globalCol !== undefined && globalRow !== undefined) {
-                    // [FIX] Calculate Local Buffer Index directly from Block Origin
-                    // Buffer is 25x22. Core is 23x20. 
-                    // Block Origin (padding included for Buffer 0,0) starts at:
-                    //   originCol = (blockEE - BLOCK_START_EE) * 23; ? No.
-                    // Let's use BlockUtils definition.
-                    // Global X = 1 + (ee - START_EE)*23 + (c-1)
-                    // If we reverse it:
-                    // Core Start Global X = 1 + (ee - START_EE) * 23.
-                    // Buffer 0,0 corresponds to Core Start X - 1. (West Padding)
-                    // So OriginX = (1 + (ee - START_EE) * 23) - 1 = (ee - START_EE) * 23. (Assuming START_EE=0 -> ee*23)
-
-                    const CORE_COL = 23;
-                    const CORE_ROW = 20; // 20? 
-                    // MapView says CORE_ROW=20.
-
-                    const originGlobalCol = (blockEE - blockUtils.BLOCK_START_EE) * CORE_COL;
-                    const originGlobalRow = (blockNN - blockUtils.BLOCK_START_NN) * CORE_ROW; // ?
-                    // N-axis is tricky. Logic usually: 1 + (nn - START_NN)*20.
-                    // Buffer 0,0 corresponds to Core Start Row - 1.
-                    const originGlobalRowBase = (blockNN - blockUtils.BLOCK_START_NN) * CORE_ROW;
-
-                    let localCol, localRow;
-
-                    // [Heuristic] Check if coords are Local (0-24) or Global (>100 usually)
-                    // If blockEE is large (e.g. 50), Global Col is ~1000.
-                    // If JSON says '12', it must be Local.
-                    if (globalCol < 50 && globalRow < 50) {
-                        localCol = globalCol;
-                        localRow = globalRow;
-                    } else {
-                        localCol = globalCol - originGlobalCol;
-                        localRow = globalRow - originGlobalRowBase;
-                    }
-
-                    // Check if within Buffer Range (0-24, 0-21)
-                    if (localCol >= 0 && localCol < config.COLS && localRow >= 0 && localRow < config.ROWS) {
-                        idx = getIndex(localCol, localRow);
-                    } else {
-                        // Truly out of bounds for this block buffer
-                        return;
-                    }
-
-                    /* 
-                    // Old Logic (Strict Ownership) - Skips Padding
-                    const bCoords = blockUtils.globalToBlock(globalCol, globalRow);
-                    if (bCoords && bCoords.ee === blockEE && bCoords.nn === blockNN) {
-                        idx = getIndex(bCoords.localCol, bCoords.localRow);
-                    } else {
-                        return;
-                    }
-                    */
-                } else {
-                    // Fallback to Index if provided, or Direct Global calculation
-                    // If no Block ID, simplified loading?
-                    if (globalCol !== undefined) {
-                        idx = getIndex(globalCol, globalRow);
-                    } else {
-                        idx = index; // Raw array index fallback
-                    }
-                }
+                // Fallback check
+                if (idx < 0 || idx >= worldData.allHexes.size) return;
 
                 const hex = worldData.allHexes.getHex(idx);
                 if (!hex) return;
 
-                // Restore Coordinates
-                if (globalCol !== undefined) hex.col = globalCol;
-                if (globalRow !== undefined) hex.row = globalRow;
+                // Restore Coordinates - SKIPPED (Handled by Final Fix Loop)
+                // if (globalCol !== undefined) hex.col = globalCol;
+                // if (globalRow !== undefined) hex.row = globalRow;
 
                 // プロパティの展開 (Decompression)
                 const props = {};
@@ -1470,8 +1410,45 @@ async function processLoadedData(loadedData, options = {}) {
     // neighborsの完全再計算
     const mapCols = worldData.allHexes.cols;
     const mapRows = worldData.allHexes.rows;
+
+    // [CRITICAL FIX] Calculate Block Offset for Global Coordinates
+    let globalOffsetX = 0;
+    let globalOffsetY = 0;
+
+    if (options.blockId) {
+        const parts = options.blockId.split('_');
+        const ee = parseInt(parts[1], 10);
+        const nn = parseInt(parts[2], 10);
+
+        const BLOCK_START_EE = 0;
+        const BLOCK_START_NN = 0;
+        const CORE_COL = 23;
+        const CORE_ROW = 20;
+        const GLOBAL_OFFSET_X = 1;
+        const GLOBAL_OFFSET_Y = 1;
+
+        globalOffsetX = GLOBAL_OFFSET_X + (ee - BLOCK_START_EE) * CORE_COL;
+        globalOffsetY = GLOBAL_OFFSET_Y + (nn - BLOCK_START_NN) * CORE_ROW;
+
+        console.log(`[Geo Coord Debug] Block=${options.blockId} EE=${ee} NN=${nn} -> OffsetX=${globalOffsetX} OffsetY=${globalOffsetY}`);
+    }
+
     worldData.allHexes.forEach(h => {
-        h.neighbors = getNeighborIndices(h.col, h.row, mapCols, mapRows);
+        // [FIX] グローバル座標ではなく、バッファ内のローカル座標を使用して隣接関係を計算する
+        // Global coordinates (e.g. 5012) will fail bounds check against mapCols (25).
+        const localCol = h.index % mapCols;
+        const localRow = Math.floor(h.index / mapCols);
+        h.neighbors = getNeighborIndices(localCol, localRow, mapCols, mapRows);
+
+        // グローバル座標の適用
+        if (blockIdForLoad) {
+            h.col = globalOffsetX + (localCol - 1);
+            h.row = globalOffsetY + (localRow - 1);
+
+            if (h.index === 0 || h.index === 300) {
+                console.log(`[Geo Coord Loop Debug] Hex[${h.index}] Local(${localCol},${localRow}) -> Assigned Global(${h.col},${h.row})`);
+            }
+        }
     });
 
     // 既存のgetIndex関数を利用
@@ -1534,63 +1511,85 @@ async function processLoadedData(loadedData, options = {}) {
 
     // データ補完: 河川プロパティの再計算
     // downstreamIndexが保存されていない(V2初期)場合、または河川が表示されない場合は再構築が必要
-    // データ補完: 河川プロパティの再計算
-    // [OPTIMIZATION] Skip for scrolling load
-    if (!options.skipCalculations) {
-        // downstreamIndexが保存されていない(V2初期)場合、または河川が表示されない場合は再構築が必要
-        const riverHexes = worldData.allHexes.filter(h => h.properties.flow > 0);
-        const missingRivers = riverHexes.some(h => h.downstreamIndex === -1);
+    // [CRITICAL FIX] 河川データの補完は計算スキップオプションに関わらず実行する
+    // downstreamIndexが保存されていない(V2初期)場合、または河川が表示されない場合は再構築が必要
+    const riverHexes = worldData.allHexes.filter(h => h.properties.flow > 0);
+    const missingRivers = riverHexes.some(h => h.downstreamIndex === -1);
 
-        // [DEBUG] 河川データの状態確認
-        // console.log(`[River Debug] Flow > 0 hexes: ${riverHexes.length}`);
-        // console.log(`[River Debug] Missing downstreamIndex: ${riverHexes.filter(h => h.downstreamIndex === -1).length}`);
+    // [DEBUG] 河川データの状態確認
+    // console.log(`[River Debug] Flow > 0 hexes: ${riverHexes.length}`);
+    // console.log(`[River Debug] Missing downstreamIndex: ${riverHexes.filter(h => h.downstreamIndex === -1).length}`);
 
-        // データ救済措置: flowデータが全くない場合は再生成する (v3.Xデータ消失対応)
-        if (riverHexes.length === 0) {
-            await addLogMessage("河川データが検出されません。河川システムを再生成します...");
-            initializeNoiseFunctions();
-            generateWaterSystems(worldData.allHexes);
+    // データ救済措置: flowデータが全くない場合は再生成する (v3.Xデータ消失対応)
+    if (riverHexes.length === 0 && !options.skipCalculations) {
+        // 全く新規生成の場合は重いのでスキップフラグに従うか...? 
+        // いや、河川がないとマップとして成立しないのでやるべきだが、初期ロード以外では危険かもしれない
+        // ここでは skipCalculations が false (初期ロード) の場合のみ完全再生成を許可する
+        await addLogMessage("河川データが検出されません。河川システムを再生成します...");
+        initializeNoiseFunctions();
+        generateWaterSystems(worldData.allHexes);
 
-            // 再生成後のステータス更新
-            recalculateRiverProperties(worldData.allHexes);
+        // 再生成後のステータス更新
+        recalculateRiverProperties(worldData.allHexes);
 
-        } else if (missingRivers) {
-            // await addLogMessage(`河川接続データ欠損を検出: ${riverHexes.filter(h => h.downstreamIndex === -1).length}箇所`);
+    } else if (missingRivers) {
+        // await addLogMessage(`河川接続データ欠損を検出: ${riverHexes.filter(h => h.downstreamIndex === -1).length}箇所`);
 
-            // 簡易復元: flowがある全ヘックスについて、最も標高が低い隣接ヘックスを下流とみなす
-            let restoredCount = 0;
-            worldData.allHexes.forEach(h => {
-                if (h.properties.flow > 0 && h.downstreamIndex === -1 && !h.properties.isWater) {
-                    let minElev = h.properties.elevation;
-                    let targetIndex = -1;
+        // 簡易復元: flowがある全ヘックスについて、最も標高が低い隣接ヘックスを下流とみなす
+        let restoredCount = 0;
+        worldData.allHexes.forEach(h => {
+            if (h.properties.flow > 0 && h.downstreamIndex === -1 && !h.properties.isWater) {
+                let minElev = h.properties.elevation;
+                let targetIndex = -1;
 
-                    // 隣接ヘックスを走査
-                    h.neighbors.forEach(nIndex => {
-                        const n = worldData.allHexes[nIndex];
-                        if (n.properties.elevation < minElev) {
-                            minElev = n.properties.elevation;
-                            targetIndex = nIndex;
-                        }
-                    });
+                // 隣接ヘックスを走査
+                h.neighbors.forEach(nIndex => {
+                    // [SAFETY] Ignore neighbors that are too far (index diff > width + padding).
+                    // This prevents "Teleport Rivers" caused by invalid neighbor data.
+                    if (Math.abs(nIndex - h.index) > mapCols + 2) return;
 
-                    // 下流が見つかれば接続
-                    if (targetIndex !== -1) {
-                        h.downstreamIndex = targetIndex;
-                        restoredCount++;
+                    const n = worldData.allHexes.getHex(nIndex);
+                    if (n && n.properties.elevation < minElev) {
+                        minElev = n.properties.elevation;
+                        targetIndex = nIndex;
+                    }
+                });
+
+                // 下流が見つかれば接続
+                if (targetIndex !== -1) {
+                    h.downstreamIndex = targetIndex;
+                    restoredCount++;
+                    // [DEBUG VALIDATION]
+                    if (restoredCount <= 5) {
+                        console.log(`[River Restore Check] Hex[${h.index}] (Global ${h.col},${h.row}) -> Downstream Index: ${h.downstreamIndex} (Target Local: ${targetIndex})`);
                     }
                 }
-            });
-
-            console.log(`[River Debug] Restored connections: ${restoredCount}`);
-            if (restoredCount > 0) {
-                await addLogMessage(`${restoredCount}箇所の河川接続を復元しました`);
             }
+        });
 
-            recalculateRiverProperties(worldData.allHexes);
-        } else {
-            recalculateRiverProperties(worldData.allHexes);
+        console.log(`[River Debug] Restored connections: ${restoredCount}`);
+        if (restoredCount > 0) {
+            await addLogMessage(`${restoredCount}箇所の河川接続を復元しました`);
         }
+
+        // [FINAL FIX] 座標系の強制再適用
+        // JSON読み込みなどで座標が上書きされるケースを防ぐため、最後に正しいGlobal座標を確定させます。
+        if (blockIdForLoad) {
+            worldData.allHexes.forEach(h => {
+                const localCol = h.index % config.COLS;
+                const localRow = Math.floor(h.index / config.COLS);
+                h.col = globalOffsetX + (localCol - 1);
+                h.row = globalOffsetY + (localRow - 1);
+            });
+        }
+
+        recalculateRiverProperties(worldData.allHexes);
+    } else {
+        // データが正常でもプロパティ再計算は念のため行う（軽い処理なので）
+        recalculateRiverProperties(worldData.allHexes);
     }
+
+
 
     // [MOVED] generateRidgeLines called later after seed init
 

@@ -445,6 +445,9 @@ class Hex {
     get travelDaysToParent() { return this._map.travelDaysToParent[this._index]; }
     set travelDaysToParent(v) { this._map.travelDaysToParent[this._index] = v; }
 
+    get downstreamIndex() { return this._map.downstreamIndex[this._index]; }
+    set downstreamIndex(v) { this._map.downstreamIndex[this._index] = v; }
+
     get roadLevel() { return this._map.roadLevel[this._index]; }
     set roadLevel(v) { this._map.roadLevel[this._index] = v; }
 
