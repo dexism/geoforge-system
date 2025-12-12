@@ -6,6 +6,7 @@ import * as config from './config.js';
 import { getIndex, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint } from './utils.js';
 import { BLOCK_START_EE, BLOCK_START_NN, BLOCK_END_NN } from './BlockUtils.js';
 import { getInfoText, updateOverallInfo, generateHexJson, childrenMap } from './infoWindow.js';
+import { CoordinateSystem } from './CoordinateSystem.js'; // [NEW]
 
 /**
  * 変更履歴:
@@ -36,6 +37,9 @@ export class MapView {
         this.nationColor = d3.scaleOrdinal(d3.schemeTableau10);
         this.BLOCK_COLS = 23;
         this.BLOCK_ROWS = 20;
+
+        // [NEW] 座標系システムの初期化
+        this.coordSys = new CoordinateSystem();
     }
 
     /**
@@ -46,17 +50,7 @@ export class MapView {
         d3.select('#tooltip').remove();
         return d3.select('body').append('div')
             .attr('id', 'tooltip')
-            .attr('class', 'tooltip')
-            .style('position', 'absolute')
-            .style('visibility', 'hidden')
-            .style('background-color', 'rgba(0, 0, 0, 0.8)')
-            .style('color', '#fff')
-            .style('padding', '5px')
-            .style('border-radius', '5px')
-            .style('font-size', '12px')
-            .style('pointer-events', 'none')
-            .style('z-index', '1000')
-            .style('white-space', 'pre-wrap');
+            .attr('class', 'tooltip');
     }
 
     /**
@@ -153,7 +147,7 @@ export class MapView {
         this.layers = {};
 
         const createLayer = (name, visibleByDefault = true) => {
-            const layerGroup = this.g.append('g').attr('class', `${name} -layer`);
+            const layerGroup = this.g.append('g').attr('class', `${name}-layer`);
             this.layers[name] = { group: layerGroup, visible: visibleByDefault };
             if (!visibleByDefault) {
                 layerGroup.style('display', 'none');
@@ -181,10 +175,19 @@ export class MapView {
 
         // データオーバーレイ群
         const overlays = [
-            'monster-overlay', 'population-overlay', 'climate-zone-overlay',
-            'temp-overlay', 'precip-overlay', 'mana-overlay',
-            'agri-overlay', 'forest-overlay', 'mining-overlay', 'fishing-overlay',
-            'hunting-overlay', 'pastoral-overlay', 'livestock-overlay'
+            'monster-overlay', 
+            'population-overlay', 
+            'climate-zone-overlay',
+            'temp-overlay', 
+            'precip-overlay', 
+            'mana-overlay',
+            'agri-overlay', 
+            'forest-overlay', 
+            'mining-overlay', 
+            'fishing-overlay',
+            'hunting-overlay', 
+            'pastoral-overlay', 
+            'livestock-overlay'
         ];
         overlays.forEach(name => createLayer(name, false));
 
@@ -232,9 +235,17 @@ export class MapView {
             })
             .on('end', (event) => {
                 this.isZooming = false;
-                // ズーム終了後にレイヤー再表示
-                // [FIX] ズーム依存レイヤーはこの後の updateZoomDependentLayers で制御するため、ここでは復帰させない
-                // ここで復帰させてしまうと、updateZoomDependentLayers での「状態変化検知」が働かず、再描画トリガーが発火しない
+
+                // [FIX] 1. Recenter Check (Floating Origin)
+                // 原点シフトが必要か確認し、実行する。
+                // シフトした場合は内部で D3 Transform の調整と this.currentTransform の更新が行われる
+                // 戻り値が true の場合、Originが変わっているので再描画必須
+                const recentered = this.handleRecenter(event.transform);
+
+                // [FIX] 2. レイヤー状態の更新
+                this.updateZoomDependentLayers(event.transform.k);
+
+                // 2. その他のレイヤーの表示復帰 (ズーム中のみ非表示だったもの)
                 const zoomDependentLayers = ['contour', 'labels', 'block-id-labels', 'settlement'];
                 Object.entries(this.layers).forEach(([name, layer]) => {
                     if (!zoomDependentLayers.includes(name) && layer.visible) {
@@ -242,13 +253,23 @@ export class MapView {
                     }
                 });
 
-                // [FIX] 再表示後にズーム依存の表示制限を適用する
-                // これを行わないと、initZoomのon('end')が強制的にdisplay: inlineにしてしまい、
-                // updateZoomDependentLayersの制限（倍率1.0以下非表示など）が上書きされてしまう。
-                this.updateZoomDependentLayers(event.transform.k);
-
-                // 可視範囲の計算とブロックロード判定
+                // 3. 可視ブロックの計算とロード/描画
+                // ここで `handleBlockAndRender` -> `renderBlock` が呼ばれる
+                // `renderBlock` 内で `drawBlockLabels` が呼ばれ、上記1で設定されたdisplay状態に従ってDOMが生成される
                 this.updateVisibleBlocks(event.transform);
+
+                // 4. [Safety] 既存の描画済みブロックに対しても強制的に更新をかける
+                // updateVisibleBlocks は「新規」や「範囲外」の処理が主だが、
+                // 既存ブロックのラベル表示切り替え(2.0x未満<->以上)を確実に行うため
+                if (event.transform.k >= 2.0) {
+                    this.blocks.forEach(b => {
+                        if (b.rendered && b.visible) {
+                            this.drawBlockLabels(b);
+                            this.drawBlockSettlements(b);
+                        }
+                    });
+                }
+
                 this.svg.style('cursor', 'grab');
                 this.updateMinimapViewport();
             });
@@ -298,14 +319,20 @@ export class MapView {
             initialCy = relativeBy * blockHeightPx + ly * hexHeight;
         }
 
+        // [NEW] 初期位置を「原点」として設定
+        this.coordSys.setOrigin(initialCx, initialCy);
+
         const initialScale = config.INITIAL_SCALE || 3.0;
+
+        // [NEW] 原点=中心なので、画面中央(width/2, height/2)に(0,0)を持ってくる変換
+        // つまり translate(width/2, height/2)
         const initialTransform = d3.zoomIdentity
-            .translate(width / 2 - initialCx * initialScale, height / 2 - initialCy * initialScale)
+            .translate(width / 2, height / 2)
             .scale(initialScale);
 
         this.svg.call(this.zoom.transform, initialTransform);
         this.currentTransform = initialTransform;
-        this.updateVisibleBlocks(initialTransform);
+        this.updateVisibleBlocks(initialTransform); // これも修正が必要（後述）
         this.updateMinimap();
     }
 
@@ -534,6 +561,69 @@ export class MapView {
     }
 
     // ================================================================
+    // Floating Origin Logic
+    // ================================================================
+
+    /**
+     * [NEW] Floating Origin Recenter Logic
+     * 現在のビューポート中心が原点から離れすぎている場合、原点をリセットします。
+     * @param {Object} currentTransform - D3 Zoom Transform
+     * @returns {boolean} - true if recenter occurred
+     */
+    handleRecenter(currentTransform) {
+        if (!this.coordSys) return false;
+
+        const svgNode = this.svg.node();
+        const width = svgNode.clientWidth || window.innerWidth;
+        const height = svgNode.clientHeight || window.innerHeight;
+        const scale = currentTransform.k;
+
+        // Check if recenter is needed
+        const newOrigin = this.coordSys.checkReCenter(
+            currentTransform.x, currentTransform.y,
+            scale, width, height
+        );
+
+        if (newOrigin) {
+            const oldOrigin = this.coordSys.getOrigin();
+
+            // 1. Update Origin
+            this.coordSys.setOrigin(newOrigin.x, newOrigin.y);
+
+            // 2. Calculate Shift (World Space)
+            // Shift = New - Old
+            const shiftX = newOrigin.x - oldOrigin.x;
+            const shiftY = newOrigin.y - oldOrigin.y;
+
+            // 3. Adjust Viewport Transform (Screen Space)
+            // tX_new = tX_old + Shift * k
+            const newTx = currentTransform.x + shiftX * scale;
+            const newTy = currentTransform.y + shiftY * scale;
+
+            console.log(`[MapView] Recenter Triggered! Shift:(${Math.round(shiftX)},${Math.round(shiftY)}) NewT:(${Math.round(newTx)},${Math.round(newTy)})`);
+
+            // 4. Apply new transform silently to D3 state
+            const newTransform = d3.zoomIdentity.translate(newTx, newTy).scale(scale);
+
+            // Flag to prevent recursion in zoom events
+            this.isProgrammaticZoom = true;
+            this.svg.call(this.zoom.transform, newTransform);
+            this.isProgrammaticZoom = false;
+
+            this.currentTransform = newTransform;
+
+            // 5. Invalidate all rendered blocks to force coordinate update
+            this.blocks.forEach(b => {
+                b.rendered = false;
+            });
+
+            return true;
+        }
+
+        return false;
+    }
+
+    // ================================================================
     // Block Management (ブロック管理)
     // ================================================================
 
@@ -547,13 +637,22 @@ export class MapView {
         const width = svgNode.clientWidth || window.innerWidth;
         const height = svgNode.clientHeight || window.innerHeight;
 
-        // 画面中央 (スクリーン座標)
-        const screenCenter = [width / 2, height / 2];
-        // 画面中央 (ワールド座標)
-        const worldCenter = transform.invert(screenCenter);
+        // [FIX] CoordinateSystem 対応
+        // 画面の四隅の座標をワールド座標に変換して可視ブロックを判定
 
-        const topLeft = transform.invert([0, 0]);
-        const bottomRight = transform.invert([width, height]);
+        // 1. スクリーン座標 (0,0) -> Transform逆変換(Zoom) -> RelativeView座標 -> World座標
+        // d3.zoomTransform.invert は (Screen - Translate) / Scale を返す
+        const topLeftView = transform.invert([0, 0]); // Relative View Coords
+        const bottomRightView = transform.invert([width, height]);
+
+        const topLeftWorld = this.coordSys.fromView(topLeftView[0], topLeftView[1]);
+        const bottomRightWorld = this.coordSys.fromView(bottomRightView[0], bottomRightView[1]);
+
+        // 画面中央 (ワールド座標) - ソート用
+        const worldCenter = this.coordSys.fromView(
+            (topLeftView[0] + bottomRightView[0]) / 2,
+            (topLeftView[1] + bottomRightView[1]) / 2
+        );
 
         const hexWidth = 2 * config.r;
         const hexHeight = Math.sqrt(3) * config.r;
@@ -564,10 +663,10 @@ export class MapView {
         // [FIX] 厳密な可視性: 隣接ブロックの予備ロードは行わない (BUFFER = 0)
         // ユーザー要件: 厳密に見えているものだけをロードする
         const BUFFER = 0;
-        const relBxMin = Math.floor(topLeft[0] / blockWidthPx) - BUFFER;
-        const relBxMax = Math.floor(bottomRight[0] / blockWidthPx) + BUFFER;
-        const relByMin = Math.floor(topLeft[1] / blockHeightPx) - BUFFER;
-        const relByMax = Math.floor(bottomRight[1] / blockHeightPx) + BUFFER;
+        const relBxMin = Math.floor(topLeftWorld.x / blockWidthPx) - BUFFER;
+        const relBxMax = Math.floor(bottomRightWorld.x / blockWidthPx) + BUFFER;
+        const relByMin = Math.floor(topLeftWorld.y / blockHeightPx) - BUFFER;
+        const relByMax = Math.floor(bottomRightWorld.y / blockHeightPx) + BUFFER;
 
         const visibleIds = new Set();
         let activeBlocks = [];
@@ -603,8 +702,8 @@ export class MapView {
             const bcx = (b.relBx + 0.5) * blockWidthPx;
             const bcy = (b.relBy + 0.5) * blockHeightPx;
 
-            const distA = (acx - worldCenter[0]) ** 2 + (acy - worldCenter[1]) ** 2;
-            const distB = (bcx - worldCenter[0]) ** 2 + (bcy - worldCenter[1]) ** 2;
+            const distA = (acx - worldCenter.x) ** 2 + (acy - worldCenter.y) ** 2;
+            const distB = (bcx - worldCenter.x) ** 2 + (bcy - worldCenter.y) ** 2;
             return distA - distB;
         });
 
@@ -615,7 +714,9 @@ export class MapView {
             this.layers[name].group.selectAll(`.block-group-${name}`)
                 .data(activeBlocks, d => d.id)
                 .join(
-                    enter => enter.append('g').attr('class', `block-group block-group-${name}`).attr('id', d => `${name}-${d.id}`),
+                    enter => enter.append('g')
+                        .attr('class', `block-group block-group-${name}`)
+                        .attr('id', d => `${name}-${d.id}`),
                     update => update,
                     exit => exit.remove()
                 );
@@ -678,9 +779,13 @@ export class MapView {
                         // バッファが有効なうちにスクリーンバッファ (block.hexes) を作成
                         this.generateBlockHexes(block);
                     } else {
-                        console.warn(`[MapView] Block ${block.id} load failed or invalid. Filling Dummy Data.`);
                         // ダミーデータで埋める
                         await this.ensureDummyData(block);
+                        this.generateBlockHexes(block);
+                    }
+                    // [Safety] hexesが何らかの理由で空なら再生成を試みる
+                    if (!block.hexes || block.hexes.length === 0) {
+                        console.warn(`[MapView] Block ${block.id} loaded but hexes empty. Regenerating...`);
                         this.generateBlockHexes(block);
                     }
                     this.renderBlock(block);
@@ -703,6 +808,10 @@ export class MapView {
             }
         } else if (block.loaded && !block.rendered) {
             // ロード済みだが未描画の場合
+            // [Safety] hexesチェック
+            if (!block.hexes || block.hexes.length === 0) {
+                this.generateBlockHexes(block);
+            }
             this.renderBlock(block);
             return Promise.resolve();
         }
@@ -1210,8 +1319,18 @@ export class MapView {
         if (g.empty()) return;
         g.selectAll('.hex').data(block.hexes, d => d.index).join('polygon')
             .attr('class', 'hex')
-            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => `translate(${d.cx}, ${d.cy}) scale(1.01)`) // scale(1.01)で隙間を防止
+            .attr('points', d => d.points.map(p => {
+                // Points are absolute world coords in d.points
+                // We need to shift them by (d.cx, d.cy) if logic expects local points, BUT
+                // The original logic was: p[0] - d.cx. This converts Absolute Point -> Local Point (relative to hex center)
+                // Then transform translates to d.cx (Absolute).
+                // NEW LOGIC: Translate to toView(d.cx, d.cy). Points remain local relative to center.
+                return `${p[0] - d.cx},${p[1] - d.cy}`;
+            }).join(' '))
+            .attr('transform', d => {
+                const p = this.coordSys.toView(d.cx, d.cy);
+                return `translate(${p.x}, ${p.y}) scale(1.01)`;
+            })
             .attr('stroke', 'none')
             .attr('fill', d => d._displayColor || '#000');
     }
@@ -1285,10 +1404,14 @@ export class MapView {
                     const endX = d.cx + Math.cos(angle) * length;
                     const endY = d.cy + Math.sin(angle) * length;
 
+                    // [FIX] Transform to View Coords
+                    const startView = this.coordSys.toView(d.cx, d.cy);
+                    const endView = this.coordSys.toView(endX, endY);
+
                     // Draw Line: Center -> Edge direction
                     // Using predefined width or default
                     pathData.push({
-                        path: `M ${d.cx},${d.cy} L ${endX},${endY}`,
+                        path: `M ${startView.x},${startView.y} L ${endView.x},${endView.y}`,
                         width: d.properties.riverWidth || 1.0
                     });
 
@@ -1359,8 +1482,7 @@ export class MapView {
             .attr('stroke', color)
             .attr('stroke-width', d => Math.min(0.5 + (d.width || 1) * 0.1, config.r))
             .attr('stroke-linecap', 'round')
-            .style('fill', 'none')
-            .style('pointer-events', 'none');
+            .attr('class', 'river-path');
     }
 
     /**
@@ -1377,18 +1499,22 @@ export class MapView {
                     const n = this.hexes[ni];
                     if (n) {
                         const edge = getSharedEdgePoints(d, n);
-                        if (edge) paths.push(`M ${edge[0][0]},${edge[0][1]} L ${edge[1][0]},${edge[1][1]}`);
+                        // [FIX] Transform beach edge points
+                        if (edge) {
+                            const p1 = this.coordSys.toView(edge[0][0], edge[0][1]);
+                            const p2 = this.coordSys.toView(edge[1][0], edge[1][1]);
+                            paths.push(`M ${p1.x},${p1.y} L ${p2.x},${p2.y}`);
+                        }
                     }
                 });
             }
         });
         g.selectAll('path').data(paths).join('path')
             .attr('d', d => d)
+            .attr('class', 'beach-path')
             .attr('stroke', config.TERRAIN_COLORS.水域)
             .attr('stroke-width', 6)
-            .attr('stroke-linecap', 'round')
-            .style('fill', 'none')
-            .style('pointer-events', 'none');
+            .attr('stroke-linecap', 'round');
     }
 
     /**
@@ -1407,15 +1533,25 @@ export class MapView {
                     const nId = n.properties.nationId || 0;
                     if (nId > 0 && hId !== nId) {
                         const edge = getSharedEdgePoints(h, n);
-                        if (edge) lines.push({ x1: edge[0][0], y1: edge[0][1], x2: edge[1][0], y2: edge[1][1] });
+                        // [FIX] Border lines need full point transformation
+                        // Since 'line' uses x1,y1,x2,y2, we need to transform world coords to view coords
+                        if (edge) {
+                            // edge is [[x1,y1], [x2,y2]] in World
+                            lines.push({
+                                x1: edge[0][0], y1: edge[0][1],
+                                x2: edge[1][0], y2: edge[1][1]
+                            });
+                        }
                     }
                 }
             });
         });
         g.selectAll('line').data(lines).join('line')
-            .attr('x1', d => d.x1).attr('y1', d => d.y1)
-            .attr('x2', d => d.x2).attr('y2', d => d.y2)
-            .attr('stroke', '#f00').attr('stroke-width', 4).attr('stroke-linecap', 'round');
+            .attr('x1', d => this.coordSys.toView(d.x1, 0).x).attr('y1', d => this.coordSys.toView(0, d.y1).y)
+            .attr('x2', d => this.coordSys.toView(d.x2, 0).x).attr('y2', d => this.coordSys.toView(0, d.y2).y)
+            .attr('stroke', '#f00')
+            .attr('stroke-width', 4)
+            .attr('stroke-linecap', 'round');
     }
 
     /**
@@ -1429,8 +1565,12 @@ export class MapView {
         g.selectAll('.rws-water-hex')
             .data(block.hexes.filter(d => d.properties.isWater), d => d.index).join('polygon')
             .attr('class', 'rws-water-hex')
+            .attr('class', 'rws-water-hex')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => `translate(${d.cx}, ${d.cy}) scale(1.01)`)
+            .attr('transform', d => {
+                const p = this.coordSys.toView(d.cx, d.cy);
+                return `translate(${p.x}, ${p.y}) scale(1.01)`;
+            })
             .attr('fill', config.RIDGE_WATER_SYSTEM_COLORS.RIVER);
 
         const paths = [];
@@ -1443,11 +1583,19 @@ export class MapView {
                 const cp = [s.cx, s.cy];
 
                 if (downs.length === 0) {
-                    paths.push({ path: `M ${s.cx},${s.cy} Q ${cp[0]},${cp[1]} ${end[0]},${end[1]}`, flow: s.properties.ridgeFlow });
+                    const sView = this.coordSys.toView(s.cx, s.cy);
+                    const cpView = this.coordSys.toView(cp[0], cp[1]);
+                    const endView = this.coordSys.toView(end[0], end[1]);
+                    paths.push({ path: `M ${sView.x},${sView.y} Q ${cpView.x},${cpView.y} ${endView.x},${endView.y}`, flow: s.properties.ridgeFlow });
                 } else {
                     downs.forEach(d => {
                         const start = getSharedEdgeMidpoint(s, d);
-                        if (start) paths.push({ path: `M ${start[0]},${start[1]} Q ${cp[0]},${cp[1]} ${end[0]},${end[1]}`, flow: d.properties.ridgeFlow });
+                        if (start) {
+                            const startView = this.coordSys.toView(start[0], start[1]);
+                            const cpView = this.coordSys.toView(cp[0], cp[1]);
+                            const endView = this.coordSys.toView(end[0], end[1]);
+                            paths.push({ path: `M ${startView.x},${startView.y} Q ${cpView.x},${cpView.y} ${endView.x},${endView.y}`, flow: d.properties.ridgeFlow });
+                        }
                     });
                 }
             }
@@ -1457,7 +1605,7 @@ export class MapView {
             .attr('d', d => d.path)
             .attr('stroke', config.RIDGE_WATER_SYSTEM_COLORS.RIDGE)
             .attr('stroke-width', d => Math.min(Math.sqrt(d.flow) * 1.5, config.r * 0.8))
-            .style('fill', 'none').style('pointer-events', 'none');
+            .attr('class', 'ridge-segment');
     }
 
     /**
@@ -1608,7 +1756,17 @@ export class MapView {
                         .join("path")
                         .attr("class", d => `contour-path ${d.value % 1000 === 0 ? 'contour-index' : 'contour-intermediate'}`)
                         .attr("d", d3.geoPath())
-                        .attr("transform", `translate(${xMin - resolution / 2}, ${yMin - resolution / 2}) scale(${resolution})`)
+                        .attr("transform", () => {
+                            // [FIX] Contours are generated in World Coords.
+                            // Need to transform the group or path?
+                            // Since d3.geoPath works on the projection or raw data...
+                            // The generated contours are in the coordinate space of input (World).
+                            // The contours internal data is in grid index space (0..gridWidth).
+                            // We need to scale by resolution and translate to the View Coordinate of the grid's top-left (xMin, yMin).
+                            const viewMin = this.coordSys.toView(xMin, yMin);
+                            // -resolution/2 is from original logic, likely for centering correction
+                            return `translate(${viewMin.x - resolution / 2}, ${viewMin.y - resolution / 2}) scale(${resolution})`;
+                        })
                         .style('fill', 'none')
                         .style('stroke', '#642')
                         .style('stroke-opacity', 0.5)
@@ -1640,8 +1798,12 @@ export class MapView {
         // 1. Draw Icons (Polygons)
         g.selectAll('.settlement-hex').data(data, d => d.index).join('polygon')
             .attr('class', 'settlement-hex')
+            .attr('class', 'settlement-hex')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => `translate(${d.cx}, ${d.cy}) scale(0.5)`)
+            .attr('transform', d => {
+                const p = this.coordSys.toView(d.cx, d.cy);
+                return `translate(${p.x}, ${p.y}) scale(0.5)`;
+            })
             .attr('fill', d => ({
                 '首都': '#f0f',
                 '領都': '#f00',
@@ -1662,8 +1824,8 @@ export class MapView {
 
         g.selectAll('.settlement-label').data(data, d => d.index).join('text')
             .attr('class', 'settlement-label')
-            .attr('x', d => d.cx)
-            .attr('y', d => d.cy)
+            .attr('x', d => this.coordSys.toView(d.cx, d.cy).x)
+            .attr('y', d => this.coordSys.toView(d.cx, d.cy).y)
             .text(d => d.properties.settlement)
             // .attr('text-anchor', 'middle')
             // .attr('dominant-baseline', 'middle')
@@ -1672,10 +1834,6 @@ export class MapView {
             .style('display', initialDisplay);
     }
 
-    /**
-     * ブロックIDを描画します (ズームアウト時用)。
-     * @param {Object} block 
-     */
     /**
      * ブロックIDを描画します (ズームアウト時用)。
      * @param {Object} block 
@@ -1700,15 +1858,9 @@ export class MapView {
         const labelText = block.id.replace('map_', '').replace('_', '-');
 
         g.append('text')
-            .attr('x', cx)
-            .attr('y', cy)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'middle')
-            .style('font-size', '200px')
-            .style('font-family', 'sans-serif')
-            .style('font-weight', '900')
-            .style('fill', 'rgba(0, 0, 0, 0.5)')
-            .style('pointer-events', 'none')
+            .attr('x', this.coordSys.toView(cx, cy).x)
+            .attr('y', this.coordSys.toView(cx, cy).y)
+            .attr('class', 'block-id-label')
             .text(labelText);
     }
 
@@ -1821,7 +1973,13 @@ export class MapView {
                 const end = nextHex ? getSharedEdgeMidpoint(curHex, nextHex) : [curHex.cx, curHex.cy];
 
                 const cp = [curHex.cx, curHex.cy];
-                const path = `M ${start ? start[0] : cp[0]},${start ? start[1] : cp[1]} Q ${cp[0]},${cp[1]} ${end ? end[0] : cp[0]},${end ? end[1] : cp[1]}`;
+
+                // [FIX] Transform to View Coords
+                const startView = this.coordSys.toView(start ? start[0] : cp[0], start ? start[1] : cp[1]);
+                const endView = this.coordSys.toView(end ? end[0] : cp[0], end ? end[1] : cp[1]);
+                const cpView = this.coordSys.toView(cp[0], cp[1]);
+
+                const path = `M ${startView.x},${startView.y} Q ${cpView.x},${cpView.y} ${endView.x},${endView.y}`;
 
                 if (road.level === 10) {
                     seaRoutes.push({ path, shipKey: road.shipKey });
@@ -1846,7 +2004,8 @@ export class MapView {
                 .style('pointer-events', 'none');
         }
         if (!seaG.empty()) {
-            seaG.selectAll('path').data(seaRoutes).join('path').attr('d', d => d.path)
+            seaG.selectAll('path').data(seaRoutes).join('path')
+                .attr('d', d => d.path)
                 .attr('stroke', d => ({
                     'dinghy': '#0f0',
                     'small_trader': '#ff0',
@@ -1854,8 +2013,8 @@ export class MapView {
                     'medium_merchant': '#a0f',
                     'large_sailing_ship': '#00f'
                 }[d.shipKey] || '#fff'))
+                .attr('class', 'sea-route-path')
                 .attr('stroke-width', 2).attr('stroke-dasharray', '2,4')
-                .style('fill', 'none').style('pointer-events', 'none');
         }
     }
 
@@ -1875,21 +2034,21 @@ export class MapView {
         grps.selectAll('*').remove();
 
         const text = grps.append('text')
-            .attr('x', d => d.cx)
-            .attr('y', d => d.cy)
+            .attr('x', d => this.coordSys.toView(d.cx, d.cy).x)
+            .attr('y', d => this.coordSys.toView(d.cx, d.cy).y)
             .attr('class', 'hex-label')
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'middle');
 
         // Line 1: Coords
         text.append('tspan')
-            .attr('x', d => d.cx)
-            .attr('y', d => d.cy + config.r * 0.5)
+            .attr('x', d => this.coordSys.toView(d.cx, d.cy).x)
+            .attr('y', d => this.coordSys.toView(d.cx, d.cy).y + config.r * 0.5)
             .text(d => formatLocation(d, 'coords'));
 
         // Line 2: Elevation (H/D)
         text.append('tspan')
-            .attr('x', d => d.cx)
+            .attr('x', d => this.coordSys.toView(d.cx, d.cy).x)
             .attr('dy', '1.0em')
             .text(d => formatLocation(d, 'elevation'));
         // .style('font-size', '5px')
@@ -1905,7 +2064,10 @@ export class MapView {
         if (g.empty()) return;
         g.selectAll('polygon').data(block.hexes, d => d.index).join('polygon')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => `translate(${d.cx}, ${d.cy})`)
+            .attr('transform', d => {
+                const p = this.coordSys.toView(d.cx, d.cy);
+                return `translate(${p.x}, ${p.y})`;
+            })
             .attr('fill', 'none')
             .attr('stroke', '#fff4')
             .attr('stroke-width', 0.5);
@@ -1923,13 +2085,44 @@ export class MapView {
         g.selectAll('.interactive-hex').data(block.hexes, d => d.index).join('polygon')
             .attr('class', 'interactive-hex')
             .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => `translate(${d.cx}, ${d.cy}) scale(1.01)`)
-            .style('fill', 'transparent').style('cursor', 'pointer').style('pointer-events', 'all')
+            .attr('transform', d => {
+                const p = this.coordSys.toView(d.cx, d.cy);
+                return `translate(${p.x}, ${p.y}) scale(1.01)`;
+            })
+            .attr('class', 'interactive-hex')
             .on('mousemove', (event) => {
-                this.tooltipContainer.style('visibility', 'visible')
-                    .style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 40) + 'px');
+                // [FIX] モバイル環境(幅600px以下またはタッチデバイス)ではツールチップを表示しない
+                const isMobile = window.innerWidth <= 600 || window.matchMedia('(hover: none)').matches;
+                if (isMobile) {
+                    this.tooltipContainer.style('visibility', 'hidden');
+                    return;
+                }
+                this.tooltipContainer.style('visibility', 'visible');
+
+                // [FIX] 画面右端(70%以降)では左側に表示する
+                const x = event.pageX;
+                const y = event.pageY;
+                const isRightSide = x > window.innerWidth * 0.7;
+
+                if (isRightSide) {
+                    // 左側に表示 (カーソル位置から少し左へ、かつ自身の幅分ずらす)
+                    this.tooltipContainer
+                        .style('top', (y - 10) + 'px')
+                        .style('left', (x - 40) + 'px')
+                        .style('transform', 'translateX(-100%)');
+                } else {
+                    // 右側に表示 (デフォルト)
+                    this.tooltipContainer
+                        .style('top', (y - 10) + 'px')
+                        .style('left', (x + 40) + 'px')
+                        .style('transform', 'none');
+                }
             })
             .on('mouseover', (event, d) => {
+                // [FIX] モバイル環境では表示しない
+                const isMobile = window.innerWidth <= 600 || window.matchMedia('(hover: none)').matches;
+                if (isMobile) return;
+
                 const text = this.getTooltipText(d);
                 this.tooltipContainer.text(text);
             })
@@ -1941,8 +2134,15 @@ export class MapView {
                 // 選択ハイライト
                 const hl = this.layers['highlight-overlay'].group;
                 hl.selectAll('*').remove();
+
+                // [FIX] Transform points to view coordinates for highlight
+                const viewPoints = d.points.map(p => {
+                    const vp = this.coordSys.toView(p[0], p[1]);
+                    return [vp.x, vp.y];
+                });
+
                 hl.append('polygon')
-                    .attr('points', d.points.map(p => p.join(',')).join(' '))
+                    .attr('points', viewPoints.map(p => p.join(',')).join(' '))
                     .attr('fill', 'none').attr('stroke', 'cyan').attr('stroke-width', 4);
 
                 // 詳細情報ウィンドウの更新

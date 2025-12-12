@@ -22,7 +22,7 @@ svg {
     height: 100%;
     /* [FIX] 座標が大きい場合の描画精度を確保する */
     shape-rendering: geometricPrecision;
-    text-rendering: geometricPrecision;
+    text-rendering: optimizeLegibility;
 }
 
 small {
@@ -69,6 +69,9 @@ button.active:hover {
     /* rotate: x 30deg; */
     /* transform: scale(1.00); */
     pointer-events: none;
+    /* [FIX] 3D描画時のぼやけ対策 */
+    backface-visibility: hidden;
+    -webkit-font-smoothing: antialiased;
     /* コンテナ自体はイベントを透過 */
 }
 
@@ -512,6 +515,9 @@ button.active:hover {
     stroke-linejoin: miter;
     text-anchor: middle;
     dominant-baseline: middle;
+    /* [FIX] 3D描画時のぼやけ対策 */
+    backface-visibility: hidden;
+    /* transform-style: preserve-3d; */
 }
 
 /* 居住区ラベル (都, 街) */
@@ -1106,4 +1112,59 @@ button.active:hover {
 
 .shortcut-btn .material-icons-round {
     font-size: 24px;
+}
+
+/* ================================================================
+   ツールチップ スタイル
+   ================================================================ */
+.tooltip {
+    position: absolute;
+    background-color: #000c;
+    color: #fff;
+    padding: 5px;
+    border-radius: 5px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    white-space: pre;
+    visibility: hidden;
+    /* デフォルト非表示 */
+}
+
+/* ================================================================
+   マップ要素 スタイル (Refactored from JS)
+   ================================================================ */
+.interactive-hex {
+    fill: transparent;
+    cursor: pointer;
+    pointer-events: all;
+}
+
+.road-path,
+.sea-route-path,
+.river-path,
+.beach-path,
+.ridge-segment {
+    fill: none;
+    pointer-events: none;
+}
+
+.block-id-label {
+    font-size: 200px;
+    font-family: sans-serif;
+    font-weight: 900;
+    fill: #0008;
+    pointer-events: none;
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+.beach-path {
+    stroke-width: 6;
+    stroke-linecap: round;
+}
+
+.ridge-segment {
+    fill: none;
+    pointer-events: none;
 }
