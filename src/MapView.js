@@ -248,7 +248,7 @@ export class MapView {
                 this.updateZoomDependentLayers(event.transform.k);
 
                 // 2. その他のレイヤーの表示復帰 (ズーム中のみ非表示だったもの)
-                const zoomDependentLayers = ['contour', 'labels', 'block-id-labels', 'settlement'];
+                const zoomDependentLayers = ['contour', 'labels', 'block-id-labels', 'settlement', 'hex-border'];
                 Object.entries(this.layers).forEach(([name, layer]) => {
                     if (!zoomDependentLayers.includes(name) && layer.visible) {
                         layer.group.style('display', 'inline');
@@ -356,7 +356,7 @@ export class MapView {
         layer.visible = newState;
 
         // ズーム依存レイヤーの場合は、updateZoomDependentLayersに描画判定を委譲
-        if (['contour', 'labels', 'block-id-labels'].includes(layerName)) {
+        if (['contour', 'labels', 'block-id-labels', 'hex-border'].includes(layerName)) {
             const currentScale = this.currentTransform ? this.currentTransform.k : 1.0;
             this.updateZoomDependentLayers(currentScale);
         } else {
@@ -1940,7 +1940,36 @@ export class MapView {
                 settlementLabelGroups.style('display', slDisplay);
             }
         }
+
+        // 5. Hex Borders: Visible if scale > 1.0
+        // 5. Hex Borders: Visible if scale > 1.0 AND Switch is ON
+        const borderLayer = this.layers['hex-border'];
+        // toggle switch (visible property) must be true for it to be shown at all
+        const isBorderSwitchOn = borderLayer ? borderLayer.visible : true;
+
+
+        const showBorders = isBorderSwitchOn && (scale > 1.0) && !isScrolling;
+        const borderDisplay = showBorders ? 'inline' : 'none';
+
+        if (borderLayer && borderLayer.group) {
+            // Force hide if switch is off
+            if (!isBorderSwitchOn) {
+                if (borderLayer.group.style('display') !== 'none') {
+                    borderLayer.group.style('display', 'none').attr('display', 'none');
+                }
+            } else {
+                // Switch is ON, respect Zoom
+                // Always set both style and attribute to be safe
+                if (borderLayer.group.style('display') !== borderDisplay) {
+                    borderLayer.group.style('display', borderDisplay).attr('display', borderDisplay);
+                    if (showBorders) {
+                        this.blocks.forEach(b => { if (b.rendered) this.drawBlockHexBorders(b); });
+                    }
+                }
+            }
+        }
     }
+
 
     /**
      * ブロックの道路と海路を描画します。
@@ -2050,7 +2079,7 @@ export class MapView {
         // Line 1: Coords
         text.append('tspan')
             .attr('x', d => this.coordSys.toView(d.cx, d.cy).x)
-            .attr('y', d => this.coordSys.toView(d.cx, d.cy).y + config.r * 0.5)
+            .attr('y', d => this.coordSys.toView(d.cx, d.cy).y + config.r * 0.55)
             .text(d => formatLocation(d, 'coords'));
 
         // Line 2: Elevation (H/D)
@@ -2067,6 +2096,9 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockHexBorders(block) {
+        // [FIX] Lazy Rendering
+        if (this.layers['hex-border'].group.style('display') === 'none') return;
+
         const g = this.layers['hex-border'].group.select(`#hex-border-${block.id}`);
         if (g.empty()) return;
         g.selectAll('polygon').data(block.hexes, d => d.index).join('polygon')
