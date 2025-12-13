@@ -194,6 +194,20 @@ export function getInfoText(d, allHexes) {
         }
 
         if (h) {
+            // [FIX] Buffer Mismatch Check
+            // d (View Hex) vs h (Buffer Hex).
+            // バッファは再利用されるため、座標が一致しない場合は「古いデータ」を見ていると判断して無視する。
+            if (h.col !== d.col || h.row !== d.row) {
+                console.warn(`[Info] Buffer Mismatch (Coords): View(${d.col},${d.row}) vs Buffer(${h.col},${h.row}). Skipping restore.`);
+                h = null;
+            } else if (d.blockId && h.properties.blockId && d.blockId !== h.properties.blockId) {
+                // 念のためIDチェックも維持
+                console.warn(`[Info] Buffer Mismatch (ID): View(${d.blockId}) vs Buffer(${h.properties.blockId}). Skipping restore.`);
+                h = null;
+            }
+        }
+
+        if (h) {
             const hp = h.properties;
 
             // 1. Restore Vegetation Areas (if missing)

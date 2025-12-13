@@ -559,7 +559,7 @@ button.active:hover {
     z-index: 20;
     box-shadow: 0 0 20px #000;
     font-size: 14px;
-    padding: 0;
+    padding: 0 0 10px 0;
 
     /* 修正後: visible にして枠外表示を許可します */
     overflow: visible;

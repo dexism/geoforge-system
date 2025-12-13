@@ -290,9 +290,9 @@ export function calculateHexFacilities(h, allHexes) {
 
     // Special
     if (p.industry) {
-        if (p.industry.quaternary['魔法研究'] > 50) addFacility('魔導塔', 1, Math.ceil(p.industry.quaternary['魔法研究'] / 500));
-        if (p.industry.quaternary['学問・歴史'] > 50) addFacility('図書館', 1, 1);
-        if (p.industry.quinary['芸術・文化'] > 50) addFacility('劇場', 1, 1);
-        if (p.industry.quinary['世界儀式'] > 0) addFacility('大聖堂', 1, 5);
+        if (p.industry.quaternary && p.industry.quaternary['魔法研究'] > 50) addFacility('魔導塔', 1, Math.ceil(p.industry.quaternary['魔法研究'] / 500));
+        if (p.industry.quaternary && p.industry.quaternary['学問・歴史'] > 50) addFacility('図書館', 1, 1);
+        if (p.industry.quinary && p.industry.quinary['芸術・文化'] > 50) addFacility('劇場', 1, 1);
+        if (p.industry.quinary && p.industry.quinary['世界儀式'] > 0) addFacility('大聖堂', 1, 5);
     }
 }

@@ -1244,6 +1244,8 @@ export class MapView {
                 hex.nn = absNn;
                 hex.localCol = localCol;
                 hex.localRow = localRow;
+                // [FIX] バッファ不整合チェック用のブロックID
+                hex.blockId = block.id;
 
                 // ジオメトリ計算 (ピクセル空間)
                 // グローバルRow 0 は最下部。ピクセルYは下に行くほど増える。
