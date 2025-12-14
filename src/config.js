@@ -18,7 +18,7 @@ export const HEX_SIZE_KM = 10; // 1ヘックスの対角線距離に相当する
 export const r = 20; // 描画時の1ヘックスの半径 (px)。SVG上でのサイズ。
 export const HEX_AREA_HA = 8660; // ヘックス1マスの面積 (ヘクタール)。人口収容力などの計算に使用。
 export const HEX_SIDE_LENGTH_KM = 5.77; // ヘックス1辺の長さ (km)。移動距離計算の基礎。
-export const BEACH_WIDTH_M = 50; // 砂浜レンダリング時の視覚的な幅 (メートル換算だが、実際は描画エフェクト用)
+export const BEACH_WIDTH_M = 50; // 植生詳細の土地利用面積計算用の砂浜の基準幅（m）
 
 // 初期表示位置とズームレベル
 // ワールド座標系 (Block-Local) で指定: { x: BlockX, y: BlockY } ではなく特定のヘックス座標を指す
@@ -322,6 +322,34 @@ export const whiteMapElevationColor = d3.scaleLinear()
 
 // 魔物ランク色
 export const MONSTER_COLORS = { 'S': '#ff00ff', 'A': '#ff0000', 'B': '#ff8800', 'C': '#ffff00', 'D': '#aaaaaa' };
+
+// ================================================================
+// ■ 6.1. 初期レイヤー設定
+// ================================================================
+export const INITIAL_LAYER_SETTINGS = {
+    'terrain': {
+        'vegetation-overlay': true,
+        'snow': true,
+        'shading': true, // レリーフ (仕様書指示に合わせてtrueに修正)
+        'contour': true,
+        'settlement': true,
+        'road': true,
+        'territory-overlay': false,
+        'hex-border': true,
+        'ridge-water-system': false
+    },
+    'white': {
+        'vegetation-overlay': false,
+        'snow': false,
+        'shading': false,
+        'contour': true,
+        'settlement': true,
+        'road': true,
+        'territory-overlay': true,
+        'hex-border': false,
+        'ridge-water-system': false
+    }
+};
 
 // 牧畜・家畜用スケール
 export const pastoralColor = d3.scaleSequential(d3.interpolateBrBG).domain([0, 1]);

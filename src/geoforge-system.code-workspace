@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../entrySheet"
+		},
+		{
+			"path": "../../bot"
 		}
 	],
 	"settings": {}

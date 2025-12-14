@@ -104,16 +104,7 @@ function setupEventHandlers() {
 
     // 4. Map Type Switch
     // マップタイプ（地形図/白地図）の切り替え処理
-    const layerMemory = {
-        'terrain': {
-            'vegetation-overlay': true, 'snow': true, 'shading': false, 'contour': true,
-            'settlement': true, 'road': true, 'territory-overlay': false, 'hex-border': false, 'ridge-water-system': false
-        },
-        'white': {
-            'vegetation-overlay': false, 'snow': false, 'shading': true, 'contour': true,
-            'settlement': true, 'road': true, 'territory-overlay': false, 'hex-border': false, 'ridge-water-system': false
-        }
-    };
+    const layerMemory = JSON.parse(JSON.stringify(config.INITIAL_LAYER_SETTINGS));
     let currentMapType = 'terrain';
 
     // UIボタンの状態をMapViewのレイヤー状態と同期させる関数
@@ -283,8 +274,71 @@ function setupEventHandlers() {
 }
 
 function applyInitialUIState() {
-    // ボタンの初期状態をマップの状態に合わせる
-    // 今回は初期化時にデフォルトで設定されていると仮定
+    // 1. 現在のマップタイプを取得 (HTMLのchecked属性準拠)
+    const currentMapType = d3.select('input[name="map-type"]:checked').property('value') || 'terrain';
+
+    // 2. configから初期設定を取得
+    const initialSettings = config.INITIAL_LAYER_SETTINGS[currentMapType];
+
+    if (!initialSettings) {
+        console.warn(`[UI] No initial settings found for map type: ${currentMapType}`);
+        return;
+    }
+
+    // 3. 各レイヤーの状態を適用
+    // ボタンのIDとレイヤー名の対応表 (setupEventHandlers内と重複するが、スコープ外のため再定義)
+    const layerToggles = [
+        { id: '#toggleVegetationLayer', layer: 'vegetation-overlay' },
+        { id: '#toggleReliefLayer', layer: 'shading' },
+        { id: '#toggleContourLayer', layer: 'contour' },
+        { id: '#toggleSettlementLayer', layer: 'settlement' },
+        { id: '#toggleRoadLayer', layer: 'road' },
+        { id: '#toggleTerritoryLayer', layer: 'territory-overlay' },
+        { id: '#toggleHexBorderLayer', layer: 'hex-border' },
+        { id: '#toggleRidgeWaterSystemLayer', layer: 'ridge-water-system' }
+    ];
+
+    Object.keys(initialSettings).forEach(layerName => {
+        const isVisible = initialSettings[layerName];
+
+        // MapViewの状態更新
+        if (mapView) {
+            mapView.toggleLayer(layerName, isVisible);
+
+            // 特殊連動: 植生オンなら雪もオン
+            if (layerName === 'vegetation-overlay') {
+                mapView.toggleLayer('snow', isVisible);
+            }
+        }
+
+        // UIボタンの更新 (メインのトグルボタン)
+        const toggleBtn = layerToggles.find(t => t.layer === layerName);
+        if (toggleBtn) {
+            d3.select(toggleBtn.id).classed('active', isVisible);
+        }
+
+        // ショートカットボタンの更新
+        // ショートカットボタンIDは #shortcut-{key} の形式。マッピングが必要。
+        let shortcutId = null;
+        if (layerName === 'vegetation-overlay') shortcutId = '#shortcut-vegetation';
+        else if (layerName === 'shading') shortcutId = '#shortcut-relief';
+        else if (layerName === 'contour') shortcutId = '#shortcut-contour';
+        else if (layerName === 'settlement') shortcutId = '#shortcut-settlement';
+        else if (layerName === 'road') shortcutId = '#shortcut-road';
+        else if (layerName === 'territory-overlay') shortcutId = '#shortcut-territory';
+        else if (layerName === 'hex-border') shortcutId = '#shortcut-hex-border';
+
+        if (shortcutId) {
+            d3.select(shortcutId).classed('active', isVisible);
+        }
+    });
+
+    // 4. マップ全体の再描画 (初期状態反映)
+    if (mapView) {
+        mapView.updateAllHexColors();
+        mapView.updateRiverColor();
+        mapView.updateVisibleBlocks(mapView.currentTransform);
+    }
 }
 
 // ================================================================
