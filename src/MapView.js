@@ -195,8 +195,7 @@ export class MapView {
 
         createLayer('labels'); // ラベル
         createLayer('block-id-labels', false); // ブロックID (ズームアウト時)
-        const interactionLayer = createLayer('interaction'); // インタラクション (最前面)
-        interactionLayer.style('pointer-events', 'none'); // イベントは透過させるが、要素検知には使う
+        createLayer('interaction'); // インタラクション (最前面)
     }
 
     /**
@@ -1190,10 +1189,20 @@ export class MapView {
 
                         // 複合オブジェクト
                         landUse: sourceHex.landUse ? { ...sourceHex.landUse } : {},
+                        vegetationAreas: sourceHex.vegetationAreas ? { ...sourceHex.vegetationAreas } : null,
+                        industry: sourceHex.industry ? { ...sourceHex.industry } : null,
+                        logistics: sourceHex.logistics ? { ...sourceHex.logistics } : null,
+                        livingConditions: sourceHex.livingConditions ? { ...sourceHex.livingConditions } : null,
+                        ships: sourceHex.ships ? { ...sourceHex.ships } : null,
+                        facilities: sourceHex.facilities ? { ...sourceHex.facilities } : null,
+                        production: sourceHex.production ? { ...sourceHex.production } : null,
+                        surplus: sourceHex.surplus ? { ...sourceHex.surplus } : null,
+                        shortage: sourceHex.shortage ? { ...sourceHex.shortage } : null,
 
                         // IDs
                         nationId: sourceHex.nationId,
                         territoryId: sourceHex.territoryId,
+                        blockId: sourceHex.properties ? sourceHex.properties.blockId : (sourceHex.blockId || block.id),
 
                         // 隣接情報 (配列コピー)
                         neighbors: sourceHex.neighbors ? [...sourceHex.neighbors] : [],

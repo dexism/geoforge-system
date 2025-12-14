@@ -80,7 +80,10 @@ export const KEY_MAP = {
     facilities: 'fac',
     livingConditions: 'lc',
     logistics: 'log',
-    vegetationAreas: 'va'
+    logistics: 'log',
+    vegetationAreas: 'va',
+    downstreamIndex: 'ds',
+    ridgeUpstreamIndex: 'rus'
 };
 
 // 逆マッピング（解凍用）
@@ -232,6 +235,7 @@ export class BlockManager {
                     // console.log('[BlockManager] worldData exists');
                     if (worldData.allHexes) {
                         // console.log('[BlockManager] worldData.allHexes exists');
+                        // [FIX] バッファクリアを有効化（ゴースト防止）
                         if (typeof worldData.allHexes.clear === 'function') {
                             worldData.allHexes.clear();
                         } else {
@@ -661,7 +665,7 @@ export async function processLoadedData(loadedData, options = {}) {
 
                 let localCol, localRow;
 
-                // If data is already local (heuristic)
+                // データが既にローカル座標系の場合 (ヒューリスティック)
                 if (col < 50 && row < 50) {
                     localCol = col;
                     localRow = row;
@@ -673,12 +677,9 @@ export async function processLoadedData(loadedData, options = {}) {
                 if (localCol >= 0 && localCol < config.COLS && localRow >= 0 && localRow < config.ROWS) {
                     const idx = localCol + localRow * config.COLS;
                     hex = worldData.allHexes.getHex(idx);
-                    // [DEBUG] Log first few insertions to verify alignment
+                    // [DEBUG] 位置合わせ確認用のログ
                     if (loadedData.hexes.indexOf(cHex) < 1) {
-                        console.log(`[BlockIO Debug] Block:${bid} Idx:${idx} HexFound:${!!hex}`);
-                        // Check Key Map
-                        // console.log(`[BlockIO Debug] Keys:`, Object.keys(cHex));
-                        // console.log(`[BlockIO Debug] Reverse Key Map valid?`, !!REVERSE_KEY_MAP['e']);
+                         // console.log(`[BlockIO Debug] Block:${bid} Local(${localCol},${localRow}) Idx:${idx} HexFound:${!!hex}`);
                     }
                 } else {
                     return;

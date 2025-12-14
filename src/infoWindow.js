@@ -207,8 +207,16 @@ export function getInfoText(d, allHexes) {
             }
         }
 
-        if (h) {
-            const hp = h.properties;
+        // [FIX] Buffer Mismatch Fallback: Use View Data (d) if Buffer (h) is invalid
+        // d comes from MapView with copied properties (vegetationAreas etc.)
+        const hp = h ? h.properties : d;
+
+        if (hp) {
+            // Validate essential property existence to avoid errors
+            if (!h && !hp.vegetation) {
+                // Should act as 'h' for subsequent logic?
+                // Logic below relies on 'hp' being a valid hex-like object.
+            }
 
             // 1. Restore Vegetation Areas (if missing)
             if (!hp.vegetationAreas && !hp.landUse) {
@@ -240,21 +248,28 @@ export function getInfoText(d, allHexes) {
             // 2. Restore Economy (if missing and populated)
             if (hp.population > 0) {
                 // Ships (Pre-requisite for fishery)
-                if (!hp.ships) calculateHexShipOwnership(h, allHexes);
+                // [FIX] Only calculate if we have a valid Hex object (buffer context)
+                // If using 'd' (View POJO), we rely on copied data (ships/industry etc)
+                if (h && !hp.ships) calculateHexShipOwnership(h, allHexes);
 
                 // Industry
-                if (!hp.industry) calculateHexIndustry(h, allHexes);
+                if (h && !hp.industry) calculateHexIndustry(h, allHexes);
 
                 // Demographics
-                if (!hp.demographics) calculateHexDemographics(h, allHexes);
+                if (h && !hp.demographics) calculateHexDemographics(h, allHexes);
 
                 // Facilities
-                if (!hp.facilities) calculateHexFacilities(h, allHexes);
+                if (h && !hp.facilities) calculateHexFacilities(h, allHexes);
+
+                // Production (Depends on Industry)
+                if (h && !hp.production) calculateHexProduction(h, allHexes);
             }
 
             // Sync calculated props back to display POJO 'd'
             // We use Object.assign to copy the properties proxy or values
-            Object.assign(d.properties, h.toObject());
+            if (h) {
+                Object.assign(d.properties, h.toObject());
+            }
             // Note: toObject() creates a POJO with all props.
             // This ensures d.properties has everything including the newly calculated ones.
         }
@@ -700,29 +715,29 @@ export function getInfoText(d, allHexes) {
         if (p.landUse) {
             const safeTotal = config.HEX_AREA_HA - (oceanArea + lakeArea + riverArea); // 近似的な陸地合計
 
-            const useMap = [
-                { key: 'beach', label: '砂浜', icon: 'beach_access', color: '#feb' },
-                { key: 'forest', label: '森林', icon: 'forest', color: '#228b22' },
-                { key: 'grassland', label: '草原', icon: 'grass', color: '#bda' },
-                { key: 'barren', label: '荒地', icon: 'terrain', color: '#ccb' },
-                { key: 'desert', label: '砂漠', icon: 'landscape', color: '#eca' }
-            ];
+            // [FIX] 除外リストのみを定義し、それ以外はすべて表示する
+            const excludeKeys = ['water', 'total', 'road', 'settlement', 'river']; // riverも別途計算済みのため除外
+            const vegLabelMap = {
+                'beach': { label: '砂浜', icon: 'beach_access', color: '#feb' },
+                'forest': { label: '森林', icon: 'forest', color: '#228b22' },
+                'grassland': { label: '草原', icon: 'grass', color: '#bda' },
+                'barren': { label: '荒地', icon: 'terrain', color: '#ccb' },
+                'desert': { label: '砂漠', icon: 'landscape', color: '#eca' },
+                'savanna': { label: 'サバンナ', icon: 'grass', color: '#dcb' },
+                'steppe': { label: 'ステップ', icon: 'grass', color: '#cda' },
+                'coastal': { label: '沿岸植生', icon: 'waves', color: '#8db' },
+                'iceSnow': { label: '氷雪帯', icon: 'ac_unit', color: '#eff' }
+            };
 
-            useMap.forEach(item => {
-                const ratio = p.landUse[item.key];
+            Object.entries(p.landUse).forEach(([key, ratio]) => {
+                if (excludeKeys.includes(key)) return;
+
                 if (ratio > 0) {
-                    // 面積換算: 厳密には safeTotal * ratio だが、safeTotalの計算が難しい場合があるため
-                    // 簡易的に (HEX_AREA_HA - water) * ratio とする
-                    // ただし p.landUse.river もあるので注意
-
-                    // calculateFinalProperties での計算式:
-                    // beach: vegAreas.beach / safeTotal
-                    // safeTotal = HEX_AREA_HA - waterHa
-
                     const area = ratio * safeTotal;
                     if (area > 1) {
-                        envInfoHtml += createRow(item.icon, item.label, Math.round(area).toLocaleString(), ' ha', item.color);
-                        landUseSegments.push({ label: item.label, area: area, color: item.color });
+                        const info = vegLabelMap[key] || { label: key, icon: 'help_outline', color: '#ccc' };
+                        envInfoHtml += createRow(info.icon, info.label, Math.round(area).toLocaleString(), ' ha', info.color);
+                        landUseSegments.push({ label: info.label, area: area, color: info.color });
                     }
                 }
             });
