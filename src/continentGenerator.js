@@ -79,6 +79,8 @@ const CLIMATE_RETENTION_PARAMS = {
     '氷雪気候': { retention: 0.12, evap: 0.80 }
 };
 
+export { CLIMATE_RETENTION_PARAMS };
+
 // ================================================================
 // ■ ヘルパー関数
 // ================================================================
@@ -129,7 +131,10 @@ function calculateWaterRetention(terrainType, climateZone) {
 /**
  * 気候区分判定
  */
-function classifyClimate(T_mean, P_annual, H_m) {
+/**
+ * 気候区分判定
+ */
+export function classifyClimate(T_mean, P_annual, H_m) {
     const H_ice = 3600;
     const H_alpine = 3000;
     const C = 140;

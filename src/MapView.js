@@ -7,6 +7,7 @@ import { getIndex, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint } 
 import { BLOCK_START_EE, BLOCK_START_NN, BLOCK_END_NN } from './BlockUtils.js';
 import { getInfoText, updateOverallInfo, generateHexJson, childrenMap } from './infoWindow.js';
 import { CoordinateSystem } from './CoordinateSystem.js'; // [NEW]
+import { JapanOverlay } from './JapanOverlay.js';
 
 /**
  * 変更履歴:
@@ -40,6 +41,7 @@ export class MapView {
 
         // [NEW] 座標系システムの初期化
         this.coordSys = new CoordinateSystem();
+        this.japanOverlay = new JapanOverlay();
     }
 
     /**
@@ -168,6 +170,7 @@ export class MapView {
         createLayer('contour', true); // 等高線
         createLayer('ridge-water-system', false); // 稜線・水系デバッグ
         createLayer('territory-overlay', false); // 領土
+        createLayer('japan-overlay', false); // 日本地図
         createLayer('hex-border', false); // ヘックス境界
         createLayer('road'); // 道路
         createLayer('sea-route'); // 海路
@@ -273,6 +276,7 @@ export class MapView {
 
                 this.svg.style('cursor', 'grab');
                 this.updateMinimapViewport();
+                this.updateJapanLayer();
             });
 
         this.svg.call(this.zoom);
@@ -397,6 +401,11 @@ export class MapView {
         }
 
         this.updateVisibleBlocks(this.currentTransform);
+
+        if (layerName === 'japan-overlay' && newState) {
+            this.updateJapanLayer();
+        }
+
         return newState;
     }
 
@@ -559,6 +568,18 @@ export class MapView {
         this.layers.river.group.selectAll('path').attr('stroke', color);
         // 稜線水系ヘックス
         this.layers['ridge-water-system'].group.selectAll('.rws-water-hex').attr('fill', color);
+    }
+
+    /**
+     * 日本地図オーバーレイを更新します。
+     */
+    updateJapanLayer() {
+        if (this.layers['japan-overlay'] && this.layers['japan-overlay'].visible) {
+            const svgNode = this.svg.node();
+            const width = svgNode.clientWidth || window.innerWidth;
+            const height = svgNode.clientHeight || window.innerHeight;
+            this.japanOverlay.draw(this.layers['japan-overlay'].group, this.coordSys, width, height);
+        }
     }
 
     // ================================================================

@@ -8,6 +8,7 @@ import {
     updateOverallInfo,
     generateHexJson
 } from './infoWindow.js';
+import { DataGenerator } from './DataGenerator.js';
 
 /**
  * サイドバーの高さを動的に調整する関数
@@ -107,6 +108,12 @@ function setupEventHandlers() {
     const layerMemory = JSON.parse(JSON.stringify(config.INITIAL_LAYER_SETTINGS));
     let currentMapType = 'terrain';
 
+    // [NEW] Generation Tool Button
+    const genBtn = document.getElementById('btn-generate-japan');
+    if (genBtn) {
+        genBtn.addEventListener('click', openGenerator);
+    }
+
     // UIボタンの状態をMapViewのレイヤー状態と同期させる関数
     const updateLayerUI = () => {
         const layersToCheck = [
@@ -118,6 +125,7 @@ function setupEventHandlers() {
             { id: '#toggleTerritoryLayer', layer: 'territory-overlay' },
             { id: '#toggleHexBorderLayer', layer: 'hex-border' },
             { id: '#toggleRidgeWaterSystemLayer', layer: 'ridge-water-system' },
+            { id: '#toggleJapanLayer', layer: 'japan-overlay' },
             // ショートカットボタン
             { id: '#shortcut-vegetation', layer: 'vegetation-overlay' },
             { id: '#shortcut-relief', layer: 'shading' },
@@ -184,7 +192,8 @@ function setupEventHandlers() {
         { id: '#toggleRoadLayer', layer: 'road' },
         { id: '#toggleTerritoryLayer', layer: 'territory-overlay' },
         { id: '#toggleHexBorderLayer', layer: 'hex-border' },
-        { id: '#toggleRidgeWaterSystemLayer', layer: 'ridge-water-system' }
+        { id: '#toggleRidgeWaterSystemLayer', layer: 'ridge-water-system' },
+        { id: '#toggleJapanLayer', layer: 'japan-overlay' }
     ];
 
     layerToggles.forEach(item => {
@@ -295,7 +304,8 @@ function applyInitialUIState() {
         { id: '#toggleRoadLayer', layer: 'road' },
         { id: '#toggleTerritoryLayer', layer: 'territory-overlay' },
         { id: '#toggleHexBorderLayer', layer: 'hex-border' },
-        { id: '#toggleRidgeWaterSystemLayer', layer: 'ridge-water-system' }
+        { id: '#toggleRidgeWaterSystemLayer', layer: 'ridge-water-system' },
+        { id: '#toggleJapanLayer', layer: 'japan-overlay' }
     ];
 
     Object.keys(initialSettings).forEach(layerName => {
@@ -417,4 +427,60 @@ export function updateMinimap(allHexes) {
 export function updateUIWithBlockData(blockId, updatedAllHexes) {
     console.log(`[UI] Updating UI for block ${blockId}`);
     if (mapView) mapView.updateUIWithBlockData(blockId, updatedAllHexes);
+}
+
+/**
+ * 日本データ生成ツールの起動
+ */
+export function openGenerator() {
+    // 進行状況表示用のオーバーレイを作成
+    let overlay = document.getElementById('gen-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'gen-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.8)';
+        overlay.style.color = 'white';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.zIndex = '9999';
+        overlay.innerHTML = `
+            <h2>Japan Data Generation</h2>
+            <div id="gen-status">Initializing...</div>
+            <div id="gen-progress">0 / 0</div>
+            <button id="gen-close" style="margin-top:20px; display:none;">Close</button>
+        `;
+        document.body.appendChild(overlay);
+
+        document.getElementById('gen-close').addEventListener('click', () => {
+            overlay.style.display = 'none';
+        });
+    } else {
+        overlay.style.display = 'flex';
+        document.getElementById('gen-close').style.display = 'none';
+    }
+
+    const statusEl = document.getElementById('gen-status');
+    const progressEl = document.getElementById('gen-progress');
+
+    const generator = new DataGenerator();
+    generator.generateJapanData((msg, current, total) => {
+        statusEl.innerText = msg;
+        if (current !== undefined && total !== undefined) {
+            progressEl.innerText = `${current} / ${total}`;
+        }
+    }).catch(err => {
+        console.error(err);
+        statusEl.innerText = "Error: " + err.message;
+        document.getElementById('gen-close').style.display = 'block';
+    }).then(() => {
+        statusEl.innerText = "Generation Complete!";
+        document.getElementById('gen-close').style.display = 'block';
+    });
 }

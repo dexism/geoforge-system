@@ -22,7 +22,7 @@ export const BEACH_WIDTH_M = 50; // 植生詳細の土地利用面積計算用�
 
 // 初期表示位置とズームレベル
 // ワールド座標系 (Block-Local) で指定: { x: BlockX, y: BlockY } ではなく特定のヘックス座標を指す
-export const INITIAL_ZOOM_LOC = { x: 5011, y: 7309 };
+export const INITIAL_ZOOM_LOC = { x: 6211, y: 7309 };
 export const INITIAL_SCALE = 2.0; // 初期の拡大率
 
 // ================================================================
@@ -336,7 +336,8 @@ export const INITIAL_LAYER_SETTINGS = {
         'road': true,
         'territory-overlay': false,
         'hex-border': true,
-        'ridge-water-system': false
+        'ridge-water-system': false,
+        'japan-overlay': false
     },
     'white': {
         'vegetation-overlay': false,
@@ -347,7 +348,8 @@ export const INITIAL_LAYER_SETTINGS = {
         'road': true,
         'territory-overlay': true,
         'hex-border': false,
-        'ridge-water-system': false
+        'ridge-water-system': false,
+        'japan-overlay': false
     }
 };
 
@@ -443,141 +445,141 @@ export const TRANSPORT_CAPACITY = { 'wagon': 1.0, 'pack_animal': 0.15 };
 
 export const SHIP_TYPES = {
     'dinghy': {
-        name: '小舟・漁船', 
-        cargo_capacity_t: 1, 
-        range_km: 20, 
+        name: '小舟・漁船',
+        cargo_capacity_t: 1,
+        range_km: 20,
         max_offshore_km: 10,
-        min_settlement_level: '村', 
-        avg_speed_kmh: 4, 
-        fishing_capacity: 2, 
+        min_settlement_level: '村',
+        avg_speed_kmh: 4,
+        fishing_capacity: 2,
         fishing_coefficient: 1,
         crew_requirements: { skipper: 0, crew: 0, fisher: 2 }
     },
     'small_trader': {
-        name: '商船・大型漁船', 
-        cargo_capacity_t: 10, 
-        range_km: 100, 
+        name: '商船・大型漁船',
+        cargo_capacity_t: 10,
+        range_km: 100,
         max_offshore_km: 20,
-        min_settlement_level: '町', 
-        avg_speed_kmh: 5, 
-        fishing_capacity: 10, 
+        min_settlement_level: '町',
+        avg_speed_kmh: 5,
+        fishing_capacity: 10,
         fishing_coefficient: 4,
         crew_requirements: { skipper: 1, crew: 5, fisher: 10 }
     },
     'coastal_trader': {
-        name: '沿岸交易船', 
-        cargo_capacity_t: 30, 
-        range_km: 200, 
+        name: '沿岸交易船',
+        cargo_capacity_t: 30,
+        range_km: 200,
         max_offshore_km: 20,
-        min_settlement_level: '街', 
-        avg_speed_kmh: 6, 
-        fishing_capacity: 10, 
+        min_settlement_level: '街',
+        avg_speed_kmh: 6,
+        fishing_capacity: 10,
         fishing_coefficient: 5,
         crew_requirements: { skipper: 1, crew: 10, fisher: 0 }
     },
     'medium_merchant': {
-        name: '中型商船', 
-        cargo_capacity_t: 200, 
-        range_km: 1000, 
+        name: '中型商船',
+        cargo_capacity_t: 200,
+        range_km: 1000,
         max_offshore_km: Infinity,
-        min_settlement_level: '領都', 
-        avg_speed_kmh: 8, 
-        fishing_capacity: 20, 
+        min_settlement_level: '領都',
+        avg_speed_kmh: 8,
+        fishing_capacity: 20,
         fishing_coefficient: 8,
         crew_requirements: { skipper: 1, crew: 20, fisher: 0 }
     },
     'large_sailing_ship': {
-        name: '大型帆船', 
-        cargo_capacity_t: 500, 
-        range_km: 3000, 
+        name: '大型帆船',
+        cargo_capacity_t: 500,
+        range_km: 3000,
         max_offshore_km: Infinity,
-        min_settlement_level: '首都', 
-        avg_speed_kmh: 10, 
-        fishing_capacity: 50, 
+        min_settlement_level: '首都',
+        avg_speed_kmh: 10,
+        fishing_capacity: 50,
         fishing_coefficient: 10,
         crew_requirements: { skipper: 1, crew: 50, fisher: 0 }
     },
     'lake_boat': {
-        name: '湖沼用ボート', 
-        cargo_capacity_t: 0.5, 
-        range_km: 15, 
+        name: '湖沼用ボート',
+        cargo_capacity_t: 0.5,
+        range_km: 15,
         max_offshore_km: 5,
-        min_settlement_level: '村', 
-        avg_speed_kmh: 4, 
-        fishing_capacity: 2, 
+        min_settlement_level: '村',
+        avg_speed_kmh: 4,
+        fishing_capacity: 2,
         fishing_coefficient: 1,
         crew_requirements: { skipper: 0, crew: 0, fisher: 2 }
     },
     'lake_trader': {
-        name: '湖沼交易船', 
-        cargo_capacity_t: 5, 
-        range_km: 50, 
+        name: '湖沼交易船',
+        cargo_capacity_t: 5,
+        range_km: 50,
         max_offshore_km: 10,
-        min_settlement_level: '町', 
-        avg_speed_kmh: 5, 
-        fishing_capacity: 4, 
+        min_settlement_level: '町',
+        avg_speed_kmh: 5,
+        fishing_capacity: 4,
         fishing_coefficient: 2,
         crew_requirements: { skipper: 1, crew: 2, fisher: 4 }
     },
     'river_canoe': {
-        name: '河川用カヌー', 
-        cargo_capacity_t: 0.2, 
-        range_km: 10, 
+        name: '河川用カヌー',
+        cargo_capacity_t: 0.2,
+        range_km: 10,
         max_offshore_km: 0,
-        min_settlement_level: '村', 
-        avg_speed_kmh: 3, 
-        fishing_capacity: 2, 
+        min_settlement_level: '村',
+        avg_speed_kmh: 3,
+        fishing_capacity: 2,
         fishing_coefficient: 1,
         crew_requirements: { skipper: 0, crew: 0, fisher: 2 }
     },
     'river_barge': {
-        name: '河川用平底船', 
-        cargo_capacity_t: 20, 
-        range_km: 100, 
+        name: '河川用平底船',
+        cargo_capacity_t: 20,
+        range_km: 100,
         max_offshore_km: 0,
-        min_settlement_level: '町', 
-        avg_speed_kmh: 5, 
-        fishing_capacity: 4, 
+        min_settlement_level: '町',
+        avg_speed_kmh: 5,
+        fishing_capacity: 4,
         fishing_coefficient: 3,
         crew_requirements: { skipper: 1, crew: 3, fisher: 4 }
     }
 };
 
 export const WARSHIP_TYPES = {
-    'patrol_boat': { 
-        name: '警備艇', 
-        combat_power: 10, 
-        crew_requirements: { skipper: 1, crew: 5, marine: 5 }, 
-        min_settlement_level: '町', 
-        type: 'small' 
+    'patrol_boat': {
+        name: '警備艇',
+        combat_power: 10,
+        crew_requirements: { skipper: 1, crew: 5, marine: 5 },
+        min_settlement_level: '町',
+        type: 'small'
     },
-    'escort_ship': { 
-        name: '護衛艦', 
-        combat_power: 30, 
-        crew_requirements: { skipper: 1, crew: 15, marine: 10 }, 
-        min_settlement_level: '街', 
-        type: 'medium' 
+    'escort_ship': {
+        name: '護衛艦',
+        combat_power: 30,
+        crew_requirements: { skipper: 1, crew: 15, marine: 10 },
+        min_settlement_level: '街',
+        type: 'medium'
     },
-    'galley': { 
-        name: 'ガレー船', 
-        combat_power: 50, 
-        crew_requirements: { skipper: 1, crew: 50, marine: 30 }, 
-        min_settlement_level: '街', 
-        type: 'medium' 
+    'galley': {
+        name: 'ガレー船',
+        combat_power: 50,
+        crew_requirements: { skipper: 1, crew: 50, marine: 30 },
+        min_settlement_level: '街',
+        type: 'medium'
     },
-    'ship_of_the_line': { 
-        name: '戦列艦', 
-        combat_power: 100, 
-        crew_requirements: { skipper: 1, crew: 80, marine: 40 }, 
-        min_settlement_level: '領都', 
-        type: 'large' 
+    'ship_of_the_line': {
+        name: '戦列艦',
+        combat_power: 100,
+        crew_requirements: { skipper: 1, crew: 80, marine: 40 },
+        min_settlement_level: '領都',
+        type: 'large'
     },
-    'flagship': { 
-        name: '旗艦', 
-        combat_power: 200, 
-        crew_requirements: { skipper: 1, crew: 150, marine: 60 }, 
-        min_settlement_level: '首都', 
-        type: 'huge' 
+    'flagship': {
+        name: '旗艦',
+        combat_power: 200,
+        crew_requirements: { skipper: 1, crew: 150, marine: 60 },
+        min_settlement_level: '首都',
+        type: 'huge'
     }
 };
 
@@ -624,14 +626,14 @@ export const PORT_PARAMS = {
     },
     // 船種ごとの最低航行水深(m)
     MIN_NAVIGATION_DEPTH: {
-        'dinghy': 1, 
-        'small_trader': 2, 
+        'dinghy': 1,
+        'small_trader': 2,
         'coastal_trader': 4,
-        'medium_merchant': 8, 
+        'medium_merchant': 8,
         'large_sailing_ship': 12,
-        'lake_boat': 1, 
-        'lake_trader': 2, 
-        'river_canoe': 0.5, 
+        'lake_boat': 1,
+        'lake_trader': 2,
+        'river_canoe': 0.5,
         'river_barge': 1.5
     }
 };
