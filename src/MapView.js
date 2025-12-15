@@ -663,10 +663,11 @@ export class MapView {
         // 相対ブロック座標の計算 (0-based from Block BLOCK_START_EE, BLOCK_START_NN)
         // [FIX] 厳密な可視性: 隣接ブロックの予備ロードは行わない (BUFFER = 0)
         // ユーザー要件: 厳密に見えているものだけをロードする
+        // [FIX] Expand render range to Top and Left as requested to prevent background gaps
         const BUFFER = 0;
-        const relBxMin = Math.floor(topLeftWorld.x / blockWidthPx) - BUFFER;
+        const relBxMin = Math.floor(topLeftWorld.x / blockWidthPx) - BUFFER - 1; // Add Left
         const relBxMax = Math.floor(bottomRightWorld.x / blockWidthPx) + BUFFER;
-        const relByMin = Math.floor(topLeftWorld.y / blockHeightPx) - BUFFER;
+        const relByMin = Math.floor(topLeftWorld.y / blockHeightPx) - BUFFER - 1; // Add Top
         const relByMax = Math.floor(bottomRightWorld.y / blockHeightPx) + BUFFER;
 
         const visibleIds = new Set();
