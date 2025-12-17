@@ -31,5 +31,8 @@ export default {
         // entrysheet: resolve(process.cwd(), 'src/entrysheet.html'),
       }
     }
+  },
+  define: {
+    '__APP_VERSION__': JSON.stringify(process.env.npm_package_version)
   }
 }
