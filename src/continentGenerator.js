@@ -6,7 +6,7 @@ import { createNoise2D } from 'simplex-noise';
 import * as config from './config.ts';
 import { getIndex, globalRandom, getNeighborIndices, initGlobalRandom } from './utils.ts';
 import * as d3 from 'd3';
-import { WorldMap } from './WorldMap.js';
+import { WorldMap } from './WorldMap.ts';
 
 // ノイズ変数を let で宣言のみ行う
 let continentNoise,

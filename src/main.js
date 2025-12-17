@@ -16,12 +16,12 @@ import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, ca
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap, updateMinimap, updateUIWithBlockData } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex, initGlobalRandom, globalRandom, getNeighborIndices } from './utils.ts';
-import { WorldMap } from './WorldMap.js';
+import { WorldMap } from './WorldMap.ts';
 import { assignRoadPatterns, assignRiverPatterns, splitWorldIntoBlocks } from './MapSplitter.js';
 import * as blockUtils from './BlockUtils.ts';
 
 // [NEW] BlockIO モジュールのインポート
-import { blockManager, compressWorldData, processLoadedData, createCompressedData } from './BlockIO.js';
+import { blockManager, compressWorldData, processLoadedData, createCompressedData } from './BlockIO.ts';
 
 // GASのデプロイで取得したウェブアプリのURL (データのクラウド保存用)
 const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyS8buNL8u2DK9L3UZRtQqLWgDLvuj0WE5ZrzzdXNXSWH3bnGo-JsiO9KSrHp6YOjmtvg/exec';

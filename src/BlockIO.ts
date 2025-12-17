@@ -2,10 +2,11 @@
 // GeoForge System - Block IO (ブロック入出力モジュール)
 // ================================================================
 
+import { BlockData, CompressedHexData } from './types.ts';
 import * as config from './config.ts';
 import * as blockUtils from './BlockUtils.ts';
 import * as utils from './utils.ts';
-import { WorldMap } from './WorldMap.js';
+import { WorldMap, Hex } from './WorldMap.ts'; // Ensure Hex is imported if available, checking WorldMap exports later
 import { updateUIWithBlockData } from './ui.js';
 
 // ================================================================
@@ -79,7 +80,6 @@ export const KEY_MAP = {
     demographics: 'dem',
     facilities: 'fac',
     livingConditions: 'lc',
-    logistics: 'log',
     logistics: 'log',
     vegetationAreas: 'va',
     downstreamIndex: 'ds',
@@ -170,30 +170,34 @@ export const REVERSE_INDUSTRY_LEVEL_MAP = Object.fromEntries(Object.entries(INDU
  * ブロックの読み込み状態とキューを管理するクラス
  */
 export class BlockManager {
+    private loadedBlockIds: Set<string>;
+    private loadingBlockIds: Set<string>;
+    private queue: Promise<any>;
+
     constructor() {
         this.loadedBlockIds = new Set();
         this.loadingBlockIds = new Set();
         this.queue = Promise.resolve();
     }
 
-    isLoaded(blockId) {
+    isLoaded(blockId: string): boolean {
         return this.loadedBlockIds.has(blockId);
     }
 
-    isLoading(blockId) {
+    isLoading(blockId: string): boolean {
         return this.loadingBlockIds.has(blockId);
     }
 
-    markAsLoading(blockId) {
+    markAsLoading(blockId: string): void {
         this.loadingBlockIds.add(blockId);
     }
 
-    markAsLoaded(blockId) {
+    markAsLoaded(blockId: string): void {
         this.loadingBlockIds.delete(blockId);
         this.loadedBlockIds.add(blockId);
     }
 
-    reset() {
+    reset(): void {
         this.loadedBlockIds.clear();
         this.loadingBlockIds.clear();
         this.queue = Promise.resolve();
@@ -204,7 +208,7 @@ export class BlockManager {
      * @param {string} blockId - 例: "map_50_73"
      * @param {Object} worldData - グローバルなWorldDataオブジェクト
      */
-    async load(blockId, worldData) {
+    async load(blockId: string, worldData: any): Promise<boolean | any> {
         if (this.isLoading(blockId) || this.isLoaded(blockId)) return true;
 
         // キューにタスクを追加（並列リクエストによる競合を防ぐため直列化）
@@ -325,7 +329,7 @@ export function createCompressedData(hexList) {
 
     // 2. ヘックスデータの圧縮
     const compressedHexes = hexList.map(h => {
-        const cHex = {};
+        const cHex: any = {};
 
         // Hexクラスのゲッターは列挙されないため、KEY_MAPとlandUseからキーリストを作成して反復
         const keysToProcess = Object.keys(KEY_MAP).filter(k => !k.includes('.'));
@@ -569,7 +573,7 @@ export function compressWorldData(worldData) {
  * @param {Object} options - オプション (例: { buffer: 0, existingWorldData: worldData })
  * @returns {Promise<Object>} { allHexes, roadPaths, seed }
  */
-export async function processLoadedData(loadedData, options = {}) {
+export async function processLoadedData(loadedData: any, options: any = {}): Promise<any> {
     // console.log(`[BlockIO] processLoadedData started. Data version: ${loadedData.version}`);
 
     let worldData;

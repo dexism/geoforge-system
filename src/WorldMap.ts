@@ -73,12 +73,103 @@ const REVERSE_RESOURCE_RANK_MAP = createReverseMap(RESOURCE_RANKS);
  * SoA (Structure of Arrays) パターンを採用し、データを TypedArray で管理してメモリ効率とパフォーマンスを最適化しています。
  */
 export class WorldMap {
+    cols: number;
+    rows: number;
+    size: number;
+
+    // TypedArrays
+    col: Uint16Array;
+    row: Uint16Array;
+    isWater: Uint8Array;
+    elevation: Int16Array;
+    temperature: Float32Array;
+    precipitation_mm: Float32Array;
+    precipitation: Float32Array;
+    climate: Float32Array;
+    flow: Float32Array;
+    isAlluvial: Uint8Array;
+    hasSnow: Uint8Array;
+    isCoastal: Uint8Array;
+    isLakeside: Uint8Array;
+    ridgeFlow: Int16Array;
+    riverWidth: Float32Array;
+    riverDepth: Float32Array;
+    riverVelocity: Float32Array;
+    waterArea: Float32Array;
+    Qin: Float32Array;
+    inflowCount: Uint8Array;
+    beachArea: Float32Array;
+
+    // Enum IDs
+    climateZoneId: Uint8Array;
+    vegetationId: Uint8Array;
+    terrainTypeId: Uint8Array;
+    settlementId: Uint8Array;
+    manaRankId: Uint8Array;
+    resourceRankId: Uint8Array;
+    monsterRankId: Uint8Array;
+
+    // Potentials
+    manaValue: Float32Array;
+    agriPotential: Float32Array;
+    forestPotential: Float32Array;
+    miningPotential: Float32Array;
+    fishingPotential: Float32Array;
+    huntingPotential: Float32Array;
+    pastoralPotential: Float32Array;
+    livestockPotential: Float32Array;
+    cultivatedArea: Float32Array;
+    habitability: Float32Array;
+
+    // Population & IDs
+    population: Uint32Array;
+    nationId: Uint8Array;
+    parentHexId: Int32Array;
+    territoryId: Int32Array;
+    distanceToParent: Float32Array;
+    travelDaysToParent: Float32Array;
+    roadLevel: Uint8Array;
+
+    // LandUse
+    landUse_river: Float32Array;
+    landUse_desert: Float32Array;
+    landUse_barren: Float32Array;
+    landUse_grassland: Float32Array;
+    landUse_forest: Float32Array;
+    landUse_beach: Float32Array;
+
+    // Neighbors
+    neighborsBuffer: Int32Array;
+
+    // Sparse Arrays (Complex Objects)
+    industry: any[];
+    demographics: any[];
+    facilities: any[];
+    production: any[];
+    surplus: any[];
+    shortage: any[];
+    territoryData: any[];
+    beachNeighbors: any[];
+    vegetationAreas: any[];
+    logistics: any[];
+    livingConditions: any[];
+    ships: any[];
+
+    roadUsage: Float32Array;
+    roadLoss: Float32Array;
+
+    downstreamIndex: Int32Array;
+    ridgeUpstreamIndex: Int32Array;
+
+    // Instance methods
+    clear: () => void;
+
     /**
      * コンストラクタ
      * @param {number} cols - 列数
      * @param {number} rows - 行数
      */
-    constructor(cols, rows) {
+    constructor(cols: number, rows: number) {
         this.cols = cols;
         this.rows = rows;
         this.size = cols * rows;
@@ -106,7 +197,6 @@ export class WorldMap {
         this.riverVelocity = new Float32Array(this.size);
         this.waterArea = new Float32Array(this.size);
         this.Qin = new Float32Array(this.size);
-        this.Qin = new Float32Array(this.size); // [Duplicate Declaration Note: keeping to match original structure]
         this.inflowCount = new Uint8Array(this.size);
         this.beachArea = new Float32Array(this.size); // Added for beach calculation
 
@@ -258,87 +348,87 @@ export class WorldMap {
         // 配列のようなアクセスを可能にするプロキシ
         return new Proxy(this, {
             get: (target, prop) => {
-                if (typeof prop === 'string' && !isNaN(prop)) {
+                if (typeof prop === 'string' && !Number.isNaN(Number(prop))) {
                     const index = parseInt(prop, 10);
                     if (index >= 0 && index < target.size) {
                         return target.getHex(index);
                     }
                 }
-                return target[prop];
+                return (target as any)[prop];
             }
         });
 
     }
 
-/**
- * 指定されたインデックスの Hex オブジェクト (Flyweight) を取得します。
- * @param {number} index 
- * @returns {Hex}
- */
-getHex(index) {
-    // Always create a new flyweight object
-    return new Hex(this, index);
-}
+    /**
+     * 指定されたインデックスの Hex オブジェクト (Flyweight) を取得します。
+     * @param {number} index 
+     * @returns {Hex}
+     */
+    getHex(index) {
+        // Always create a new flyweight object
+        return new Hex(this, index);
+    }
 
-// Array-like iterator (イテレータ実装)
-[Symbol.iterator]() {
-    let index = 0;
-    return {
-        next: () => {
-            if (index < this.size) {
-                return { value: this.getHex(index++), done: false };
-            } else {
-                return { done: true };
+    // Array-like iterator (イテレータ実装)
+    [Symbol.iterator]() {
+        let index = 0;
+        return {
+            next: () => {
+                if (index < this.size) {
+                    return { value: this.getHex(index++), done: false };
+                } else {
+                    return { done: true };
+                }
+            }
+        };
+    }
+
+    // Array-like methods (配列風メソッド)
+
+    forEach(callback) {
+        for (let i = 0; i < this.size; i++) {
+            callback(this.getHex(i), i, this);
+        }
+    }
+
+    map(callback) {
+        const result = [];
+        for (let i = 0; i < this.size; i++) {
+            result.push(callback(this.getHex(i), i, this));
+        }
+        return result;
+    }
+
+    filter(callback) {
+        const result = [];
+        for (let i = 0; i < this.size; i++) {
+            const hex = this.getHex(i);
+            if (callback(hex, i, this)) {
+                result.push(hex);
             }
         }
-    };
-}
-
-// Array-like methods (配列風メソッド)
-
-forEach(callback) {
-    for (let i = 0; i < this.size; i++) {
-        callback(this.getHex(i), i, this);
+        return result;
     }
-}
 
-map(callback) {
-    const result = [];
-    for (let i = 0; i < this.size; i++) {
-        result.push(callback(this.getHex(i), i, this));
-    }
-    return result;
-}
-
-filter(callback) {
-    const result = [];
-    for (let i = 0; i < this.size; i++) {
-        const hex = this.getHex(i);
-        if (callback(hex, i, this)) {
-            result.push(hex);
+    find(callback) {
+        for (let i = 0; i < this.size; i++) {
+            const hex = this.getHex(i);
+            if (callback(hex, i, this)) {
+                return hex;
+            }
         }
+        return undefined;
     }
-    return result;
-}
 
-find(callback) {
-    for (let i = 0; i < this.size; i++) {
-        const hex = this.getHex(i);
-        if (callback(hex, i, this)) {
-            return hex;
+    some(callback) {
+        for (let i = 0; i < this.size; i++) {
+            if (callback(this.getHex(i), i, this)) {
+                return true;
+            }
         }
+        return false;
     }
-    return undefined;
-}
-
-some(callback) {
-    for (let i = 0; i < this.size; i++) {
-        if (callback(this.getHex(i), i, this)) {
-            return true;
-        }
-    }
-    return false;
-}
 
     // [Duplicate Method Note: forEach appeared twice in original]
     // Keeping for strict integrity if needed, but safer to remove duplicate in refactor.
@@ -353,8 +443,8 @@ some(callback) {
     */
 
     get length() {
-    return this.size;
-}
+        return this.size;
+    }
 }
 
 
@@ -367,13 +457,17 @@ some(callback) {
  * 実体は持たず、WorldMap の TypedArray への参照を通じてデータを読み書きします。
  * これにより、メモリ使用量を大幅に削減しています。
  */
-class Hex {
+export class Hex {
+    _map: WorldMap;
+    _index: number;
+    properties: this;
+
     /**
      * コンストラクタ
      * @param {WorldMap} map - 親となる WorldMap インスタンス
      * @param {number} index - ヘックスのインデックス
      */
-    constructor(map, index) {
+    constructor(map: WorldMap, index: number) {
         this._map = map;
         this._index = index;
         // Properties proxy to maintain compatibility with h.properties.xxx
@@ -520,7 +614,6 @@ class Hex {
     get Qin() { return this._map.Qin[this._index]; }
     set Qin(v) { this._map.Qin[this._index] = v; }
 
-    get inflowCount() { return this._map.inflowCount[this._index]; }
     get inflowCount() { return this._map.inflowCount[this._index]; }
     set inflowCount(v) { this._map.inflowCount[this._index] = v; }
 
@@ -772,9 +865,4 @@ class Hex {
 
 }
 
-// Iterator implementation for WorldMap (イテレータの実装)
-WorldMap.prototype[Symbol.iterator] = function* () {
-    for (let i = 0; i < this.size; i++) {
-        yield this.getHex(i);
-    }
-};
+

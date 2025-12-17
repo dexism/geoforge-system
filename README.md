@@ -1,4 +1,4 @@
-# GeoForge System
+# VoT GeoForge: Epic Fantasy World Builder
 
 ![CI Status](https://github.com/dexism/geoforge-system/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
