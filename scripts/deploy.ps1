@@ -33,6 +33,29 @@ git push -u origin $branchName
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Push successful!" -ForegroundColor Green
+
+    # --- Auto Tagging for Release ---
+    try {
+        $packageJson = Get-Content -Raw -Path "package.json" | ConvertFrom-Json
+        $version = "v" + $packageJson.version
+        
+        # Check if tag exists locally
+        $existingTag = git tag -l $version
+        if (-not $existingTag) {
+            Write-Host "Creating release tag: $version" -ForegroundColor Cyan
+            git tag $version
+            
+            Write-Host "Pushing tag: $version" -ForegroundColor Cyan
+            git push origin $version
+        }
+        else {
+            Write-Host "Tag $version already exists. Skipping creation." -ForegroundColor Yellow
+        }
+    }
+    catch {
+        Write-Host "Failed to process release tag: $_" -ForegroundColor Red
+    }
+    # --------------------------------
     
     # 5. Guide to PR
     $prUrl = "https://github.com/dexism/geoforge-system/compare/main...$branchName?expand=1"

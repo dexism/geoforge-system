@@ -31,6 +31,14 @@ const loadingOverlay = document.getElementById('loading-overlay');
 const logContainer = document.getElementById('loading-log');
 const progressBarContainer = document.getElementById('progress-bar-container');
 
+// [NEW] Update Version Display via Define Plugin (Vite config)
+const loadingTitle = document.getElementById('loading-title');
+if (loadingTitle && typeof __APP_VERSION__ !== 'undefined') {
+    // Replace "v2.8.33" placeholder with actual package version
+    // Regex matches "vX.X.X" or "ver.X.X.X"
+    loadingTitle.innerHTML = loadingTitle.innerHTML.replace(/v\d+\.\d+\.\d+/i, `v${__APP_VERSION__}`);
+}
+
 // 分割生成のためのグローバル状態管理変数
 let worldData = {
     allHexes: null, // 全ヘックスデータを格納する WorldMap インスタンス (または配列)
