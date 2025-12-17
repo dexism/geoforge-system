@@ -5,7 +5,7 @@ import * as d3 from 'd3';
 import * as config from './config.ts';
 import { getIndex, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint } from './utils.ts';
 import { BLOCK_START_EE, BLOCK_START_NN, BLOCK_END_NN } from './BlockUtils.ts';
-import { getInfoText, updateOverallInfo, generateHexJson, childrenMap } from './infoWindow.js';
+import { getInfoText, updateOverallInfo, generateHexJson, childrenMap } from './infoWindow.ts';
 import { CoordinateSystem } from './CoordinateSystem.ts'; // [NEW]
 import { JapanOverlay } from './JapanOverlay.js';
 import { WorldMap, Hex } from './WorldMap.ts';
@@ -17,7 +17,7 @@ import { WorldMap, Hex } from './WorldMap.ts';
 
 export class MapView {
     containerSelector: string;
-    svg: d3.Selection<d3.BaseType, unknown, HTMLElement, any>;
+    svg: d3.Selection<Element, unknown, HTMLElement, any>;
     g: d3.Selection<SVGGElement, unknown, HTMLElement, any>;
     layers: { [key: string]: d3.Selection<SVGGElement, unknown, HTMLElement, any> };
     hexes: WorldMap | any[]; // 全ヘックスデータへの参照 (Flyweightパターン)
@@ -47,7 +47,7 @@ export class MapView {
      */
     constructor(containerSelector: string) {
         this.containerSelector = containerSelector;
-        this.svg = d3.select(containerSelector);
+        this.svg = d3.select(containerSelector) as d3.Selection<Element, unknown, HTMLElement, any>;
         this.g = this.svg.append('g');
         this.layers = {};
         this.hexes = []; // 全ヘックスデータへの参照 (Flyweightパターン)
@@ -2176,9 +2176,7 @@ export class MapView {
                 const p = this.coordSys.toView(d.cx, d.cy);
                 return `translate(${p.x}, ${p.y})`;
             })
-            .attr('fill', 'none')
-            .attr('stroke', '#fff4')
-            .attr('stroke-width', 0.5);
+            .attr('class', 'hex-border')
     }
 
     /**

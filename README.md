@@ -23,8 +23,8 @@ Hex（六角形）グリッドベースの地図上で、大陸生成から国�
 
 ### インストール
 ```bash
-git clone https://github.com/dexism/geoforge-system.git
-cd geoforge-system
+git clone https://github.com/dexism/VoT-GeoForge.git
+cd VoT-GeoForge
 npm install
 ```
 
@@ -41,7 +41,7 @@ GitHubへのプッシュにより自動デプロイがトリガーされる設�
 
 手動デプロイ（プッシュ）用スクリプト:
 ```powershell
-./script/deploy.ps1
+./scripts/deploy.ps1
 ```
 
 ## 環境変数 (Secrets)
@@ -55,7 +55,7 @@ GitHubへのプッシュにより自動デプロイがトリガーされる設�
 
 - `src/`: ソースコード
 - `docs/`: 仕様書・ドキュメント
-- `script/`: 運用スクリプト
+- `scripts/`: 運用スクリプト
 - `backup/`: バックアップデータ（Git管理外）
 
 ## ライセンス

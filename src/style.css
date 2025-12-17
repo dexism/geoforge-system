@@ -680,9 +680,9 @@ button.active:hover {
 .hex-border {
     fill: none;
     /* 塗りつぶしはしない */
-    stroke: #fff;
+    stroke: #0002;
     /* 境界線の色 */
-    stroke-width: 0.2px;
+    stroke-width: 0.5px;
     /* 境界線の太さ */
     pointer-events: none;
     /* クリックイベントを透過させる */

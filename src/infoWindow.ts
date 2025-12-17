@@ -9,43 +9,60 @@ import * as d3 from 'd3';
 import * as config from './config.ts';
 import { getIndex, formatLocation } from './utils.ts';
 import { allocateVegetation } from './continentGenerator.js';
-import { calculateHexIndustry, calculateHexDemographics, calculateHexFacilities, calculateHexShipOwnership } from './economyHelpers.js';
+import { calculateHexIndustry, calculateHexDemographics, calculateHexFacilities, calculateHexShipOwnership } from './economyHelpers.ts';
+import { WorldMap, Hex } from './WorldMap.ts';
+
+interface SettlementStats {
+    '首都': number;
+    '領都': number;
+    '街': number;
+    '町': number;
+    '村': number;
+    [key: string]: number;
+}
+
+interface NationStat {
+    name: string;
+    population: number;
+    capital: Hex | any | null;
+    settlements: SettlementStats;
+}
 
 // --- モジュールスコープ変数 ---
-export let childrenMap = new Map();
-let allHexesData = [];
-let legendContainer = null;
+export let childrenMap: Map<number, number[]> = new Map();
+let allHexesData: WorldMap | any[] = [];
+let legendContainer: HTMLElement | null = null;
 
 /**
  * 情報ウィンドウモジュールの初期化
  * @param {HTMLElement} container - 凡例を表示するコンテナ要素
  */
-export function initInfoWindow(container) {
+export function initInfoWindow(container: HTMLElement) {
     legendContainer = container;
 }
 
 /**
  * 全ヘックスデータを設定する
- * @param {Array<object>} data - 全ヘックスデータ
+ * @param {Array<object> | WorldMap} data - 全ヘックスデータ
  */
-export function setAllHexesData(data) {
+export function setAllHexesData(data: WorldMap | any[]) {
     allHexesData = data;
 }
 
 /**
  * 集落の親子関係マップを更新する関数
- * @param {Array<object>} hexesData - 全ヘックスのデータ
+ * @param {Array<object> | WorldMap} hexesData - 全ヘックスのデータ
  */
-export function updateChildrenMap(hexesData) {
+export function updateChildrenMap(hexesData: WorldMap | any[]) {
     allHexesData = hexesData; // データも更新しておく
     childrenMap.clear(); // 古いデータをクリア
-    hexesData.forEach((h, index) => {
+    hexesData.forEach((h: any, index: number) => {
         const parentId = h.properties.parentHexId;
         if (parentId !== null) {
             if (!childrenMap.has(parentId)) {
                 childrenMap.set(parentId, []);
             }
-            childrenMap.get(parentId).push(index);
+            childrenMap.get(parentId)!.push(index);
         }
     });
 }
@@ -55,8 +72,8 @@ export function updateChildrenMap(hexesData) {
  * @param {number} rootIndex - 起点となるヘックスのインデックス
  * @returns {object} 集落タイプごとのカウント { '街': 1, '村': 5, ... }
  */
-export function getAllSubordinateSettlements(rootIndex) {
-    const counts = {};
+export function getAllSubordinateSettlements(rootIndex: number): { [key: string]: number } {
+    const counts: { [key: string]: number } = {};
     const queue = [rootIndex];
 
     // 循環参照防止のためのSet
@@ -83,9 +100,9 @@ export function getAllSubordinateSettlements(rootIndex) {
 
 /**
  * サイドバーの全体情報パネルを更新する (辺境地帯の集計に対応)
- * @param {Array<object>} allHexes - 全てのヘックスデータ
+ * @param {Array<object> | WorldMap} allHexes - 全てのヘックスデータ
  */
-export function updateOverallInfo(allHexes) {
+export function updateOverallInfo(allHexes: WorldMap | any[]) {
     if (!allHexes || allHexes.length === 0) return;
 
     // --- DOM要素の取得 ---
@@ -96,20 +113,27 @@ export function updateOverallInfo(allHexes) {
     if (nationsDetailsEl) nationsDetailsEl.innerHTML = ''; // 事前にクリア
 
     // --- 集計用データ構造の初期化 ---
-    const globalStats = {
+    const globalStats: {
+        population: number;
+        nations: Set<number>;
+        settlements: SettlementStats;
+    } = {
         population: 0,
         nations: new Set(),
         settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
     };
-    const nationStats = new Map();
+    const nationStats = new Map<number, NationStat>();
     // 辺境地帯用の集計オブジェクトを追加
-    const frontierStats = {
+    const frontierStats: {
+        population: number;
+        settlements: SettlementStats;
+    } = {
         population: 0,
         settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
     };
 
     // --- STEP 1: 全ヘックスを走査し、データ集計 ---
-    allHexes.forEach(h => {
+    allHexes.forEach((h: any) => {
         const p = h.properties;
         globalStats.population += p.population || 0;
         if (p.settlement && globalStats.settlements[p.settlement] !== undefined) {
@@ -126,7 +150,7 @@ export function updateOverallInfo(allHexes) {
                     settlements: { '首都': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
                 });
             }
-            const currentNation = nationStats.get(p.nationId);
+            const currentNation = nationStats.get(p.nationId)!;
             currentNation.population += p.population || 0;
             if (p.settlement && currentNation.settlements[p.settlement] !== undefined) {
                 currentNation.settlements[p.settlement]++;
@@ -181,16 +205,16 @@ export function updateOverallInfo(allHexes) {
  * @param {object} d - ヘックスデータ
  * @returns {string} - 整形された情報テキスト (HTML)
  */
-export function getInfoText(d, allHexes) {
+export function getInfoText(d: any, allHexes: WorldMap | any[]) {
     // [FIX] Lazy Restoration of missing data
     // d is a POJO (display data). We need to access the WorldMap/Buffer to calculate details.
     if (allHexes) {
         // Try to get the Flyweight Hex object
         let h = null;
-        if (typeof allHexes.getHex === 'function') {
-            h = allHexes.getHex(d.index);
-        } else if (allHexes[d.index]) {
-            h = allHexes[d.index];
+        if (typeof (allHexes as any).getHex === 'function') {
+            h = (allHexes as any).getHex(d.index);
+        } else if ((allHexes as any)[d.index]) {
+            h = (allHexes as any)[d.index];
         }
 
         if (h) {
@@ -262,7 +286,7 @@ export function getInfoText(d, allHexes) {
                 if (h && !hp.facilities) calculateHexFacilities(h, allHexes);
 
                 // Production (Depends on Industry)
-                if (h && !hp.production) calculateHexProduction(h, allHexes);
+                // if (h && !hp.production) calculateHexProduction(h, allHexes);
             }
 
             // Sync calculated props back to display POJO 'd'
@@ -278,7 +302,7 @@ export function getInfoText(d, allHexes) {
     const p = d.properties;
 
     // --- ヘルパー: アイコン付き行の生成 ---
-    const createRow = (icon, label, value, unit = '', color = null) => {
+    const createRow = (icon: string, label: string, value: string | number, unit = '', color: string | null = null) => {
         let legendHtml = '';
         if (color) {
             legendHtml = `<span class="legend-icon" style="background-color:${color};"></span>`;
@@ -546,7 +570,7 @@ export function getInfoText(d, allHexes) {
     if (p.vegetationAreas) {
         Object.entries(p.vegetationAreas).forEach(([vegType, area]) => {
             const suitability = RECLAMATION_SUITABILITY[vegType] || 0;
-            maxPotentialFarmland += area * suitability;
+            maxPotentialFarmland += (area as number) * suitability;
         });
     } else {
         // vegetationAreasがない場合のフォールバック
@@ -586,8 +610,8 @@ export function getInfoText(d, allHexes) {
         let majorCrop = null;
         let maxYield = -1;
         Object.entries(p.industry.primary).forEach(([crop, amount]) => {
-            if (amount > maxYield) {
-                maxYield = amount;
+            if ((amount as number) > maxYield) {
+                maxYield = amount as number;
                 majorCrop = crop;
             }
         });
@@ -677,24 +701,24 @@ export function getInfoText(d, allHexes) {
         // 元の植生面積の合計（水域除く）
         let totalVegArea = 0;
         Object.entries(p.vegetationAreas).forEach(([k, v]) => {
-            if (k !== 'water') totalVegArea += v;
+            if (k !== 'water') totalVegArea += (v as number);
         });
 
         const scaleFactor = totalVegArea > 0 ? remainingNatureArea / totalVegArea : 0;
 
         Object.entries(p.vegetationAreas)
             .filter(([key, area]) => key !== 'water')
-            .map(([key, area]) => [key, area * scaleFactor])
-            .filter(([, area]) => area > 1)
-            .sort(([, a], [, b]) => b - a)
+            .map(([key, area]) => [key, (area as number) * scaleFactor])
+            .filter(([, area]) => (area as number) > 1)
+            .sort(([, a], [, b]) => (b as number) - (a as number))
             .forEach(([key, area]) => {
-                const info = vegLabelMap[key];
+                const info = vegLabelMap[key as keyof typeof vegLabelMap];
                 if (info) {
-                    envInfoHtml += createRow(info.icon, info.label, Math.round(area).toLocaleString(), ' ha', info.color);
-                    landUseSegments.push({ label: info.label, area: area, color: info.color });
+                    envInfoHtml += createRow(info.icon, info.label, Math.round(area as number).toLocaleString(), ' ha', info.color);
+                    landUseSegments.push({ label: info.label, area: area as number, color: info.color });
                 } else {
-                    envInfoHtml += createRow('help_outline', key, Math.round(area).toLocaleString(), ' ha', '#ccc');
-                    landUseSegments.push({ label: key, area: area, color: '#ccc' });
+                    envInfoHtml += createRow('help_outline', key as string, Math.round(area as number).toLocaleString(), ' ha', '#ccc');
+                    landUseSegments.push({ label: key as string, area: area as number, color: '#ccc' });
                 }
             });
     } else {
@@ -732,8 +756,8 @@ export function getInfoText(d, allHexes) {
             Object.entries(p.landUse).forEach(([key, ratio]) => {
                 if (excludeKeys.includes(key)) return;
 
-                if (ratio > 0) {
-                    const area = ratio * safeTotal;
+                if ((ratio as number) > 0) {
+                    const area = (ratio as number) * safeTotal;
                     if (area > 1) {
                         const info = vegLabelMap[key] || { label: key, icon: 'help_outline', color: '#ccc' };
                         envInfoHtml += createRow(info.icon, info.label, Math.round(area).toLocaleString(), ' ha', info.color);
@@ -811,18 +835,18 @@ export function getInfoText(d, allHexes) {
                 '武具・道具': '鍛　冶', '織　物': '繊　維', 'ポーション・魔導具': '魔　導', '酒(穀物)': '食　品', '酒(果実)': '食　品', '建　築': '建　築'
             };
 
-            const formatSector = (title, icon, data, unit) => {
-                const entries = Object.entries(data || {}).filter(([, val]) => val > 0.1);
+            const formatSector = (title: string, icon: string, data: { [key: string]: number }, unit: string) => {
+                const entries = Object.entries(data || {}).filter(([, val]) => (val as number) > 0.1);
                 if (entries.length === 0) return '';
 
                 let html = `<div class="sector-block"><h6><span class="material-icons-round" style="font-size:14px; vertical-align:text-bottom; margin-right:4px;">${icon}</span>${title}</h6>`;
 
                 // グルーピング
-                const groups = {};
-                const others = [];
+                const groups: { [key: string]: { key: string, val: string }[] } = {};
+                const others: { key: string, val: string }[] = [];
                 entries.forEach(([key, val]) => {
-                    const cat = categoryMap[key];
-                    const valStr = `${Math.round(val).toLocaleString()}${unit}`;
+                    const cat = categoryMap[key as keyof typeof categoryMap];
+                    const valStr = `${Math.round(val as number).toLocaleString()}${unit}`;
                     if (cat) {
                         if (!groups[cat]) groups[cat] = [];
                         groups[cat].push({ key, val: valStr });
@@ -982,7 +1006,7 @@ export function getInfoText(d, allHexes) {
         livingHtml += `</div>`;
 
         // 詳細指標 (バー表示)
-        const createBar = (label, value, color) => {
+        const createBar = (label: string, value: number, color: string) => {
             const width = Math.min(100, value * 100);
             return `<div class="industry-item" style="flex-direction:column; align-items:flex-start; gap:2px;">
                 <div style="display:flex; justify-content:space-between; width:100%; font-size:11px;"><span>${label}</span><span>${(value * 100).toFixed(0)}%</span></div>
@@ -1114,7 +1138,7 @@ export function getInfoText(d, allHexes) {
         let territoryHtml = '';
 
         // 集落数 (直轄)
-        const counts = Object.entries(data.settlementCounts).filter(([, c]) => c > 0)
+        const counts = Object.entries(data.settlementCounts).filter(([, c]) => (c as number) > 0)
             .map(([t, c]) => `${t}:${c}`).join(', ');
         if (counts) {
             territoryHtml += `<div class="info-row" style="display:block;"><span class="label" style="display:block; margin-bottom:2px;">直轄集落</span><span class="value" style="font-size:12px;">${counts}</span></div>`;
@@ -1122,7 +1146,7 @@ export function getInfoText(d, allHexes) {
 
         // 集落数 (全隷下)
         const allSubordinateCounts = getAllSubordinateSettlements(d.index);
-        const allCountsStr = Object.entries(allSubordinateCounts).filter(([, c]) => c > 0)
+        const allCountsStr = Object.entries(allSubordinateCounts).filter(([, c]) => (c as number) > 0)
             .map(([t, c]) => `${t}:${c}`).join(', ');
         if (allCountsStr) {
             territoryHtml += `<div class="info-row" style="display:block;"><span class="label" style="display:block; margin-bottom:2px;">全隷下集落</span><span class="value" style="font-size:12px;">${allCountsStr}</span></div>`;
@@ -1134,7 +1158,7 @@ export function getInfoText(d, allHexes) {
         // 収支
         const settlementInfo = config.SETTLEMENT_PARAMS[p.settlement];
         const totalDemand = data.population * settlementInfo.consumption_t_per_person;
-        const totalSupply = Object.values(data.production).reduce((a, b) => a + b, 0);
+        const totalSupply = Object.values(data.production as { [key: string]: number }).reduce((a, b) => a + b, 0);
         const balance = totalSupply - totalDemand;
 
         if (balance >= 0) {
@@ -1216,7 +1240,7 @@ export function generateHexJson(d) {
     let maxPotentialFarmland = 0;
     if (p.vegetationAreas) {
         Object.entries(p.vegetationAreas).forEach(([vegType, area]) => {
-            maxPotentialFarmland += area * (RECLAMATION_SUITABILITY[vegType] || 0);
+            maxPotentialFarmland += (area as number) * (RECLAMATION_SUITABILITY[vegType as keyof typeof RECLAMATION_SUITABILITY] || 0);
         });
     } else {
         const landArea = config.HEX_AREA_HA - (oceanArea + lakeArea + riverArea);
@@ -1278,9 +1302,9 @@ export function generateHexJson(d) {
     if (p.population > 0 && p.industry) {
         json['産業'] = {};
         const formatInd = (src) => {
-            const res = {};
+            const res: { [key: string]: number } = {};
             Object.entries(src).forEach(([k, v]) => {
-                if (v > 0.1) res[k] = Math.round(v);
+                if ((v as number) > 0.1) res[k] = Math.round(v as number);
             });
             return Object.keys(res).length > 0 ? res : null;
         };
