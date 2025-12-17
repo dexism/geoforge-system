@@ -5,7 +5,7 @@
 ![Node](https://img.shields.io/badge/node-%3E%3D22-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
 
-GeoForge Systemは、架空の世界地図を生成し、文明、経済、歴史をシミュレートするためのWebアプリケーションです。
+VoT GeoForgeは、[ベンチャー of テイルズ TRPG](https://geoforge-system.onrender.com/rulebook.html) における架空の世界地図を生成し、文明、経済、歴史をシミュレートするためのWebアプリケーションです。
 Hex（六角形）グリッドベースの地図上で、大陸生成から国家興亡までを可視化します。
 
 ## 機能概要
