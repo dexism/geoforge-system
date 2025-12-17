@@ -1,6 +1,6 @@
 {
-  "name": "VoT-GeoForge",
-  "version": "2.8.36",
+  "name": "vot-geoforge",
+  "version": "2.8.37",
   "description": "Epic Fantasy World Builder",
   "main": "index.js",
   "scripts": {

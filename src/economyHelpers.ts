@@ -1,6 +1,7 @@
 
 import * as config from './config.ts';
 import { getIndex, globalRandom } from './utils.ts';
+import { WorldMap, Hex } from './WorldMap.ts';
 
 // ================================================================
 // Single Hex Economy Calculation Helpers
@@ -9,7 +10,7 @@ import { getIndex, globalRandom } from './utils.ts';
 /**
  * Calculates ship ownership for a single hex.
  */
-export function calculateHexShipOwnership(h, allHexes) {
+export function calculateHexShipOwnership(h: any, allHexes: WorldMap | any[]) {
     const p = h.properties;
     p.ships = {}; // Initialize
 
@@ -53,7 +54,7 @@ export function calculateHexShipOwnership(h, allHexes) {
 
     const totalShips = Math.floor(baseShips + popFactor + (10 * tradeFactor) + (8 * waterFactor));
 
-    let ratios = {};
+    let ratios: { [key: string]: number } = {};
     if (isCoastal) {
         if (settlementLevel === '村') ratios = { 'dinghy': 0.90, 'small_trader': 0.10 };
         else if (settlementLevel === '町') ratios = { 'dinghy': 0.65, 'small_trader': 0.30, 'coastal_trader': 0.05 };
@@ -107,7 +108,7 @@ export function calculateHexShipOwnership(h, allHexes) {
 /**
  * Calculates industry structure for a single hex.
  */
-export function calculateHexIndustry(h, allHexes) {
+export function calculateHexIndustry(h: any, allHexes: WorldMap | any[]) {
     const p = h.properties;
     p.industry = { primary: {}, secondary: {}, tertiary: {}, quaternary: {}, quinary: {} };
     p.production = {}; p.surplus = {}; p.shortage = {}; p.cultivatedArea = 0; p.imports = { '食料': 0 };
@@ -140,7 +141,7 @@ export function calculateHexIndustry(h, allHexes) {
         // Agri logic simplified hook or duplicated?
         // Duplicating core logic for safety/independence
         const climate = p.climateZone || "";
-        let mainCrops = (climate.includes("亜寒帯") || climate.includes("ツンドラ")) ? { '大麦': 0.6, '雑穀': 0.4 } :
+        let mainCrops: { [key: string]: number } = (climate.includes("亜寒帯") || climate.includes("ツンドラ")) ? { '大麦': 0.6, '雑穀': 0.4 } :
             (climate.includes("温暖") || climate.includes("地中海")) ? { '小麦': 0.7, '雑穀': 0.3 } :
                 (climate.includes("熱帯")) ? (p.isAlluvial ? { '稲': 0.8, '雑穀': 0.2 } : { '雑穀': 1.0 }) : { '雑穀': 1.0 };
 
@@ -173,7 +174,7 @@ export function calculateHexIndustry(h, allHexes) {
         let totalYield = workers.fish * 0.5; // Base
         if (p.ships) {
             // Add ship bonus if any
-            const ships = Object.values(p.ships).reduce((a, b) => a + b, 0);
+            const ships = (Object.values(p.ships) as number[]).reduce((a, b) => a + b, 0);
             totalYield += ships * 5; // Simplified
         }
         prod1['魚介類'] = totalYield * p.fishingPotential;
@@ -216,7 +217,7 @@ export function calculateHexIndustry(h, allHexes) {
 /**
  * Calculates demographics for a single hex.
  */
-export function calculateHexDemographics(h, allHexes) {
+export function calculateHexDemographics(h: any, allHexes: WorldMap | any[]) {
     const p = h.properties;
     if (p.population <= 0) return;
     const totalPop = p.population;
@@ -244,13 +245,13 @@ export function calculateHexDemographics(h, allHexes) {
 /**
  * Calculates facilities for a single hex.
  */
-export function calculateHexFacilities(h, allHexes) {
+export function calculateHexFacilities(h: any, allHexes: WorldMap | any[]) {
     const p = h.properties;
     p.facilities = [];
 
     if (p.population <= 0) return;
 
-    const addFacility = (name, count = 1, level = 1) => {
+    const addFacility = (name: string, count: number = 1, level: number = 1) => {
         p.facilities.push({ name, count, level });
     };
 
