@@ -1,5 +1,5 @@
 // ================================================================
-// GeoForge System - ユーティリティモジュール (utils.js)
+// GeoForge System - ユーティリティモジュール (utils.ts)
 // ================================================================
 // 解説:
 // アプリケーション全体で使用される汎用的な関数群を提供するモジュール。
@@ -8,6 +8,29 @@
 
 import * as config from './config.js';
 import { globalToBlock } from './BlockUtils.js';
+
+// 基本的なPoint型 (CoordinateSystem.tsと重複するが、疎結合のためここで定義またはanyで済ます)
+interface Point2D {
+    x: number;
+    y: number;
+}
+
+// ヘックスの最低限のインターフェース
+interface HexMinimal {
+    col: number;
+    row: number;
+    x?: number;
+    y?: number;
+    properties?: {
+        elevation?: number;
+        [key: string]: any;
+    };
+    ee?: number;
+    nn?: number;
+    localCol?: number;
+    localRow?: number;
+    points?: number[][];
+}
 
 /**
  * 座標からallHexes配列のインデックスを計算する
@@ -20,7 +43,7 @@ import { globalToBlock } from './BlockUtils.js';
  * @param {number} row - ヘックスの行 (Y成分相当)
  * @returns {number} 1次元配列上のインデックス。範囲外チェックは行わないため呼び出し側で注意が必要。
  */
-export function getIndex(col, row) {
+export function getIndex(col: number, row: number): number {
     return row * config.COLS + col;
 }
 
@@ -38,7 +61,7 @@ export function getIndex(col, row) {
  * @param {number} maxRows - グリッドの最大行数 (通常 config.ROWS)
  * @returns {Array<number>} 隣接する有効なヘックスの1次元配列インデックスのリスト
  */
-export function getNeighborIndices(col, row, maxCols, maxRows) {
+export function getNeighborIndices(col: number, row: number, maxCols: number, maxRows: number): number[] {
     const isOddCol = col % 2 !== 0;
     const candidates = [
         { col: col, row: row - 1 },     // N (北)
@@ -49,7 +72,7 @@ export function getNeighborIndices(col, row, maxCols, maxRows) {
         { col: col + 1, row: isOddCol ? row + 1 : row - 1 }, // SE (南東: 偶数列ならrow-1, 奇数列ならrow+1)
     ];
 
-    const neighbors = [];
+    const neighbors: number[] = [];
     candidates.forEach(n => {
         // グリッド範囲内かチェック
         if (n.col >= 0 && n.col < maxCols && n.row >= 0 && n.row < maxRows) {
@@ -70,12 +93,19 @@ export function getNeighborIndices(col, row, maxCols, maxRows) {
  * @param {object} h2 - 2つ目のヘックスオブジェクト (要: col, row プロパティ)
  * @returns {number} ヘックス単位でのステップ距離（近似値）
  */
-export function getDistance(h1, h2) {
+export function getDistance(h1: { col: number; row: number }, h2: { col: number; row: number }): number {
     const dx = Math.abs(h1.col - h2.col);
     const dy = Math.abs(h1.row - h2.row);
 
     // ヘックス距離 = max(|dx|, |dy|, |dx+dy|) だが、この座標系では簡易的に以下で算出
     return Math.max(dx, dy);
+}
+
+interface ProgressBarParams {
+    current: number;
+    total: number;
+    prefix?: string;
+    barWidth?: number;
 }
 
 /**
@@ -92,7 +122,7 @@ export function getDistance(h1, h2) {
  * @param {number} [params.barWidth=40] - バー部分の文字数幅
  * @returns {string} フォーマットされたプログレスバー文字列
  */
-export function formatProgressBar({ current, total, prefix = "", barWidth = 40 }) {
+export function formatProgressBar({ current, total, prefix = "", barWidth = 40 }: ProgressBarParams): string {
     if (total === 0) return `${prefix} [${'-'.repeat(barWidth)}] 0% (0/0)`;
 
     const percent = Math.floor((current / total) * 100);
@@ -119,7 +149,7 @@ export function formatProgressBar({ current, total, prefix = "", barWidth = 40 }
  *   - 'elevation': "H 100" 形式 (標高のみ)
  * @returns {string} フォーマット結果
  */
-export function formatLocation(hexData, formatType) {
+export function formatLocation(hexData: HexMinimal | null | undefined, formatType: 'full' | 'short' | 'coords' | 'elevation'): string {
     if (!hexData) return 'N/A';
 
     const p = hexData.properties || {};
@@ -134,7 +164,7 @@ export function formatLocation(hexData, formatType) {
     const elevLabel = isDepth ? 'D' : 'H';
     const elevValue = isDepth ? Math.abs(elevation) : elevation;
 
-    let ee, nn, lx, ly;
+    let ee: number | undefined, nn: number | undefined, lx: string, ly: string;
     let coordsStr = '00-00'; // デフォルト値
 
     // ブロック座標情報 (ee/nn) を持っている場合
@@ -187,12 +217,12 @@ export function formatLocation(hexData, formatType) {
  * @param {object} h2 - 2つ目のヘックス
  * @returns {Array<Array<number>>|null} [[x1, y1], [x2, y2]] 形式の座標配列。共有辺が無い場合はnull
  */
-export function getSharedEdgePoints(h1, h2) {
-    if (!h1 || !h2) return null;
+export function getSharedEdgePoints(h1: HexMinimal, h2: HexMinimal): number[][] | null {
+    if (!h1 || !h2 || !h1.points || !h2.points) return null;
 
     // 座標比較の許容誤差 (浮動小数点演算対策)
     const epsilon = 0.1;
-    const sharedPoints = [];
+    const sharedPoints: number[][] = [];
 
     // 総当たりで頂点を比較
     for (const p1 of h1.points) {
@@ -222,7 +252,7 @@ export function getSharedEdgePoints(h1, h2) {
  * @param {object} h2 - 2つ目のヘックス
  * @returns {Array<number>|null} [x, y] 形式の座標。共有辺が無い場合はnull
  */
-export function getSharedEdgeMidpoint(h1, h2) {
+export function getSharedEdgeMidpoint(h1: HexMinimal, h2: HexMinimal): number[] | null {
     const points = getSharedEdgePoints(h1, h2);
     if (points) {
         return [(points[0][0] + points[1][0]) / 2, (points[0][1] + points[1][1]) / 2];
@@ -239,39 +269,46 @@ export function getSharedEdgeMidpoint(h1, h2) {
  * アルゴリズムには高速で品質の良い Xorshift128+ を採用。
  */
 export class SeededRandom {
+    private s0: number;
+    private s1: number;
+    private s2: number;
+    private s3: number;
+    public readonly initialSeed: number;
+
     /**
      * コンストラクタ
      * @param {number|string} seed - 乱数シード。省略時は現在時刻を使用。
      */
-    constructor(seed) {
+    constructor(seed?: number | string) {
         // シード未指定時は現在時刻
+        let numericSeed: number;
         if (seed === undefined || seed === null || seed === 0) {
-            seed = Date.now();
-        }
-
-        // 文字列シード対応: 文字列をハッシュ化して数値シードに変換
-        if (typeof seed === 'string') {
+            numericSeed = Date.now();
+        } else if (typeof seed === 'string') {
+            // 文字列シード対応: 文字列をハッシュ化して数値シードに変換
             let h = 0xdeadbeef;
             for (let i = 0; i < seed.length; i++) {
                 h = Math.imul(h ^ seed.charCodeAt(i), 2654435761);
             }
-            seed = (h ^ h >>> 16) >>> 0;
+            numericSeed = (h ^ h >>> 16) >>> 0;
+        } else {
+            numericSeed = seed;
         }
 
         // 状態変数の初期化 (SplitMix64アルゴリズムで初期シードから内部状態を生成)
-        this.s0 = this._splitmix64(seed);
+        this.s0 = this._splitmix64(numericSeed);
         this.s1 = this._splitmix64(this.s0);
         this.s2 = this._splitmix64(this.s1);
         this.s3 = this._splitmix64(this.s2);
 
-        this.initialSeed = seed;
+        this.initialSeed = numericSeed;
     }
 
     /**
      * 初期化用ヘルパー (SplitMix64)
      * シード値から偏りのない初期状態変数を生成する
      */
-    _splitmix64(a) {
+    private _splitmix64(a: number): number {
         a |= 0; a = a + 0x9e3779b9 | 0;
         let t = a ^ a >>> 16;
         t = Math.imul(t, 0x21f0aaad);
@@ -284,7 +321,7 @@ export class SeededRandom {
      * 0以上1未満の乱数を返す (Math.random() 互換)
      * @returns {number} 0 <= n < 1
      */
-    next() {
+    next(): number {
         // Xorshift128+ アルゴリズム
         let t = this.s3;
         const s = this.s0;
@@ -306,7 +343,7 @@ export class SeededRandom {
      * @param {number} max - 最大値 (含む)
      * @returns {number} min <= n <= max の整数
      */
-    nextInt(min, max) {
+    nextInt(min: number, max: number): number {
         return Math.floor(this.next() * (max - min + 1)) + min;
     }
 }
@@ -323,7 +360,8 @@ export let globalRandom = new SeededRandom();
  * 
  * @param {number|string} seed - 新しいシード値
  */
-export function initGlobalRandom(seed) {
+export function initGlobalRandom(seed: number | string): void {
     globalRandom = new SeededRandom(seed);
     console.log(`[PRNG] Initialized with seed: ${seed}`);
 }
+

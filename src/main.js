@@ -15,7 +15,7 @@ import { generateCivilization, determineTerritories, defineNations, assignTerrit
 import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap, updateMinimap, updateUIWithBlockData } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
-import { getIndex, initGlobalRandom, globalRandom, getNeighborIndices } from './utils.js';
+import { getIndex, initGlobalRandom, globalRandom, getNeighborIndices } from './utils.ts';
 import { WorldMap } from './WorldMap.js';
 import { assignRoadPatterns, assignRiverPatterns, splitWorldIntoBlocks } from './MapSplitter.js';
 import * as blockUtils from './BlockUtils.js';
