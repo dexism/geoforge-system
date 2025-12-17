@@ -6,9 +6,9 @@ import * as d3 from 'd3';
 import { MapView } from './MapView.js';
 import {
     updateOverallInfo,
-    generateHexJson
+    generateHexJson,
+    updateLegend
 } from './infoWindow.js';
-import { DataGenerator } from './DataGenerator.js';
 
 /**
  * サイドバーの高さを動的に調整する関数
@@ -273,10 +273,9 @@ function setupEventHandlers() {
             if (!isActive) {
                 d3.select(this).classed('active', true);
                 mapView.toggleLayer(layerName, true);
-                // 凡例の更新が必要な場合はここで呼び出す
-                // updateLegend(layerName); // infoWindow.js
+                updateLegend(layerName);
             } else {
-                // updateLegend(null);
+                updateLegend(null);
             }
         });
     });

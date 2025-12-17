@@ -775,3 +775,81 @@ async function notifyRegenerationAttempt() {
         console.warn("通知送信に失敗しましたが、処理は続行します。", e);
     }
 }
+
+// ================================================================
+// ■ 保存機能 (Restored via AI)
+// ================================================================
+
+async function saveWorldData() {
+    if (!confirm("現在のデータをGAS（スプレッドシート）に保存しますか？\\n※既存のデータは上書きされます。")) return;
+
+    if (typeof addLogMessage === 'function') addLogMessage("データ保存を開始します...");
+    else console.log("データ保存を開始します...");
+
+    const saveBtn = document.getElementById('step5-save-btn');
+    if (saveBtn) saveBtn.disabled = true;
+
+    try {
+        const p = performance.now();
+
+        // 1. データのシリアライズ
+        const hexes = [];
+        if (allHexes && typeof allHexes.forEach === 'function') {
+            allHexes.forEach(h => {
+                hexes.push(h.toObject());
+            });
+        }
+
+        const payload = {
+            hexes: hexes,
+            roads: roadPaths || [],
+            version: 'ver.2.8 (Restored)',
+            cols: config.COLS,
+            rows: config.ROWS
+        };
+
+        // 2. 送信
+        if (typeof GAS_WEB_APP_URL === 'undefined') {
+            throw new Error("GAS_WEB_APP_URL is not defined in main.js");
+        }
+
+        const response = await fetch(GAS_WEB_APP_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+                'Content-Type': 'text/plain'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const time = (performance.now() - p).toFixed(0);
+        if (typeof addLogMessage === 'function') addLogMessage(`保存リクエストを送信しました。(Time: ${time}ms)`);
+        alert("保存リクエストを送信しました。\\n(GAS側の処理完了まで数秒〜数分かかる場合があります)");
+
+    } catch (e) {
+        console.error(e);
+        if (typeof addLogMessage === 'function') addLogMessage("保存に失敗しました: " + e.message, true);
+        alert("保存に失敗しました。詳細はコンソールを確認してください。\\n" + e.message);
+    } finally {
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
+// イベントリスナーの設定
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindSaveButton);
+} else {
+    bindSaveButton();
+}
+
+function bindSaveButton() {
+    const saveBtn = document.getElementById('step5-save-btn');
+    if (saveBtn) {
+        // 重複防止
+        saveBtn.removeEventListener('click', saveWorldData);
+        saveBtn.addEventListener('click', saveWorldData);
+        // 生成完了後に有効化されるべきだが、復旧確認のため有効化
+        // saveBtn.disabled = false; 
+        console.log("[Restoration] saveWorldData bound to #step5-save-btn");
+    }
+}

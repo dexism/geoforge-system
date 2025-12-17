@@ -1,17 +1,27 @@
 {
 	"folders": [
 		{
-			"path": ".."
+			"name": "bot",
+			"path": "../../bot"
 		},
 		{
-			"path": "../../nechronica"
-		},
-		{
+			"name": "entrySheet",
 			"path": "../../entrySheet"
 		},
 		{
-			"path": "../../bot"
+			"name": "geoforge-system",
+			"path": ".."
+		},
+		{
+			"name": "nechronica",
+			"path": "../../nechronica"
+		},
+		{
+			"name": "Venture-of-Tales-TRPG",
+			"path": "../../Venture-of-Tales-TRPG"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"powershell.cwd": "geoforge-system"
+	}
 }
