@@ -1,6 +1,9 @@
 # GeoForge System
 
 ![CI Status](https://github.com/dexism/geoforge-system/actions/workflows/ci.yml/badge.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D22-green)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
 
 GeoForge Systemは、架空の世界地図を生成し、文明、経済、歴史をシミュレートするためのWebアプリケーションです。
 Hex（六角形）グリッドベースの地図上で、大陸生成から国家興亡までを可視化します。
