@@ -4,6 +4,7 @@
 import * as config from './config.ts';
 import * as d3 from 'd3';
 import { MapView } from './MapView.js';
+import { DataGenerator } from './DataGenerator.ts';
 import {
     updateOverallInfo,
     generateHexJson,

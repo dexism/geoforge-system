@@ -25,6 +25,9 @@ const CLIMATE_STATIONS = [
 ];
 
 export class DataGenerator {
+    progressCallback: ((msg: string, current?: number, total?: number) => void) | null;
+    elevationCache: Map<string, any>;
+
     constructor() {
         this.progressCallback = null;
         this.elevationCache = new Map();
@@ -34,7 +37,7 @@ export class DataGenerator {
      * Start the generation process
      * @param {Function} onProgress - Callback for progress updates (messge, current, total)
      */
-    async generateJapanData(onProgress) {
+    async generateJapanData(onProgress: (msg: string, current?: number, total?: number) => void) {
         this.progressCallback = onProgress;
         this.log("Starting Japan Data Generation...");
 
@@ -77,7 +80,7 @@ export class DataGenerator {
         this.log("Done!");
     }
 
-    log(msg) {
+    log(msg: string) {
         console.log(`[DataGenerator] ${msg}`);
         if (this.progressCallback) {
             this.progressCallback(msg);
@@ -86,7 +89,7 @@ export class DataGenerator {
 
     // --- Core Logic ---
 
-    identifyJapanBlocks() {
+    identifyJapanBlocks(): { ee: number, nn: number }[] {
         // Japan Bounding Box (Approximate for testing)
         // Lat: 24 (Okinawa) to 46 (Hokkaido) -> NN
         // Lon: 122 (Yonaguni) to 154 (Minamitori) -> EE
@@ -97,7 +100,7 @@ export class DataGenerator {
         // Lat 46 -> N50 + (46 / 1.8) = N50 + 25.5 = N75
 
         // Let's generate a slightly wider range to be safe
-        const blocks = [];
+        const blocks: { ee: number, nn: number }[] = [];
         for (let nn = 60; nn <= 78; nn++) {
             for (let ee = 65; ee <= 85; ee++) {
                 blocks.push({ ee, nn });
@@ -106,8 +109,8 @@ export class DataGenerator {
         return blocks;
     }
 
-    async generateBlockData(ee, nn) {
-        const hexes = [];
+    async generateBlockData(ee: number, nn: number): Promise<any | null> {
+        const hexes: any[] = [];
         const COLS = 25;
         const ROWS = 22;
 
@@ -129,7 +132,7 @@ export class DataGenerator {
 
                 // Construct Hex Data
                 // w: false is REQUIRED because WorldMap defaults to Water (1).
-                const hexData = {
+                const hexData: any = {
                     c: c,
                     r: r,
                     el: Math.round(elev),
@@ -161,11 +164,11 @@ export class DataGenerator {
         return this.compressBlockData(ee, nn, hexes);
     }
 
-    addDerivedVisualProps(hex, veg) {
+    addDerivedVisualProps(hex: any, veg: string) {
         // Mock Vegetation Areas (va) and LandUse (lu_*) based on dominant vegetation
         // This ensures the frontend has necessary data for rendering
         const totalHa = 8660; // Approx hex area
-        const va = {
+        const va: any = {
             des: 0, was: 0, gra: 0, wet: 0, t_for: 0, s_for: 0, tr_for: 0,
             alp: 0, tun: 0, sav: 0, ste: 0, coa: 0, iceSnow: 0, wat: 0
         };
@@ -195,11 +198,11 @@ export class DataGenerator {
         hex.va = va;
     }
 
-    compressBlockData(ee, nn, hexArray) {
-        const dictionaries = {
+    compressBlockData(ee: number, nn: number, hexArray: any[]) {
+        const dictionaries: any = {
             cz: [], v: [], tt: [] // keys only if used
         };
-        const getDictId = (dictName, val) => {
+        const getDictId = (dictName: string, val: any) => {
             if (val === undefined || val === null) return null;
             let idx = dictionaries[dictName].indexOf(val);
             if (idx === -1) {
@@ -234,7 +237,7 @@ export class DataGenerator {
 
     // --- Derived Logic ---
 
-    determineTerrainType(elev, isWater) {
+    determineTerrainType(elev: number, isWater: boolean) {
         if (isWater) {
             if (elev < -500) return '深海'; // Deep Ocean
             if (elev <= 0) return '海洋'; // Ocean
@@ -250,7 +253,7 @@ export class DataGenerator {
      * Determines dominant vegetation based on climate and terrain.
      * Uses mappings consistent with GeoForge logic.
      */
-    determineVegetation(cz, tt, temp, precip, elev, isWater) {
+    determineVegetation(cz: string, tt: string, temp: number, precip: number, elev: number, isWater: boolean) {
         if (isWater) {
             if (elev < -200) return '深海'; // Deep Sea
             return '海洋';
@@ -282,7 +285,7 @@ export class DataGenerator {
 
     // --- Coordinate Calculation ---
 
-    getHexCenterLatLon(ee, nn, q, r) {
+    getHexCenterLatLon(ee: number, nn: number, q: number, r: number) {
         // Reverting to the logic that the User said was CORRECT.
         // N60-78.
 
@@ -304,7 +307,7 @@ export class DataGenerator {
     // URL: https://cyberjapandata.gsi.go.jp/xyz/demgm/{z}/{x}/{y}.txt
     // demgm max zoom = 8.
 
-    async getElevation(lat, lon) {
+    async getElevation(lat: number, lon: number) {
         const z = 8;
         const tile = this.lonLatToTile(lon, lat, z);
         const tx = Math.floor(tile.x);
@@ -328,7 +331,7 @@ export class DataGenerator {
         return val === undefined || val === 'e' ? -100 : parseFloat(val); // 'e' is usually no-data (water) in GSI
     }
 
-    async fetchTile(z, x, y) {
+    async fetchTile(z: number, x: number, y: number) {
         const url = `https://cyberjapandata.gsi.go.jp/xyz/demgm/${z}/${x}/${y}.txt`;
         try {
             const resp = await fetch(url);
@@ -351,7 +354,7 @@ export class DataGenerator {
         }
     }
 
-    lonLatToTile(lon, lat, z) {
+    lonLatToTile(lon: number, lat: number, z: number) {
         const rad = lat * Math.PI / 180;
         const n = Math.pow(2, z);
         const xtile = n * ((lon + 180) / 360);
@@ -362,7 +365,7 @@ export class DataGenerator {
     // --- Climate Interpolation ---
     // IDW (Inverse Distance Weighting)
 
-    getClimate(lat, lon, elev) {
+    getClimate(lat: number, lon: number, elev: number) {
         let nomTemp = 0, denTemp = 0;
         let nomPre = 0, denPre = 0;
 
@@ -391,7 +394,7 @@ export class DataGenerator {
         return { temp, precip };
     }
 
-    dist(lat1, lon1, lat2, lon2) {
+    dist(lat1: number, lon1: number, lat2: number, lon2: number) {
         const R = 6371;
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLon = (lon2 - lon1) * Math.PI / 180;
