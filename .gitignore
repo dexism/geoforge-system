@@ -8,6 +8,7 @@ dist/
 !AI_RULES.md
 !.github/**/*.md
 !.github/*.md
+!.github/workflows/*.yml
 *test_*.*
 .DS_Store
 Thumbs.db
