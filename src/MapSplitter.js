@@ -3,7 +3,7 @@
 // ================================================================
 
 import * as config from './config.js';
-import * as utils from './utils.js';
+import * as utils from './utils.ts';
 import * as blockUtils from './BlockUtils.js';
 
 /**
@@ -126,7 +126,7 @@ export function assignRiverPatterns(allHexes) {
         if (down !== -1 && down !== undefined) {
             const dsHex = allHexes[down];
             if (dsHex) {
-                outDir = utils.getDirection({ col: currCol, row: currRow }, { col: dsHex.col, row: dsHex.row });
+                outDir = blockUtils.getDirection({ col: currCol, row: currRow }, { col: dsHex.col, row: dsHex.row });
             }
         }
 
@@ -142,7 +142,7 @@ export function assignRiverPatterns(allHexes) {
 
         ups.forEach(upIndex => {
             const upHex = allHexes[upIndex];
-            const inDir = utils.getDirection({ col: currCol, row: currRow }, { col: upHex.col, row: upHex.row });
+            const inDir = blockUtils.getDirection({ col: currCol, row: currRow }, { col: upHex.col, row: upHex.row });
 
             const pids = blockUtils.getPatternIds(inDir, outDir);
 
