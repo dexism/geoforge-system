@@ -8,6 +8,7 @@ import { BLOCK_START_EE, BLOCK_START_NN, BLOCK_END_NN } from './BlockUtils.ts';
 import { getInfoText, updateOverallInfo, generateHexJson, childrenMap } from './infoWindow.js';
 import { CoordinateSystem } from './CoordinateSystem.ts'; // [NEW]
 import { JapanOverlay } from './JapanOverlay.js';
+import { WorldMap, Hex } from './WorldMap.ts';
 
 /**
  * 変更履歴:
@@ -15,11 +16,36 @@ import { JapanOverlay } from './JapanOverlay.js';
  */
 
 export class MapView {
+    containerSelector: string;
+    svg: d3.Selection<d3.BaseType, unknown, HTMLElement, any>;
+    g: d3.Selection<SVGGElement, unknown, HTMLElement, any>;
+    layers: { [key: string]: d3.Selection<SVGGElement, unknown, HTMLElement, any> };
+    hexes: WorldMap | any[]; // 全ヘックスデータへの参照 (Flyweightパターン)
+    roadPathsData: any[];
+    currentTransform: d3.ZoomTransform;
+    blocks: any[]; // 読み込まれたブロックオブジェクトの配列
+    blockLoaderRef: any;
+    minimapContainer: d3.Selection<d3.BaseType, unknown, HTMLElement, any> | null;
+    minimapSvg: d3.Selection<SVGSVGElement, unknown, HTMLElement, any> | null;
+    minimapViewport: d3.Selection<SVGRectElement, unknown, HTMLElement, any> | null;
+    currentSelectedHex: Hex | null;
+    tooltipContainer: d3.Selection<HTMLDivElement, unknown, HTMLElement, any>;
+    nationColor: d3.ScaleOrdinal<string, string>;
+    BLOCK_COLS: number;
+    BLOCK_ROWS: number;
+    coordSys: CoordinateSystem;
+    japanOverlay: JapanOverlay;
+
+    // Zoom related
+    zoom: d3.ZoomBehavior<Element, unknown>;
+    isZooming: boolean = false;
+    isProgrammaticZoom: boolean = false;
+
     /**
      * コンストラクタ
      * @param {string} containerSelector - SVGを描画するコンテナのセレクタ
      */
-    constructor(containerSelector) {
+    constructor(containerSelector: string) {
         this.containerSelector = containerSelector;
         this.svg = d3.select(containerSelector);
         this.g = this.svg.append('g');
@@ -31,8 +57,12 @@ export class MapView {
         this.blockLoaderRef = null;
         this.minimapContainer = null;
         this.minimapSvg = null;
+        this.minimapViewport = null;
         this.currentSelectedHex = null;
         this.tooltipContainer = this.createTooltip();
+        this.zoom = d3.zoom(); // Initialize
+        this.isZooming = false;
+        this.isProgrammaticZoom = false;
 
         // 定数
         this.nationColor = d3.scaleOrdinal(d3.schemeTableau10);
@@ -139,7 +169,7 @@ export class MapView {
         this.setInitialView();
 
         this.updateAllHexColors();
-        updateOverallInfo(this.hexes);
+        updateOverallInfo(this.hexes as any[]);
     }
 
     /**
@@ -152,7 +182,8 @@ export class MapView {
 
         const createLayer = (name, visibleByDefault = true) => {
             const layerGroup = this.g.append('g').attr('class', `${name} -layer`);
-            this.layers[name] = { group: layerGroup, visible: visibleByDefault };
+            (layerGroup as any).visible = visibleByDefault;
+            this.layers[name] = layerGroup;
             if (!visibleByDefault) {
                 layerGroup.style('display', 'none');
             }
@@ -228,7 +259,7 @@ export class MapView {
                 this.isZooming = true;
                 // ズーム中は重いレイヤーを非表示にする最適化
                 // updateZoomDependentLayers が isZooming フラグを見て非表示にする
-                this.updateZoomDependentLayers(d3.zoomTransform(this.svg.node()).k);
+                this.updateZoomDependentLayers(d3.zoomTransform(this.svg.node() as Element).k);
             })
             .on('zoom', (event) => {
                 this.g.attr('transform', event.transform);
@@ -252,8 +283,8 @@ export class MapView {
                 // 2. その他のレイヤーの表示復帰 (ズーム中のみ非表示だったもの)
                 const zoomDependentLayers = ['contour', 'labels', 'block-id-labels', 'settlement', 'hex-border'];
                 Object.entries(this.layers).forEach(([name, layer]) => {
-                    if (!zoomDependentLayers.includes(name) && layer.visible) {
-                        layer.group.style('display', 'inline');
+                    if (!zoomDependentLayers.includes(name) && (layer as any).visible) {
+                        layer.style('display', 'inline');
                     }
                 });
 
@@ -287,7 +318,7 @@ export class MapView {
      * configで指定された初期座標にフォーカスします。
      */
     setInitialView() {
-        const svgNode = this.svg.node();
+        const svgNode = this.svg.node() as Element; // Cast to Element
         const width = svgNode ? svgNode.clientWidth || window.innerWidth : window.innerWidth;
         const height = svgNode ? svgNode.clientHeight || window.innerHeight : window.innerHeight;
 
@@ -351,24 +382,27 @@ export class MapView {
      * @param {boolean|null} forceVisible - 強制的にこの状態にする (nullならトグル)
      * @returns {boolean} 新しい表示状態
      */
-    toggleLayer(layerName, forceVisible = null) {
+    toggleLayer(layerName: string, forceVisible: boolean | null = null): boolean {
         const layer = this.layers[layerName];
         if (!layer) return false;
 
-        const newState = forceVisible !== null ? forceVisible : !layer.visible;
-        layer.visible = newState;
+        const newState = forceVisible !== null ? forceVisible : !((layer as any).visible);
+        (layer as any).visible = newState;
 
         // ズーム依存レイヤーの場合は、updateZoomDependentLayersに描画判定を委譲
         if (['contour', 'labels', 'block-id-labels', 'hex-border'].includes(layerName)) {
             const currentScale = this.currentTransform ? this.currentTransform.k : 1.0;
             this.updateZoomDependentLayers(currentScale);
         } else {
-            layer.group.style('display', newState ? 'inline' : 'none');
+            layer.style('display', newState ? 'inline' : 'none');
         }
 
         // 集落レイヤーの場合、関連するラベルや国境も連動
         if (layerName === 'settlement') {
-            this.layers.labels.group.selectAll('.settlement-label').style('display', newState ? 'inline' : 'none');
+            const labelsLayer = this.layers['labels'];
+            if (labelsLayer) {
+                labelsLayer.selectAll('.settlement-label').style('display', newState ? 'inline' : 'none');
+            }
             this.toggleLayer('border', newState);
         }
 
@@ -415,11 +449,11 @@ export class MapView {
      * @param {Object} d - ヘックスデータ
      * @returns {string} RGBカラー文字列
      */
-    calculateCompositeColor(d) {
+    calculateCompositeColor(d: any) {
         const p = d.properties;
-        const isWhiteMap = document.querySelector('input[name="map-type"][value="white"]')?.checked;
+        const isWhiteMap = (document.querySelector('input[name="map-type"][value="white"]') as HTMLInputElement)?.checked;
 
-        let baseColor;
+        let baseColor: string;
         if (isWhiteMap) {
             baseColor = d.properties.isWater ? config.WHITE_MAP_COLORS.WATER : config.whiteMapElevationColor(p.elevation);
         } else {
@@ -427,11 +461,13 @@ export class MapView {
             else baseColor = config.getElevationColor(p.elevation);
         }
 
-        let c = d3.color(baseColor);
+        let c: d3.Color | null = d3.color(baseColor);
         if (!c) c = d3.color('#000');
 
+        if (!c) return '#000'; // Safety check
+
         // 植生のブレンド
-        if (!p.isWater && this.layers['vegetation-overlay']?.visible) {
+        if (!p.isWater && (this.layers['vegetation-overlay'] as any)?.visible) {
             let displayVeg = p.vegetation;
             // 森林率が低い場合は草原として表示
             if ((displayVeg === '森林' || displayVeg === '針葉樹林') && p.landUse?.forest < 0.10) {
@@ -440,38 +476,41 @@ export class MapView {
             const vegColor = d3.color(config.TERRAIN_COLORS[displayVeg]);
             if (vegColor) {
                 vegColor.opacity = 0.6;
-                c = this.interpolateColor(c, vegColor);
+                c = this.interpolateColor(c as d3.RGBColor, vegColor as d3.RGBColor);
             }
         }
 
         // 積雪のブレンド
-        if (!p.isWater && this.layers.snow?.visible && p.hasSnow) {
+        if (!p.isWater && (this.layers.snow as any)?.visible && p.hasSnow) {
             const snowColor = d3.color('#fff');
-            snowColor.opacity = 0.8;
-            c = this.interpolateColor(c, snowColor);
+            if (snowColor) {
+                snowColor.opacity = 0.8;
+                c = this.interpolateColor(c as d3.RGBColor, snowColor as d3.RGBColor);
+            }
         }
 
         // 各種オーバーレイの定義
         const overlayMap = [
-            { name: 'climate-zone-overlay', func: p => config.CLIMATE_ZONE_COLORS[p.climateZone], opacity: 0.6 },
-            { name: 'temp-overlay', func: p => config.tempColor(p.temperature), opacity: 0.6 },
-            { name: 'precip-overlay', func: p => config.precipColor(p.precipitation_mm), opacity: 0.6 },
-            { name: 'population-overlay', func: p => p.population > 0 ? config.populationColor(p.population) : null, opacity: 0.9 },
-            { name: 'monster-overlay', func: p => p.monsterRank ? config.MONSTER_COLORS[p.monsterRank] : null, opacity: 0.5 },
-            { name: 'mana-overlay', func: p => config.manaColor(p.manaValue), opacity: 0.6 },
-            { name: 'agri-overlay', func: p => config.agriColor(p.agriPotential), opacity: 0.7 },
-            { name: 'forest-overlay', func: p => config.forestColor(p.forestPotential), opacity: 0.7 },
-            { name: 'mining-overlay', func: p => config.miningColor(p.miningPotential), opacity: 0.7 },
-            { name: 'fishing-overlay', func: p => config.fishingColor(p.fishingPotential), opacity: 0.7 },
-            { name: 'hunting-overlay', func: p => config.huntingColor(p.huntingPotential), opacity: 0.7 },
-            { name: 'pastoral-overlay', func: p => config.pastoralColor(p.pastoralPotential), opacity: 0.7 },
-            { name: 'livestock-overlay', func: p => config.livestockColor(p.livestockPotential), opacity: 0.7 }
+            { name: 'climate-zone-overlay', func: (p: any) => config.CLIMATE_ZONE_COLORS[p.climateZone], opacity: 0.6 },
+            { name: 'temp-overlay', func: (p: any) => config.tempColor(p.temperature), opacity: 0.6 },
+            { name: 'precip-overlay', func: (p: any) => config.precipColor(p.precipitation_mm), opacity: 0.6 },
+            { name: 'population-overlay', func: (p: any) => p.population > 0 ? config.populationColor(p.population) : null, opacity: 0.9 },
+            { name: 'monster-overlay', func: (p: any) => p.monsterRank ? config.MONSTER_COLORS[p.monsterRank] : null, opacity: 0.5 },
+            { name: 'mana-overlay', func: (p: any) => config.manaColor(p.manaValue), opacity: 0.6 },
+            { name: 'agri-overlay', func: (p: any) => config.agriColor(p.agriPotential), opacity: 0.7 },
+            { name: 'forest-overlay', func: (p: any) => config.forestColor(p.forestPotential), opacity: 0.7 },
+            { name: 'mining-overlay', func: (p: any) => config.miningColor(p.miningPotential), opacity: 0.7 },
+            { name: 'fishing-overlay', func: (p: any) => config.fishingColor(p.fishingPotential), opacity: 0.7 },
+            { name: 'hunting-overlay', func: (p: any) => config.huntingColor(p.huntingPotential), opacity: 0.7 },
+            { name: 'pastoral-overlay', func: (p: any) => config.pastoralColor(p.pastoralPotential), opacity: 0.7 },
+            { name: 'livestock-overlay', func: (p: any) => config.livestockColor(p.livestockPotential), opacity: 0.7 }
         ];
 
         // 資源系オーバーレイが有効な場合、背景を暗くして視認性を上げる
-        const isResourceActive = overlayMap.slice(5).some(l => this.layers[l.name] && this.layers[l.name].visible);
+        const isResourceActive = overlayMap.slice(5).some(l => this.layers[l.name] && (this.layers[l.name] as any).visible);
         if (isResourceActive) {
-            const hsl = d3.hsl(c);
+            const cStr = c ? c.formatRgb() : '#000';
+            const hsl = d3.hsl(cStr);
             hsl.s *= 0.3;
             hsl.l = Math.min(1, hsl.l * 1.4);
             c = hsl.rgb();
@@ -479,7 +518,7 @@ export class MapView {
 
         // オーバーレイ色の適用
         overlayMap.forEach(l => {
-            if (this.layers[l.name]?.visible) {
+            if ((this.layers[l.name] as any)?.visible) {
                 let colorVal = null;
 
                 if (l.name === 'climate-zone-overlay') {
@@ -495,29 +534,33 @@ export class MapView {
                     const col = d3.color(colorVal);
                     if (col) {
                         col.opacity = l.opacity;
-                        c = this.interpolateColor(c, col);
+                        c = this.interpolateColor(c as d3.RGBColor, col as d3.RGBColor);
                     }
                 }
             }
         });
 
         // 領土オーバーレイ
-        if (this.layers['territory-overlay']?.visible && p.nationId > 0) {
-            const tColor = d3.color(this.nationColor(p.nationId));
-            tColor.opacity = 0.7;
-            c = this.interpolateColor(c, tColor);
+        if ((this.layers['territory-overlay'] as any)?.visible && p.nationId > 0) {
+            const tColor = d3.color(this.nationColor(String(p.nationId)));
+            if (tColor) {
+                tColor.opacity = 0.7;
+                c = this.interpolateColor(c as d3.RGBColor, tColor as d3.RGBColor);
+            }
         }
 
         // 陰影処理 (Relief Shading)
-        if (this.layers.shading?.visible) {
+        if ((this.layers.shading as any)?.visible) {
             const val = p.shadingValue || 0;
             const opacity = d3.scaleLinear().domain([0, 400]).range([0, 0.2]).clamp(true)(Math.abs(val));
             const shadeColor = d3.color(val > 0 ? '#fff' : '#000');
-            shadeColor.opacity = opacity;
-            c = this.interpolateColor(c, shadeColor);
+            if (shadeColor) {
+                shadeColor.opacity = opacity;
+                c = this.interpolateColor(c as d3.RGBColor, shadeColor as d3.RGBColor);
+            }
         }
 
-        return c.formatRgb();
+        return c ? c.formatRgb() : '#000';
     }
 
     /**
@@ -526,15 +569,19 @@ export class MapView {
      * @param {Object} overlay - 重ねる色 (d3.color object)
      * @returns {Object} ブレンド後の色 (d3.rgb)
      */
-    interpolateColor(base, overlay) {
-        if (!base || !overlay) return base || overlay;
+    interpolateColor(base: d3.RGBColor | d3.HSLColor, overlay: d3.RGBColor | d3.HSLColor): d3.RGBColor {
+        if (!base || !overlay) return (base as d3.RGBColor) || (overlay as d3.RGBColor);
         const alpha = overlay.opacity;
-        if (isNaN(alpha)) return base;
+        if (Number.isNaN(alpha)) return base as d3.RGBColor;
         const invAlpha = 1 - alpha;
+
+        const bRef = d3.rgb(base);
+        const oRef = d3.rgb(overlay);
+
         return d3.rgb(
-            overlay.r * alpha + base.r * invAlpha,
-            overlay.g * alpha + base.g * invAlpha,
-            overlay.b * alpha + base.b * invAlpha
+            oRef.r * alpha + bRef.r * invAlpha,
+            oRef.g * alpha + bRef.g * invAlpha,
+            oRef.b * alpha + bRef.b * invAlpha
         );
     }
 
@@ -546,13 +593,13 @@ export class MapView {
         if (!this.blocks) return;
         this.blocks.forEach(block => {
             if (block.hexes) {
-                block.hexes.forEach(d => {
+                block.hexes.forEach((d: any) => {
                     d._displayColor = this.calculateCompositeColor(d);
                 });
             }
             if (block.rendered) {
-                this.layers['terrain'].group.select(`#terrain-${block.id}`).selectAll('.hex')
-                    .attr('fill', d => d._displayColor || '#000');
+                this.layers['terrain'].select(`#terrain-${block.id}`).selectAll('.hex')
+                    .attr('fill', (d: any) => d._displayColor || '#000');
             }
         });
     }
@@ -562,23 +609,23 @@ export class MapView {
      * 通常の水色、白地図用、稜線確認用などで切り替えます。
      */
     updateRiverColor() {
-        const isRidge = this.layers['ridge-water-system']?.visible;
-        const isWhite = document.querySelector('input[name="map-type"][value="white"]')?.checked;
+        const isRidge = (this.layers['ridge-water-system'] as any)?.visible;
+        const isWhite = (document.querySelector('input[name="map-type"][value="white"]') as HTMLInputElement)?.checked;
         const color = isRidge ? config.RIDGE_WATER_SYSTEM_COLORS.RIVER : (isWhite ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.水域);
-        this.layers.river.group.selectAll('path').attr('stroke', color);
+        this.layers.river.selectAll('path').attr('stroke', color);
         // 稜線水系ヘックス
-        this.layers['ridge-water-system'].group.selectAll('.rws-water-hex').attr('fill', color);
+        this.layers['ridge-water-system'].selectAll('.rws-water-hex').attr('fill', color);
     }
 
     /**
      * 日本地図オーバーレイを更新します。
      */
     updateJapanLayer() {
-        if (this.layers['japan-overlay'] && this.layers['japan-overlay'].visible) {
-            const svgNode = this.svg.node();
-            const width = svgNode.clientWidth || window.innerWidth;
-            const height = svgNode.clientHeight || window.innerHeight;
-            this.japanOverlay.draw(this.layers['japan-overlay'].group, this.coordSys, width, height);
+        if (this.layers['japan-overlay'] && (this.layers['japan-overlay'] as any).visible) {
+            const svgNode = this.svg.node() as Element; // Cast
+            const width = svgNode ? svgNode.clientWidth || window.innerWidth : window.innerWidth;
+            const height = svgNode ? svgNode.clientHeight || window.innerHeight : window.innerHeight;
+            this.japanOverlay.draw(this.layers['japan-overlay'], this.coordSys, width, height);
         }
     }
 
@@ -595,7 +642,7 @@ export class MapView {
     handleRecenter(currentTransform) {
         if (!this.coordSys) return false;
 
-        const svgNode = this.svg.node();
+        const svgNode = this.svg.node() as Element; // Cast
         const width = svgNode.clientWidth || window.innerWidth;
         const height = svgNode.clientHeight || window.innerHeight;
         const scale = currentTransform.k;
@@ -655,9 +702,9 @@ export class MapView {
      */
     updateVisibleBlocks(transform) {
         if (!this.svg) return;
-        const svgNode = this.svg.node();
-        const width = svgNode.clientWidth || window.innerWidth;
-        const height = svgNode.clientHeight || window.innerHeight;
+        const svgNode = this.svg.node() as Element; // Cast
+        const width = svgNode ? svgNode.clientWidth || window.innerWidth : window.innerWidth;
+        const height = svgNode ? svgNode.clientHeight || window.innerHeight : window.innerHeight;
 
         // [FIX] CoordinateSystem 対応
         // 画面の四隅の座標をワールド座標に変換して可視ブロックを判定
@@ -734,8 +781,8 @@ export class MapView {
         const allLayerNames = Object.keys(this.layers);
         allLayerNames.forEach(name => {
             if (!this.layers[name]) return;
-            this.layers[name].group.selectAll(`.block-group-${name}`)
-                .data(activeBlocks, d => d.id)
+            this.layers[name].selectAll(`.block-group-${name}`)
+                .data(activeBlocks, (d: any) => d.id)
                 .join(
                     enter => enter.append('g')
                         .attr('class', `block-group block-group-${name}`)
@@ -858,7 +905,7 @@ export class MapView {
 
         // すぐに反映する場合（この部分は calculateCompositeColor でも使用されるので冗長かもしれないが、
         // データのshadingValueを確定させる意味で保持）
-        if (this.layers.shading && this.layers.shading.visible) {
+        if (this.layers.shading && (this.layers.shading as any).visible) {
             const val = hex.shadingValue;
             // Opacity計算: 標高差400mで最大0.2
             const opacity = Math.min(0.2, Math.abs(val) / 400 * 0.2);
@@ -909,7 +956,7 @@ export class MapView {
      */
     unloadBlockDOM(block) {
         Object.keys(this.layers).forEach(name => {
-            const sel = this.layers[name].group.select(`#${name}-${block.id}`);
+            const sel = this.layers[name].select(`#${name}-${block.id}`);
             if (!sel.empty()) {
                 sel.remove();
             }
@@ -942,13 +989,15 @@ export class MapView {
             return null;
         };
 
+        // Declare variables first
         let absNn = block.absNn;
-        if (absNn === undefined) { const p = block.id.split('_'); absNn = parseInt(p[2]); absEe = parseInt(p[1]); }
         let absEe = block.absEe;
+
+        if (absNn === undefined) { const p = block.id.split('_'); absNn = parseInt(p[2]); absEe = parseInt(p[1]); }
         if (absEe === undefined) { const p = block.id.split('_'); absEe = parseInt(p[1]); }
 
         // [FIX] 隣接ブロックの事前ロード (シームレスな境界のため)
-        const neighborIds = [
+        const neighborIds: string[] = [
             `map_${String(absEe + 1).padStart(2, '0')}_${String(absNn).padStart(2, '0')}`, // 右
             `map_${String(absEe - 1).padStart(2, '0')}_${String(absNn).padStart(2, '0')}`, // 左
             `map_${String(absEe).padStart(2, '0')}_${String(absNn + 1).padStart(2, '0')}`, // 上
@@ -956,7 +1005,7 @@ export class MapView {
         ];
 
         // 未ロードの隣接ブロックがあればロードをトリガー
-        const loadPromises = [];
+        const loadPromises: Promise<any>[] = [];
         for (const nid of neighborIds) {
             const nb = this.blocks.find(b => b.id === nid);
             if (nb && !nb.loaded && !nb.loading) {
@@ -1080,18 +1129,7 @@ export class MapView {
         }
     }
 
-    updateUIWithBlockData(blockId, allHexes) {
-        const block = this.blocks.find(b => b.id === blockId);
-        if (!block) return;
 
-        // [FIX] ローダーバッファからスクリーンバッファへ即座に同期
-        // これを行わないと、renderBlockが呼ばれた際に hexes が空の場合がある
-        this.generateBlockHexes(block);
-
-        // 再描画を強制
-        block.rendered = false;
-        this.renderBlock(block);
-    }
 
     /**
      * ブロックごとの描画用スクリーンバッファ (block.hexes) を生成します。
@@ -1148,8 +1186,8 @@ export class MapView {
                 const hexIndex = getIndex(lc, lr);
                 let sourceHex;
                 // [FIX] Use getHex if WorldMap instance, or array access if array
-                if (this.hexes.getHex) {
-                    sourceHex = this.hexes.getHex(hexIndex);
+                if ((this.hexes as any).getHex) {
+                    sourceHex = (this.hexes as any).getHex(hexIndex);
                 } else {
                     sourceHex = this.hexes[hexIndex];
                 }
@@ -1353,11 +1391,11 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockTerrain(block) {
-        const g = this.layers.terrain.group.select(`#terrain-${block.id}`);
+        const g = this.layers.terrain.select(`#terrain-${block.id}`);
         if (g.empty()) return;
-        g.selectAll('.hex').data(block.hexes, d => d.index).join('polygon')
+        g.selectAll('.hex').data(block.hexes, (d: any) => d.index).join('polygon')
             .attr('class', 'hex')
-            .attr('points', d => d.points.map(p => {
+            .attr('points', (d: any) => d.points.map(p => {
                 // Points are absolute world coords in d.points
                 // We need to shift them by (d.cx, d.cy) if logic expects local points, BUT
                 // The original logic was: p[0] - d.cx. This converts Absolute Point -> Local Point (relative to hex center)
@@ -1365,12 +1403,12 @@ export class MapView {
                 // NEW LOGIC: Translate to toView(d.cx, d.cy). Points remain local relative to center.
                 return `${p[0] - d.cx},${p[1] - d.cy}`;
             }).join(' '))
-            .attr('transform', d => {
+            .attr('transform', (d: any) => {
                 const p = this.coordSys.toView(d.cx, d.cy);
                 return `translate(${p.x}, ${p.y}) scale(1.01)`;
             })
             .attr('stroke', 'none')
-            .attr('fill', d => d._displayColor || '#000');
+            .attr('fill', (d: any) => d._displayColor || '#000');
     }
 
     /**
@@ -1378,7 +1416,7 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockRivers(block) {
-        const g = this.layers.river.group.select(`#river-${block.id}`);
+        const g = this.layers.river.select(`#river-${block.id}`);
         if (g.empty()) return;
 
         const pathData = [];
@@ -1511,8 +1549,8 @@ export class MapView {
             console.log(`[River Debug] Block ${block.id}: Land Rivers=${riverCount}, Skipped Water=${skippedWater}, Generated Paths=${pathData.length}`);
         }
 
-        const isRidge = this.layers['ridge-water-system']?.visible;
-        const isWhite = document.querySelector('input[name="map-type"][value="white"]')?.checked;
+        const isRidge = (this.layers['ridge-water-system'] as any)?.visible;
+        const isWhite = (document.querySelector('input[name="map-type"][value="white"]') as HTMLInputElement)?.checked;
         const color = isRidge ? config.RIDGE_WATER_SYSTEM_COLORS.RIVER : (isWhite ? config.WHITE_MAP_COLORS.WATER : config.TERRAIN_COLORS.水域);
 
         g.selectAll('path').data(pathData).join('path')
@@ -1528,7 +1566,7 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockBeaches(block) {
-        const g = this.layers.beach.group.select(`#beach-${block.id}`);
+        const g = this.layers.beach.select(`#beach-${block.id}`);
         if (g.empty()) return;
         const paths = [];
         block.hexes.forEach(d => {
@@ -1560,7 +1598,7 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockBorders(block) {
-        const g = this.layers.border.group.select(`#border-${block.id}`);
+        const g = this.layers.border.select(`#border-${block.id}`);
         if (g.empty()) return;
         const lines = [];
         block.hexes.forEach(h => {
@@ -1597,15 +1635,15 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockRidgeLines(block) {
-        const g = this.layers['ridge-water-system'].group.select(`#ridge-water-system-${block.id}`);
+        const g = this.layers['ridge-water-system'].select(`#ridge-water-system-${block.id}`);
         if (g.empty()) return;
 
         g.selectAll('.rws-water-hex')
-            .data(block.hexes.filter(d => d.properties.isWater), d => d.index).join('polygon')
+            .data(block.hexes.filter(d => d.properties.isWater), (d: any) => d.index).join('polygon')
             .attr('class', 'rws-water-hex')
             .attr('class', 'rws-water-hex')
-            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => {
+            .attr('points', (d: any) => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', (d: any) => {
                 const p = this.coordSys.toView(d.cx, d.cy);
                 return `translate(${p.x}, ${p.y}) scale(1.01)`;
             })
@@ -1681,9 +1719,9 @@ export class MapView {
                 if (!this.layers[layerName]) return;
 
                 // [FIX] Lazy Rendering: 表示されていない場合は計算しない
-                if (this.layers[layerName].group.style('display') === 'none') return;
+                if (this.layers[layerName].style('display') === 'none') return;
 
-                const contourGroup = this.layers[layerName].group;
+                const contourGroup = this.layers[layerName];
 
                 let unifiedGroup = contourGroup.select('#unified-contours');
                 if (unifiedGroup.empty()) {
@@ -1825,43 +1863,43 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockSettlements(block) {
-        const g = this.layers.settlement.group.select(`#settlement-${block.id}`);
+        const g = this.layers.settlement.select(`#settlement-${block.id}`);
         if (g.empty()) return;
 
         // [FIX] Lazy Rendering
-        if (this.layers.settlement.group.style('display') === 'none') return;
+        if (this.layers.settlement.style('display') === 'none') return;
 
         const data = block.hexes.filter(d => d.properties.settlement);
 
         // 1. Draw Icons (Polygons)
-        g.selectAll('.settlement-hex').data(data, d => d.index).join('polygon')
+        g.selectAll('.settlement-hex').data(data, (d: any) => d.index).join('polygon')
             .attr('class', 'settlement-hex')
-            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => {
+            .attr('points', (d: any) => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', (d: any) => {
                 const p = this.coordSys.toView(d.cx, d.cy);
                 return `translate(${p.x}, ${p.y - 1}) scale(0.5)`;
             })
-            .attr('fill', d => ({
+            .attr('fill', (d: any) => ({
                 '首都': '#f0f',
                 '領都': '#f00',
                 '都市': '#f00',
                 '街': '#f80',
                 '町': '#ff0',
                 '村': '#0f0'
-            }[d.properties.settlement] || '#fff'));
+            }[(d.properties as any).settlement] || '#fff'));
 
         // 2. Draw Labels (Moved from drawBlockLabels)
         // These are controlled separately by .settlement-label class in updateZoomDependentLayers
 
         // [FIX] Initial Visibility: Check current scale to determine if they should be shown immediately
-        const currentScale = d3.zoomTransform(this.svg.node()).k;
+        const currentScale = d3.zoomTransform(this.svg.node() as Element).k;
         const initialDisplay = (currentScale > 1.0) ? 'inline' : 'none';
 
-        g.selectAll('.settlement-label').data(data, d => d.index).join('text')
+        g.selectAll('.settlement-label').data(data, (d: any) => d.index).join('text')
             .attr('class', 'settlement-label')
-            .attr('x', d => this.coordSys.toView(d.cx, d.cy).x)
-            .attr('y', d => this.coordSys.toView(d.cx, d.cy).y)
-            .text(d => d.properties.settlement)
+            .attr('x', (d: any) => this.coordSys.toView(d.cx, d.cy).x)
+            .attr('y', (d: any) => this.coordSys.toView(d.cx, d.cy).y)
+            .text((d: any) => d.properties.settlement)
             // .attr('text-anchor', 'middle')
             // .attr('dominant-baseline', 'middle')
             // .style('font-size', '10px')
@@ -1875,21 +1913,21 @@ export class MapView {
      */
     drawBlockIdLabels(block) {
         // グループ作成
-        let g = this.layers['block-id-labels'].group.select(`#block-id-${block.id}`);
+        let g = this.layers['block-id-labels'].select(`#block-id-${block.id}`);
         if (g.empty()) {
-            g = this.layers['block-id-labels'].group.append('g').attr('id', `block-id-${block.id}`);
+            g = this.layers['block-id-labels'].append('g').attr('id', `block-id-${block.id}`);
         }
 
         // [FIX] Lazy Rendering
-        if (this.layers['block-id-labels'].group.style('display') === 'none') return;
+        if (this.layers['block-id-labels'].style('display') === 'none') return;
 
         g.selectAll('*').remove();
 
         if (!block.hexes || block.hexes.length === 0) return;
 
         // ブロックの中心を計算
-        const cx = d3.mean(block.hexes, d => d.cx);
-        const cy = d3.mean(block.hexes, d => d.cy);
+        const cx = d3.mean(block.hexes, (d: any) => d.cx);
+        const cy = d3.mean(block.hexes, (d: any) => d.cy);
         const labelText = block.id.replace('map_', '').replace('_', '-');
 
         g.append('text')
@@ -1914,9 +1952,9 @@ export class MapView {
         const showBlockId = (scale <= 1.0);
         const blockIdDisplay = showBlockId ? 'inline' : 'none';
 
-        if (blockIdLayer && blockIdLayer.group) {
-            if (blockIdLayer.group.style('display') !== blockIdDisplay) {
-                blockIdLayer.group.style('display', blockIdDisplay);
+        if (blockIdLayer) {
+            if (blockIdLayer.style('display') !== blockIdDisplay) {
+                blockIdLayer.style('display', blockIdDisplay);
                 if (showBlockId) {
                     this.blocks.forEach(b => { if (b.rendered) this.drawBlockIdLabels(b); });
                 }
@@ -1927,13 +1965,13 @@ export class MapView {
         const contourLayer = this.layers['contour'];
         const isContourZoomVisible = (scale > 1.0);
         // Toggle Switch check
-        const isContourSwitchOn = contourLayer ? contourLayer.visible : true;
+        const isContourSwitchOn = contourLayer ? (contourLayer as any).visible : true;
         const showContour = isContourSwitchOn && isContourZoomVisible && !isScrolling; // Hide during scroll
         const contourDisplay = showContour ? 'inline' : 'none';
 
-        if (contourLayer && contourLayer.group) {
-            if (contourLayer.group.style('display') !== contourDisplay) {
-                contourLayer.group.style('display', contourDisplay);
+        if (contourLayer) {
+            if (contourLayer.style('display') !== contourDisplay) {
+                contourLayer.style('display', contourDisplay);
                 if (showContour) {
                     this.drawVisibleContours();
                 }
@@ -1945,9 +1983,9 @@ export class MapView {
         const showLabels = (scale >= 2.0) && !isScrolling; // Hide during scroll
         const labelDisplay = showLabels ? 'inline' : 'none';
 
-        if (labelLayer && labelLayer.group) {
-            if (labelLayer.group.style('display') !== labelDisplay) {
-                labelLayer.group.style('display', labelDisplay);
+        if (labelLayer) {
+            if (labelLayer.style('display') !== labelDisplay) {
+                labelLayer.style('display', labelDisplay);
                 // Reveal Trigger
                 if (showLabels) {
                     this.blocks.forEach(b => { if (b.rendered) this.drawBlockLabels(b); });
@@ -1976,23 +2014,23 @@ export class MapView {
         // 5. Hex Borders: Visible if scale > 1.0 AND Switch is ON
         const borderLayer = this.layers['hex-border'];
         // toggle switch (visible property) must be true for it to be shown at all
-        const isBorderSwitchOn = borderLayer ? borderLayer.visible : true;
+        const isBorderSwitchOn = borderLayer ? (borderLayer as any).visible : true;
 
 
         const showBorders = isBorderSwitchOn && (scale > 1.0) && !isScrolling;
         const borderDisplay = showBorders ? 'inline' : 'none';
 
-        if (borderLayer && borderLayer.group) {
+        if (borderLayer) {
             // Force hide if switch is off
             if (!isBorderSwitchOn) {
-                if (borderLayer.group.style('display') !== 'none') {
-                    borderLayer.group.style('display', 'none').attr('display', 'none');
+                if (borderLayer.style('display') !== 'none') {
+                    borderLayer.style('display', 'none').attr('display', 'none');
                 }
             } else {
                 // Switch is ON, respect Zoom
                 // Always set both style and attribute to be safe
-                if (borderLayer.group.style('display') !== borderDisplay) {
-                    borderLayer.group.style('display', borderDisplay).attr('display', borderDisplay);
+                if (borderLayer.style('display') !== borderDisplay) {
+                    borderLayer.style('display', borderDisplay).attr('display', borderDisplay);
                     if (showBorders) {
                         this.blocks.forEach(b => { if (b.rendered) this.drawBlockHexBorders(b); });
                     }
@@ -2007,8 +2045,8 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockRoads(block) {
-        const g = this.layers.road.group.select(`#road-${block.id}`);
-        const seaG = this.layers['sea-route'].group.select(`#sea-route-${block.id}`);
+        const g = this.layers.road.select(`#road-${block.id}`);
+        const seaG = this.layers['sea-route'].select(`#sea-route-${block.id}`);
         if (g.empty() && seaG.empty()) return;
         if (this.roadPathsData.length === 0) return;
 
@@ -2023,8 +2061,8 @@ export class MapView {
                 const curP = road.path[i];
                 const curIdx = getIndex(curP.x, curP.y);
                 let curHex;
-                if (this.hexes.getHex) {
-                    curHex = this.hexes.getHex(curIdx);
+                if ((this.hexes as any).getHex) {
+                    curHex = (this.hexes as any).getHex(curIdx);
                 } else {
                     curHex = this.hexes[curIdx];
                 }
@@ -2033,8 +2071,8 @@ export class MapView {
                 // このブロックに含まれるヘックスのみ処理
                 if (!blockHexSet.has(curIdx)) continue;
 
-                const prevHex = i > 0 ? (this.hexes.getHex ? this.hexes.getHex(getIndex(road.path[i - 1].x, road.path[i - 1].y)) : this.hexes[getIndex(road.path[i - 1].x, road.path[i - 1].y)]) : null;
-                const nextHex = i < road.path.length - 1 ? (this.hexes.getHex ? this.hexes.getHex(getIndex(road.path[i + 1].x, road.path[i + 1].y)) : this.hexes[getIndex(road.path[i + 1].x, road.path[i + 1].y)]) : null;
+                const prevHex = i > 0 ? ((this.hexes as any).getHex ? (this.hexes as any).getHex(getIndex(road.path[i - 1].x, road.path[i - 1].y)) : this.hexes[getIndex(road.path[i - 1].x, road.path[i - 1].y)]) : null;
+                const nextHex = i < road.path.length - 1 ? ((this.hexes as any).getHex ? (this.hexes as any).getHex(getIndex(road.path[i + 1].x, road.path[i + 1].y)) : this.hexes[getIndex(road.path[i + 1].x, road.path[i + 1].y)]) : null;
 
                 const start = prevHex ? getSharedEdgeMidpoint(curHex, prevHex) : [curHex.cx, curHex.cy];
                 const end = nextHex ? getSharedEdgeMidpoint(curHex, nextHex) : [curHex.cx, curHex.cy];
@@ -2090,34 +2128,34 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockLabels(block) {
-        const g = this.layers.labels.group.select(`#labels-${block.id}`);
+        const g = this.layers.labels.select(`#labels-${block.id}`);
         if (g.empty()) return;
 
         // [FIX] Lazy Rendering
-        if (this.layers.labels.group.style('display') === 'none') return;
+        if (this.layers.labels.style('display') === 'none') return;
 
 
-        const grps = g.selectAll('.hex-label-group').data(block.hexes, d => d.index).join('g').attr('class', 'hex-label-group');
+        const grps = g.selectAll('.hex-label-group').data(block.hexes, (d: any) => d.index).join('g').attr('class', 'hex-label-group');
         grps.selectAll('*').remove();
 
         const text = grps.append('text')
-            .attr('x', d => this.coordSys.toView(d.cx, d.cy).x)
-            .attr('y', d => this.coordSys.toView(d.cx, d.cy).y)
+            .attr('x', (d: any) => this.coordSys.toView(d.cx, d.cy).x)
+            .attr('y', (d: any) => this.coordSys.toView(d.cx, d.cy).y)
             .attr('class', 'hex-label')
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'middle');
 
         // Line 1: Coords
         text.append('tspan')
-            .attr('x', d => this.coordSys.toView(d.cx, d.cy).x)
-            .attr('y', d => this.coordSys.toView(d.cx, d.cy).y + config.r * 0.55)
-            .text(d => formatLocation(d, 'coords'));
+            .attr('x', (d: any) => this.coordSys.toView(d.cx, d.cy).x)
+            .attr('y', (d: any) => this.coordSys.toView(d.cx, d.cy).y + config.r * 0.55)
+            .text((d: any) => formatLocation(d, 'coords'));
 
         // Line 2: Elevation (H/D)
         text.append('tspan')
-            .attr('x', d => this.coordSys.toView(d.cx, d.cy).x)
+            .attr('x', (d: any) => this.coordSys.toView(d.cx, d.cy).x)
             .attr('dy', '1.0em')
-            .text(d => formatLocation(d, 'elevation'));
+            .text((d: any) => formatLocation(d, 'elevation'));
         // .style('font-size', '5px')
         // .style('fill', '#000');
     }
@@ -2128,13 +2166,13 @@ export class MapView {
      */
     drawBlockHexBorders(block) {
         // [FIX] Lazy Rendering
-        if (this.layers['hex-border'].group.style('display') === 'none') return;
+        if (this.layers['hex-border'].style('display') === 'none') return;
 
-        const g = this.layers['hex-border'].group.select(`#hex-border-${block.id}`);
+        const g = this.layers['hex-border'].select(`#hex-border-${block.id}`);
         if (g.empty()) return;
-        g.selectAll('polygon').data(block.hexes, d => d.index).join('polygon')
-            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => {
+        g.selectAll('polygon').data(block.hexes, (d: any) => d.index).join('polygon')
+            .attr('points', (d: any) => d.points.map((p: any) => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', (d: any) => {
                 const p = this.coordSys.toView(d.cx, d.cy);
                 return `translate(${p.x}, ${p.y})`;
             })
@@ -2149,13 +2187,13 @@ export class MapView {
      * @param {Object} block 
      */
     drawBlockInteraction(block) {
-        const g = this.layers.interaction.group.select(`#interaction-${block.id}`);
+        const g = this.layers.interaction.select(`#interaction-${block.id}`);
         if (g.empty()) return;
 
-        g.selectAll('.interactive-hex').data(block.hexes, d => d.index).join('polygon')
+        g.selectAll('.interactive-hex').data(block.hexes, (d: any) => d.index).join('polygon')
             .attr('class', 'interactive-hex')
-            .attr('points', d => d.points.map(p => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
-            .attr('transform', d => {
+            .attr('points', (d: any) => d.points.map((p: any) => `${p[0] - d.cx},${p[1] - d.cy}`).join(' '))
+            .attr('transform', (d: any) => {
                 const p = this.coordSys.toView(d.cx, d.cy);
                 return `translate(${p.x}, ${p.y}) scale(1.01)`;
             })
@@ -2199,20 +2237,20 @@ export class MapView {
             .on('mouseout', () => this.tooltipContainer.style('visibility', 'hidden'))
             .on('click', (event, d) => {
                 event.stopPropagation();
-                this.currentSelectedHex = d;
+                this.currentSelectedHex = d as Hex;
 
                 // 選択ハイライト
-                const hl = this.layers['highlight-overlay'].group;
+                const hl = this.layers['highlight-overlay'];
                 hl.selectAll('*').remove();
 
                 // [FIX] Transform points to view coordinates for highlight
-                const viewPoints = d.points.map(p => {
+                const viewPoints = (d as any).points.map((p: any) => {
                     const vp = this.coordSys.toView(p[0], p[1]);
                     return [vp.x, vp.y];
                 });
 
                 hl.append('polygon')
-                    .attr('points', viewPoints.map(p => p.join(',')).join(' '))
+                    .attr('points', viewPoints.map((p: any) => p.join(',')).join(' '))
                     .attr('fill', 'none').attr('stroke', 'cyan').attr('stroke-width', 4);
 
                 // 詳細情報ウィンドウの更新
@@ -2284,13 +2322,15 @@ export class MapView {
     updateBlockIdLabels(scale) {
         if (!this.layers['block-id-labels']) return;
         const shouldShow = scale <= 1.0;
-        this.layers['block-id-labels'].group.style('display', shouldShow ? 'inline' : 'none');
+        this.layers['block-id-labels'].style('display', shouldShow ? 'inline' : 'none');
     }
 
     /**
      * ミニマップを更新します。
+     * @param {Object} [hexes] - 更新に使用するヘックスデータ (省略時は this.hexes)
      */
-    updateMinimap() {
+    updateMinimap(hexes?: any) {
+        if (hexes) this.hexes = hexes;
         if (!this.minimapSvg) return;
         const width = 200, height = 200;
         const mapCols = config.COLS;
@@ -2304,8 +2344,10 @@ export class MapView {
         // 簡易表示: サンプリングして描画 (負荷軽減)
         // [FIX] WorldMapインスタンス対応: filterの代わりにループまたはArray.from(iterator)
         const g = this.minimapSvg.select('#minimap-terrain');
-        const minimapData = [];
-        const iter = this.hexes[Symbol.iterator] ? this.hexes : Array.from(this.hexes);
+        const minimapData: any[] = [];
+        // WorldMap implements iterator via [Symbol.iterator], but TS might not infer it from the union type.
+        // We cast to any to treat it as an iterable source.
+        const iter: Iterable<any> = this.hexes as any;
         let i = 0;
         for (const h of iter) {
             if (i % 10 === 0) minimapData.push(h);
