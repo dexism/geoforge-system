@@ -2,8 +2,14 @@ node_modules/
 dist/
 *.bak*
 *.md
+!README.md
+!mb_*.md
+!CONTRIBUTING.md
+!AI_RULES.md
 *test_*.*
 .DS_Store
 Thumbs.db
-*backup*/
+backup/
 geoforge-system.code-workspace
+.env
+code.gs

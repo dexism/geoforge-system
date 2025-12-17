@@ -6,7 +6,7 @@ import * as config from './config.js';
 import { getIndex, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint } from './utils.js';
 import { BLOCK_START_EE, BLOCK_START_NN, BLOCK_END_NN } from './BlockUtils.js';
 import { getInfoText, updateOverallInfo, generateHexJson, childrenMap } from './infoWindow.js';
-import { CoordinateSystem } from './CoordinateSystem.js'; // [NEW]
+import { CoordinateSystem } from './CoordinateSystem.ts'; // [NEW]
 import { JapanOverlay } from './JapanOverlay.js';
 
 /**

@@ -4,7 +4,7 @@ import { resolve } from 'path'
 export default {
   root: './src',
   base: './',
-  publicDir: '../src/public', // Points to src/public relative to src?
+  // publicDir: '../src/public', // Points to src/public relative to src? (Removed for duplicate warning)
   // Wait. If root is ./src, then relative paths in index.html are relative to ./src.
   // publicDir is handled by Vite to copy files to dist or serve them at root.
   // If I want src/public/map to be available at /map,
@@ -13,13 +13,13 @@ export default {
   // If "root" option is set to "./src", then "project root" is "./src" ??
   // Let's assume yes.
   // So publicDir: './public' -> src/public.
-  
+
   // BUT the user said "Can't start". And default was likely implicit (public).
   // If default didn't work, maybe implicit wasn't src/public.
-  
+
   // Let's try explicit absolute path resolution to be 100% sure.
   publicDir: resolve(process.cwd(), 'src/public'),
-  
+
   build: {
     outDir: '../dist',
     emptyOutDir: true,

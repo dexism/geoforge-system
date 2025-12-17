@@ -1,4 +1,8 @@
-import * as config from './config.js';
+
+interface Point {
+    x: number;
+    y: number;
+}
 
 /**
  * 座標変換システム (Floating Origin)
@@ -7,6 +11,9 @@ import * as config from './config.js';
  * ワールド座標 (World Space) と ビューポート相対座標 (View Space) の相互変換を提供します。
  */
 export class CoordinateSystem {
+    private _origin: Point;
+    public readonly RECENTER_THRESHOLD: number;
+
     constructor() {
         // 現在のレンダリング原点 (ワールド座標)
         // 初期値は (0,0) だが、初期ロード時に設定される
@@ -23,7 +30,7 @@ export class CoordinateSystem {
      * @param {number} wx - ワールドX
      * @param {number} wy - ワールドY
      */
-    setOrigin(wx, wy) {
+    setOrigin(wx: number, wy: number): void {
         this._origin.x = wx;
         this._origin.y = wy;
         console.log(`[CoordinateSystem] Origin updated to (${Math.round(wx)}, ${Math.round(wy)})`);
@@ -31,9 +38,9 @@ export class CoordinateSystem {
 
     /**
      * 現在の原点を取得します。
-     * @returns {Object} {x, y}
+     * @returns {Point} {x, y}
      */
-    getOrigin() {
+    getOrigin(): Point {
         return { ...this._origin };
     }
 
@@ -42,9 +49,9 @@ export class CoordinateSystem {
      * (レンダリング用)
      * @param {number} wx 
      * @param {number} wy 
-     * @returns {Object} {x, y}
+     * @returns {Point} {x, y}
      */
-    toView(wx, wy) {
+    toView(wx: number, wy: number): Point {
         return {
             x: wx - this._origin.x,
             y: wy - this._origin.y
@@ -56,9 +63,9 @@ export class CoordinateSystem {
      * (マウスイベント等)
      * @param {number} vx 
      * @param {number} vy 
-     * @returns {Object} {x, y}
+     * @returns {Point} {x, y}
      */
-    fromView(vx, vy) {
+    fromView(vx: number, vy: number): Point {
         return {
             x: vx + this._origin.x,
             y: vy + this._origin.y
@@ -73,9 +80,9 @@ export class CoordinateSystem {
      * @param {number} scale - ズーム倍率
      * @param {number} viewportWidth 
      * @param {number} viewportHeight 
-     * @returns {Object|null} リセンターが必要な場合は新しい原点のワールド座標 {x, y}、不要なら null
+     * @returns {Point|null} リセンターが必要な場合は新しい原点のワールド座標 {x, y}、不要なら null
      */
-    checkReCenter(currentTransformX, currentTransformY, scale, viewportWidth, viewportHeight) {
+    checkReCenter(currentTransformX: number, currentTransformY: number, scale: number, viewportWidth: number, viewportHeight: number): Point | null {
         // 画面中心の「現在の相対座標」を計算
         // D3のtransformは (vx * k + tx, vy * k + ty) = screenXY
         // 画面中心 (viewportWidth/2, viewportHeight/2) に対応する相対座標 vx, vy を逆算
