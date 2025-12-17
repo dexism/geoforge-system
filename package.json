@@ -1,6 +1,6 @@
 {
   "name": "geoforge-system",
-  "version": "2.8.34",
+  "version": "2.8.35",
   "description": "",
   "main": "index.js",
   "scripts": {

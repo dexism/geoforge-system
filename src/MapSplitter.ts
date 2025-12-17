@@ -5,13 +5,14 @@
 import * as config from './config.ts';
 import * as utils from './utils.ts';
 import * as blockUtils from './BlockUtils.ts';
+import { WorldMap, Hex } from './WorldMap.ts';
 
 /**
  * Assigns road patterns to hex properties based on global road paths.
- * @param {Array} allHexes 
- * @param {Array} roadPaths 
+ * @param {WorldMap} allHexes 
+ * @param {any[]} roadPaths 
  */
-export function assignRoadPatterns(allHexes, roadPaths) {
+export function assignRoadPatterns(allHexes: WorldMap, roadPaths: any[]) {
     // Clear existing patterns
     allHexes.forEach(h => {
         h.properties.roadPatterns = [];
@@ -88,9 +89,9 @@ export function assignRoadPatterns(allHexes, roadPaths) {
 
 /**
  * Assigns river patterns to hex properties based on flow data.
- * @param {Array} allHexes 
+ * @param {WorldMap} allHexes 
  */
-export function assignRiverPatterns(allHexes) {
+export function assignRiverPatterns(allHexes: WorldMap) {
     // Clear existing patterns
     allHexes.forEach(h => {
         h.properties.riverPatterns = [];
@@ -176,7 +177,7 @@ export function assignRiverPatterns(allHexes) {
  * @param {Object} worldData 
  * @returns {Array} Array of block objects { id, data }
  */
-export function splitWorldIntoBlocks(worldData) {
+export function splitWorldIntoBlocks(worldData: any): any[] {
     const { allHexes } = worldData;
     const blocks = [];
 
@@ -257,7 +258,10 @@ export function splitWorldIntoBlocks(worldData) {
 
                         // NEW PROPS
                         rp: p.roadPatterns, // [{pattern:0, level:2}, ...]
-                        rv: p.riverPatterns // [{pattern:0, width:0.5}, ...]
+                        rv: p.riverPatterns, // [{pattern:0, width:0.5}, ...]
+
+                        col: lx, // Added to satisfy TS
+                        row: ly  // Added to satisfy TS
                     };
 
                     // We need a robust copier.

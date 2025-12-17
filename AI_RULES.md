@@ -37,8 +37,8 @@
    - `dist/`: 自動生成ディレクトリ。編集しても無駄になるため触れない。
    - `code.gs` (ルート): Git管理外の機密ファイル。Google Apps Scriptエディタでのみ管理する。
 2. **バージョン管理**:
-   - `src/index.html` の `rev` 番号は、コード改修時に必ずインクリメントする。
-     - 例: `ver.2.8 <small>rev.30</small>` -> `rev.31`
+   - `package.json` のバージョン番号は、コード改修時に必ずインクリメントする。
+     - 例: `"version": "2.8.34"` -> `"version": "2.8.35"`
 
 ## 5. コーディング規約 (Coding Standards)
 

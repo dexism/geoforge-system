@@ -17,7 +17,7 @@ import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, reset
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex, initGlobalRandom, globalRandom, getNeighborIndices } from './utils.ts';
 import { WorldMap } from './WorldMap.ts';
-import { assignRoadPatterns, assignRiverPatterns, splitWorldIntoBlocks } from './MapSplitter.js';
+import { assignRoadPatterns, assignRiverPatterns, splitWorldIntoBlocks } from './MapSplitter.ts';
 import * as blockUtils from './BlockUtils.ts';
 
 // [NEW] BlockIO モジュールのインポート
