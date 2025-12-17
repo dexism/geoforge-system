@@ -2,23 +2,35 @@
 // GeoForge System - Block Utilities (ブロックユーティリティ)
 // ================================================================
 
-export const BLOCK_CORE_COLS = 23;
-export const BLOCK_CORE_ROWS = 20;
-export const BLOCK_PADDING = 1;
+export const BLOCK_CORE_COLS: number = 23;
+export const BLOCK_CORE_ROWS: number = 20;
+export const BLOCK_PADDING: number = 1;
 
-export const BLOCK_TOTAL_COLS = BLOCK_CORE_COLS + (BLOCK_PADDING * 2); // 25
-export const BLOCK_TOTAL_ROWS = BLOCK_CORE_ROWS + (BLOCK_PADDING * 2); // 22
+export const BLOCK_TOTAL_COLS: number = BLOCK_CORE_COLS + (BLOCK_PADDING * 2); // 25
+export const BLOCK_TOTAL_ROWS: number = BLOCK_CORE_ROWS + (BLOCK_PADDING * 2); // 22
 
-export const BLOCK_START_EE = 0;
-export const BLOCK_START_NN = 0;
-export const BLOCK_END_EE = 99;
-export const BLOCK_END_NN = 99;
+export const BLOCK_START_EE: number = 0;
+export const BLOCK_START_NN: number = 0;
+export const BLOCK_END_EE: number = 99;
+export const BLOCK_END_NN: number = 99;
 
 // グローバルマップの制約
 // 5x5ブロック (コアサイズ 23x20) の場合、総コアサイズは 115x100。
 // グローバルな端に1ヘックスのパディングがあるため、全体のサイズは 117x102 となる。
-export const GLOBAL_OFFSET_X = 1; // グローバル(0,0)はパディング。(1,1)がコアデータの開始位置。
-export const GLOBAL_OFFSET_Y = 1;
+export const GLOBAL_OFFSET_X: number = 1; // グローバル(0,0)はパディング。(1,1)がコアデータの開始位置。
+export const GLOBAL_OFFSET_Y: number = 1;
+
+export interface BlockCoordinates {
+    ee: number;
+    nn: number;
+    localCol: number;
+    localRow: number;
+}
+
+export interface GlobalCoordinates {
+    col: number;
+    row: number;
+}
 
 /**
  * 指定されたブロック座標からブロックID（ファイル名互換）を返します。
@@ -26,7 +38,7 @@ export const GLOBAL_OFFSET_Y = 1;
  * @param {number} nn - 緯度インデックス (例: 71-75)
  * @returns {string} ID文字列 (例: "map_50_73")
  */
-export function getBlockId(ee, nn) {
+export function getBlockId(ee: number, nn: number): string {
     return `map_${ee}_${nn}`;
 }
 
@@ -36,7 +48,7 @@ export function getBlockId(ee, nn) {
  * @param {number} row - グローバル行番号
  * @returns {string|null} ID文字列 (例: "map_50_73")、範囲外の場合は null
  */
-export function getBlockIdFromGlobal(col, row) {
+export function getBlockIdFromGlobal(col: number, row: number): string | null {
     const coords = globalToBlock(col, row);
     if (!coords) return null;
     return getBlockId(coords.ee, coords.nn);
@@ -48,9 +60,9 @@ export function getBlockIdFromGlobal(col, row) {
  * 
  * @param {number} globalCol - グローバル列インデックス (0 から 116)
  * @param {number} globalRow - グローバル行インデックス (0 から 101)
- * @returns {Object|null} { ee, nn, localCol, localRow } または範囲外の場合 null
+ * @returns {BlockCoordinates|null} { ee, nn, localCol, localRow } または範囲外の場合 null
  */
-export function globalToBlock(globalCol, globalRow) {
+export function globalToBlock(globalCol: number, globalRow: number): BlockCoordinates | null {
     // 1. グローバルパディングを考慮して「コア」座標を取得
     const coreX = globalCol - GLOBAL_OFFSET_X;
     const coreY = globalRow - GLOBAL_OFFSET_Y;
@@ -114,9 +126,9 @@ export function globalToBlock(globalCol, globalRow) {
  * @param {number} nn - ブロック緯度
  * @param {number} localCol - ローカル列 (0〜24)
  * @param {number} localRow - ローカル行 (0〜21)
- * @returns {Object} { col, row } グローバル座標
+ * @returns {GlobalCoordinates} { col, row } グローバル座標
  */
-export function blockToGlobal(ee, nn, localCol, localRow) {
+export function blockToGlobal(ee: number, nn: number, localCol: number, localRow: number): GlobalCoordinates {
     const blockIndexX = ee - BLOCK_START_EE;
     const blockIndexY = nn - BLOCK_START_NN;
 
@@ -150,7 +162,7 @@ export function blockToGlobal(ee, nn, localCol, localRow) {
  * @param {number} outDir - 次のヘックスへの方向 (0-5)。-1 の場合は終点。
  * @returns {number[]} パターンIDの配列
  */
-export function getPatternIds(inDir, outDir) {
+export function getPatternIds(inDir: number, outDir: number): number[] {
     // 1. 端点の場合 (始点または終点)
     if (inDir === -1 && outDir !== -1) {
         return [outDir]; // 中心 -> 外
@@ -229,6 +241,13 @@ export function getPatternIds(inDir, outDir) {
     return [];
 }
 
+interface HexLike {
+    col?: number;
+    row?: number;
+    x?: number;
+    y?: number;
+}
+
 /**
  * h1 から h2 への方向 (0-5: 北から時計回り) を判定します。
  * フラットトップヘックス (Flat-Top Hexes), Odd-Q (奇数列が下にずれる) 座標系。
@@ -237,12 +256,12 @@ export function getPatternIds(inDir, outDir) {
  * @param {object} h2 - 終点ヘックス ({col, row})
  * @returns {number} 0:N, 1:NE, 2:SE, 3:S, 4:SW, 5:NW。隣接していない場合は -1。
  */
-export function getDirection(h1, h2) {
+export function getDirection(h1: HexLike, h2: HexLike): number {
     // 必要に応じて入力オブジェクトからcol/rowを取り出す
-    const c1 = h1.col !== undefined ? h1.col : h1.x;
-    const r1 = h1.row !== undefined ? h1.row : h1.y;
-    const c2 = h2.col !== undefined ? h2.col : h2.x;
-    const r2 = h2.row !== undefined ? h2.row : h2.y;
+    const c1 = h1.col !== undefined ? h1.col : h1.x!;
+    const r1 = h1.row !== undefined ? h1.row : h1.y!;
+    const c2 = h2.col !== undefined ? h2.col : h2.x!;
+    const r2 = h2.row !== undefined ? h2.row : h2.y!;
 
     const dc = c2 - c1;
     const dr = r2 - r1;

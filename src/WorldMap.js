@@ -1,5 +1,5 @@
 
-import * as config from './config.js';
+import * as config from './config.ts';
 
 // ================================================================
 // ■ 定数・Enum定義 (Constants & Enums)

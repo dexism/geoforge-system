@@ -6,8 +6,8 @@
 // ================================================================
 
 import * as d3 from 'd3';
-import * as config from './config.js';
-import { getIndex, formatLocation } from './utils.js';
+import * as config from './config.ts';
+import { getIndex, formatLocation } from './utils.ts';
 import { allocateVegetation } from './continentGenerator.js';
 import { calculateHexIndustry, calculateHexDemographics, calculateHexFacilities, calculateHexShipOwnership } from './economyHelpers.js';
 

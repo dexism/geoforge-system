@@ -1,8 +1,8 @@
 // ================================================================
 // GeoForge System - 街道生成モジュール (v18.1 - 階層生成バグ修正)
 // ================================================================
-import * as config from './config.js';
-import { getIndex, getDistance, formatProgressBar } from './utils.js';
+import * as config from './config.ts';
+import { getIndex, getDistance, formatProgressBar } from './utils.ts';
 import * as d3 from 'd3';
 
 // createCostFunction 

@@ -2,9 +2,9 @@
 // GeoForge System - Map Splitter
 // ================================================================
 
-import * as config from './config.js';
+import * as config from './config.ts';
 import * as utils from './utils.ts';
-import * as blockUtils from './BlockUtils.js';
+import * as blockUtils from './BlockUtils.ts';
 
 /**
  * Assigns road patterns to hex properties based on global road paths.

@@ -258,14 +258,14 @@ export const CONTOUR_INTERVAL = 200;  // 等高線を引く標高間隔 (m)。
 // ================================================================
 // D3.jsスケール関数を用いた配色の定義。
 
-const elevationColor_0_1k = d3.scaleLinear().domain([0, 1000]).range(['#d8ecd3', '#a8d5a2']);
-const elevationColor_1k_2k = d3.scaleLinear().domain([1000, 2000]).range(['#a8d5a2', '#dcd5c9']);
-const elevationColor_2k_3k = d3.scaleLinear().domain([2000, 3000]).range(['#dcd5c9', '#c2a383']);
-const elevationColor_3k_4k = d3.scaleLinear().domain([3000, 4000]).range(['#c2a383', '#b0b0b0']);
-const elevationColor_4k_plus = d3.scaleLinear().domain([4000, 7000]).range(['#b0b0b0', '#ffffff']);
+const elevationColor_0_1k = d3.scaleLinear<string>().domain([0, 1000]).range(['#d8ecd3', '#a8d5a2']);
+const elevationColor_1k_2k = d3.scaleLinear<string>().domain([1000, 2000]).range(['#a8d5a2', '#dcd5c9']);
+const elevationColor_2k_3k = d3.scaleLinear<string>().domain([2000, 3000]).range(['#dcd5c9', '#c2a383']);
+const elevationColor_3k_4k = d3.scaleLinear<string>().domain([3000, 4000]).range(['#c2a383', '#b0b0b0']);
+const elevationColor_4k_plus = d3.scaleLinear<string>().domain([4000, 7000]).range(['#b0b0b0', '#ffffff']);
 
-const shelfDepthColor = d3.scaleLinear().domain([0, SHELF_PARAMS.MAX_DEPTH]).range(['#8cf', '#37b']).clamp(true);
-const abyssalDepthColor = d3.scaleLinear().domain([SHELF_PARAMS.MAX_DEPTH, SHELF_PARAMS.ABYSSAL_DEPTH]).range(['#26a', '#136']).clamp(true);
+const shelfDepthColor = d3.scaleLinear<string>().domain([0, SHELF_PARAMS.MAX_DEPTH]).range(['#8cf', '#37b']).clamp(true);
+const abyssalDepthColor = d3.scaleLinear<string>().domain([SHELF_PARAMS.MAX_DEPTH, SHELF_PARAMS.ABYSSAL_DEPTH]).range(['#26a', '#136']).clamp(true);
 
 // 標高に応じた色を返す関数
 export function getElevationColor(elevation) {
@@ -303,7 +303,7 @@ export const CLIMATE_ZONE_COLORS = {
 // 各種データ可視化用のスケール
 export const manaColor = d3.scaleSequential(d3.interpolatePurples).domain([0, 1]); // 魔力
 export const tempColor = d3.scaleSequential(d3.interpolateTurbo).domain([-15, 35]); // 気温
-export const precipColor = d3.scaleLog() // 降水量 (対数スケール)
+export const precipColor = d3.scaleLog<string, string>() // 降水量 (対数スケール)
     .domain([1, 150, 400, 800, 1200, 1600, 2000, 2500])
     .range(["#fff", "#0ff", "#00f", "#8f8", "#0a0", "#ff0", "#f00", "#808"])
     .clamp(true);
@@ -312,11 +312,11 @@ export const forestColor = d3.scaleSequential(d3.interpolateYlGn).domain([0, 1])
 export const miningColor = d3.scaleSequential(d3.interpolateOranges).domain([0, 1]);  // 鉱業
 export const fishingColor = d3.scaleSequential(d3.interpolateCividis).domain([0, 1]); // 漁業
 export const huntingColor = d3.scaleSequential(d3.interpolateYlOrBr).domain([0, 1]);  // 狩猟
-export const populationColor = d3.scaleLog().domain([1, POPULATION_PARAMS.MAX_POPULATION_PER_HEX]).range(["black", "red"]).clamp(true);
+export const populationColor = d3.scaleLog<string, string>().domain([1, POPULATION_PARAMS.MAX_POPULATION_PER_HEX]).range(["black", "red"]).clamp(true);
 
 // 白地図の配色
 export const WHITE_MAP_COLORS = { WATER: '#777' };
-export const whiteMapElevationColor = d3.scaleLinear()
+export const whiteMapElevationColor = d3.scaleLinear<string>()
     .domain([0, 1000, 2000, 4000, 7000])
     .range(['#fff', '#fff', '#fee', '#edd', '#cbb']).clamp(true);
 

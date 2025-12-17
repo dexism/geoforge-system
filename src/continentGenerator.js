@@ -3,8 +3,8 @@
 // ================================================================
 
 import { createNoise2D } from 'simplex-noise';
-import * as config from './config.js';
-import { getIndex, globalRandom, getNeighborIndices, initGlobalRandom } from './utils.js';
+import * as config from './config.ts';
+import { getIndex, globalRandom, getNeighborIndices, initGlobalRandom } from './utils.ts';
 import * as d3 from 'd3';
 import { WorldMap } from './WorldMap.js';
 

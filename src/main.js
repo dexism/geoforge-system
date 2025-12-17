@@ -9,7 +9,7 @@
 // ================================================================
 
 import * as d3 from 'd3';
-import * as config from './config.js';
+import * as config from './config.ts';
 import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions, recalculateRiverProperties, generateWaterSystems, generateBeaches, initializeWaterVegetation } from './continentGenerator.js';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
 import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership } from './economySimulator.js';
@@ -18,7 +18,7 @@ import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calc
 import { getIndex, initGlobalRandom, globalRandom, getNeighborIndices } from './utils.ts';
 import { WorldMap } from './WorldMap.js';
 import { assignRoadPatterns, assignRiverPatterns, splitWorldIntoBlocks } from './MapSplitter.js';
-import * as blockUtils from './BlockUtils.js';
+import * as blockUtils from './BlockUtils.ts';
 
 // [NEW] BlockIO モジュールのインポート
 import { blockManager, compressWorldData, processLoadedData, createCompressedData } from './BlockIO.js';

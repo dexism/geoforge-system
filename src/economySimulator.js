@@ -2,8 +2,8 @@
 // GeoForge System - 経済シミュレーションモジュール (v2.0 - 産業階層・完全農業ロジック統合版)
 // ================================================================
 
-import * as config from './config.js';
-import { getIndex, globalRandom } from './utils.js';
+import * as config from './config.ts';
+import { getIndex, globalRandom } from './utils.ts';
 import { findAStarPath } from './roadGenerator.js';
 
 /**
