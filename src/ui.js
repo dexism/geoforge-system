@@ -1,7 +1,7 @@
 // ================================================================
 // GeoForge System - UI Controller
 // ================================================================
-import * as config from './config.js';
+import * as config from './config.ts';
 import * as d3 from 'd3';
 import { MapView } from './MapView.js';
 import {

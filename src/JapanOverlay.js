@@ -1,4 +1,4 @@
-import * as config from './config.js';
+import * as config from './config.ts';
 import * as d3 from 'd3';
 
 export class JapanOverlay {
@@ -10,19 +10,19 @@ export class JapanOverlay {
             // Shikoku
             [[32.9, 132.5], [33.5, 132.0], [34.3, 133.0], [34.5, 134.5], [33.8, 134.7], [33.3, 134.2]],
             // Honshu
-            [[34.0, 130.9], [34.5, 131.5], [35.5, 133.0], [35.6, 135.0], [34.6, 135.5], [34.5, 137.0], 
-             [35.0, 138.5], [35.1, 139.6], [35.6, 140.8], [36.5, 140.8], [38.0, 141.0], [40.0, 142.0], 
-             [41.5, 141.5], [41.2, 140.2], [40.0, 139.8], [39.0, 139.5], [38.0, 138.5], [37.0, 137.0], 
-             [36.5, 136.0], [35.5, 135.5]],
+            [[34.0, 130.9], [34.5, 131.5], [35.5, 133.0], [35.6, 135.0], [34.6, 135.5], [34.5, 137.0],
+            [35.0, 138.5], [35.1, 139.6], [35.6, 140.8], [36.5, 140.8], [38.0, 141.0], [40.0, 142.0],
+            [41.5, 141.5], [41.2, 140.2], [40.0, 139.8], [39.0, 139.5], [38.0, 138.5], [37.0, 137.0],
+            [36.5, 136.0], [35.5, 135.5]],
             // Hokkaido
-            [[41.4, 140.0], [41.8, 139.8], [43.0, 140.5], [45.5, 142.0], [44.0, 145.0], [43.0, 145.5], 
-             [42.0, 143.0], [42.0, 141.0]]
+            [[41.4, 140.0], [41.8, 139.8], [43.0, 140.5], [45.5, 142.0], [44.0, 145.0], [43.0, 145.5],
+            [42.0, 143.0], [42.0, 141.0]]
         ];
-        
+
         // GSI Tiles (Standard)
         // https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png
         this.tileUrlTemplate = "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png";
-        
+
         // Attribution
         this.attribution = "出典：国土地理院 (Geospatial Information Authority of Japan)";
     }
@@ -34,13 +34,13 @@ export class JapanOverlay {
      * @param {number} height - Viewport height
      */
     draw(g, coordSys, width, height) {
-        g.selectAll('*').remove(); 
-        
+        g.selectAll('*').remove();
+
         // 1. Determine Visible bounds in World Coordinates + Buffer
         // We buffer significantly (1.0x width/height) to support panning without immediate blanks
         const bufferFactor = 0.5;
         const origin = coordSys.getOrigin();
-        
+
         const vLeft = 0 - width * bufferFactor;
         const vRight = width + width * bufferFactor;
         const vTop = 0 - height * bufferFactor;
@@ -48,7 +48,7 @@ export class JapanOverlay {
 
         const pTopLeft = coordSys.fromView(vLeft, vTop);
         const pBottomRight = coordSys.fromView(vRight, vBottom);
-        
+
         // 2. Convert to Lat/Lon
         // Note: Y is inverted relative to Lat. Smaller Y = North (Higher Lat).
         const minLon = this.getLon(pTopLeft.x);
@@ -80,16 +80,16 @@ export class JapanOverlay {
         // If we want high-res tiles at high zoom, we need `k`.
         // 'coordSys' doesn't know 'k'.
         // Assuming we draw at "Native World Resolution" (Zoom=1).
-        
+
         const zoomLevel = 9; // Fix to 9 for now (approx correct for Block scale).
-        
+
         // 4. Generate Tile List
         const tiles = this.getTiles(zoomLevel, minLon, minLat, maxLon, maxLat);
-        
+
         // 5. Draw Tiles
         // We draw images mapped to World Coordinates.
         const tileGroup = g.append('g').attr('class', 'gsi-tiles');
-        
+
         tileGroup.selectAll('image')
             .data(tiles)
             .enter()
@@ -119,7 +119,7 @@ export class JapanOverlay {
             .attr('stroke-width', 2)
             .attr('stroke-opacity', 0.8)
             .style('pointer-events', 'none');
-            
+
         // 7. Attribution
         g.append('text')
             .attr('x', width - 10)
@@ -138,7 +138,7 @@ export class JapanOverlay {
         // Clamp Lat for Web Mercator
         const MAX_LAT = 85.0511;
         const clampLat = l => Math.max(-MAX_LAT, Math.min(MAX_LAT, l));
-        
+
         const bounds = {
             n: clampLat(maxLat),
             s: clampLat(minLat),
@@ -147,11 +147,11 @@ export class JapanOverlay {
         };
 
         const tiles = [];
-        
+
         // Convert bounds to Tile X/Y ranges
         const nw = this.lonLatToTile(bounds.w, bounds.n, z);
         const se = this.lonLatToTile(bounds.e, bounds.s, z);
-        
+
         const minTx = Math.floor(nw.x);
         const maxTx = Math.floor(se.x);
         const minTy = Math.floor(nw.y);
@@ -162,20 +162,20 @@ export class JapanOverlay {
                 // Calculate bounds of this tile in Lat/Lon
                 const tileNw = this.tileToLonLat(x, y, z);
                 const tileSe = this.tileToLonLat(x + 1, y + 1, z);
-                
+
                 // Map to World Coordinates (Pixels)
                 // Note: tileNw.lat is North (higher), tileSe.lat is South (lower)
                 const wx1 = this.getGlobalX(tileNw.lon);
                 const wy1 = this.getGlobalY(tileNw.lat); // GlobalY for North Lat (Standard Y is smaller)
-                
+
                 const wx2 = this.getGlobalX(tileSe.lon);
                 const wy2 = this.getGlobalY(tileSe.lat); // GlobalY for South Lat (Standard Y is larger)
-                
+
                 // Rect Dimensions
                 // X increases East (Left to Right)
                 // Y increases South (Top to Bottom) in World Pixels
                 // So wy1 < wy2 usually.
-                
+
                 tiles.push({
                     x: x, y: y, z: z,
                     url: this.tileUrlTemplate
@@ -191,9 +191,9 @@ export class JapanOverlay {
         }
         return tiles;
     }
-    
+
     // --- Mercator Helpers ---
-    
+
     lonLatToTile(lon, lat, z) {
         const rad = lat * Math.PI / 180;
         const n = Math.pow(2, z);
@@ -201,7 +201,7 @@ export class JapanOverlay {
         const ytile = n * (1 - (Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI)) / 2;
         return { x: xtile, y: ytile };
     }
-    
+
     tileToLonLat(xtile, ytile, z) {
         const n = Math.pow(2, z);
         const lon = xtile / n * 360.0 - 180.0;

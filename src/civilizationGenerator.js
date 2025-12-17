@@ -3,8 +3,8 @@
 // ================================================================
 
 import * as d3 from 'd3';
-import * as config from './config.js';
-import { getDistance, getIndex, globalRandom } from './utils.js';
+import * as config from './config.ts';
+import { getDistance, getIndex, globalRandom } from './utils.ts';
 import { generateTradeRoutes, generateFeederRoads } from './roadGenerator.js';
 
 // ================================================================

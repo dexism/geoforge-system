@@ -1,6 +1,6 @@
 
-import * as config from './config.js';
-import { getIndex, globalRandom } from './utils.js';
+import * as config from './config.ts';
+import { getIndex, globalRandom } from './utils.ts';
 
 // ================================================================
 // Single Hex Economy Calculation Helpers

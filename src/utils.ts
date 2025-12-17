@@ -6,8 +6,8 @@
 // 依存関係: config.js (定数), BlockUtils.js (座標変換)
 // ================================================================
 
-import * as config from './config.js';
-import { globalToBlock } from './BlockUtils.js';
+import * as config from './config.ts';
+import { globalToBlock } from './BlockUtils.ts';
 
 // 基本的なPoint型 (CoordinateSystem.tsと重複するが、疎結合のためここで定義またはanyで済ます)
 interface Point2D {

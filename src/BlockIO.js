@@ -2,9 +2,9 @@
 // GeoForge System - Block IO (ブロック入出力モジュール)
 // ================================================================
 
-import * as config from './config.js';
-import * as blockUtils from './BlockUtils.js';
-import * as utils from './utils.js';
+import * as config from './config.ts';
+import * as blockUtils from './BlockUtils.ts';
+import * as utils from './utils.ts';
 import { WorldMap } from './WorldMap.js';
 import { updateUIWithBlockData } from './ui.js';
 
@@ -679,7 +679,7 @@ export async function processLoadedData(loadedData, options = {}) {
                     hex = worldData.allHexes.getHex(idx);
                     // [DEBUG] 位置合わせ確認用のログ
                     if (loadedData.hexes.indexOf(cHex) < 1) {
-                         // console.log(`[BlockIO Debug] Block:${bid} Local(${localCol},${localRow}) Idx:${idx} HexFound:${!!hex}`);
+                        // console.log(`[BlockIO Debug] Block:${bid} Local(${localCol},${localRow}) Idx:${idx} HexFound:${!!hex}`);
                     }
                 } else {
                     return;

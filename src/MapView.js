@@ -2,9 +2,9 @@
 // GeoForge System - MapView Module
 // ================================================================
 import * as d3 from 'd3';
-import * as config from './config.js';
-import { getIndex, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint } from './utils.js';
-import { BLOCK_START_EE, BLOCK_START_NN, BLOCK_END_NN } from './BlockUtils.js';
+import * as config from './config.ts';
+import { getIndex, formatLocation, getSharedEdgePoints, getSharedEdgeMidpoint } from './utils.ts';
+import { BLOCK_START_EE, BLOCK_START_NN, BLOCK_END_NN } from './BlockUtils.ts';
 import { getInfoText, updateOverallInfo, generateHexJson, childrenMap } from './infoWindow.js';
 import { CoordinateSystem } from './CoordinateSystem.ts'; // [NEW]
 import { JapanOverlay } from './JapanOverlay.js';
