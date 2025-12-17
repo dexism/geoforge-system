@@ -3,7 +3,7 @@
 // ================================================================
 import * as config from './config.ts';
 import * as d3 from 'd3';
-import { MapView } from './MapView.js';
+import { MapView } from './MapView.ts';
 import { DataGenerator } from './DataGenerator.ts';
 import {
     updateOverallInfo,
@@ -11,12 +11,16 @@ import {
     updateLegend
 } from './infoWindow.js';
 
+// グローバル変数 (互換性のため残すものもあるが、基本はMapViewへ移動)
+let mapView: MapView;
+let blockLoaderRef: any;
+
 /**
  * サイドバーの高さを動的に調整する関数
  * 情報ウィンドウの表示状態に応じて、サイドバーの高さを変更します。
  */
 function adjustSidebarHeight() {
-    const sidebar = document.querySelector('.sidebar');
+    const sidebar = document.querySelector('.sidebar') as HTMLElement;
     const infoWindow = document.getElementById('info-window');
     if (!sidebar || !infoWindow) return;
 
@@ -31,10 +35,6 @@ function adjustSidebarHeight() {
     }
 }
 
-// グローバル変数 (互換性のため残すものもあるが、基本はMapViewへ移動)
-let mapView;
-let blockLoaderRef;
-
 /**
  * UIのセットアップを行うメイン関数
  * MapViewの初期化、イベントハンドラの設定、初期UI状態の適用を行います。
@@ -43,7 +43,7 @@ let blockLoaderRef;
  * @param {Function} addLogMessage - ログ出力用関数
  * @param {Object} blockLoader - ブロックロード管理オブジェクト
  */
-export async function setupUI(allHexes, roadPaths, addLogMessage, blockLoader) {
+export async function setupUI(allHexes: any, roadPaths: any[], addLogMessage: Function, blockLoader: any) {
     blockLoaderRef = blockLoader;
 
     // MapViewの初期化
@@ -138,13 +138,13 @@ function setupEventHandlers() {
         ];
 
         layersToCheck.forEach(item => {
-            const isVisible = mapView.layers[item.layer] ? mapView.layers[item.layer].visible : false;
+            const isVisible = mapView.layers[item.layer] ? (mapView.layers[item.layer] as any).visible : false;
             d3.select(item.id).classed('active', isVisible);
         });
     };
 
     // マップタイプ変更時の処理
-    d3.selectAll('input[name="map-type"]').on('change', function () {
+    d3.selectAll('input[name="map-type"]').on('change', function (this: HTMLElement) {
         const newType = d3.select(this).property('value');
         if (newType === currentMapType) return;
 
@@ -152,7 +152,7 @@ function setupEventHandlers() {
         const currentMemory = layerMemory[currentMapType];
         Object.keys(currentMemory).forEach(layerName => {
             if (mapView.layers[layerName]) {
-                currentMemory[layerName] = mapView.layers[layerName].visible;
+                currentMemory[layerName] = (mapView.layers[layerName] as any).visible; // [FIX] property access check
             }
         });
 
@@ -198,7 +198,7 @@ function setupEventHandlers() {
     ];
 
     layerToggles.forEach(item => {
-        d3.select(item.id).on('click', function () {
+        d3.select<HTMLElement, unknown>(item.id).on('click', function (this: HTMLElement) {
             const isVisible = mapView.toggleLayer(item.layer);
             this.classList.toggle('active', isVisible);
 
@@ -225,7 +225,7 @@ function setupEventHandlers() {
     ];
 
     shortcuts.forEach(item => {
-        d3.select(item.id).on('click', function () {
+        d3.select<HTMLElement, unknown>(item.id).on('click', function (this: HTMLElement) {
             const isVisible = mapView.toggleLayer(item.layer);
             this.classList.toggle('active', isVisible);
 
@@ -251,7 +251,7 @@ function setupEventHandlers() {
     ];
 
     overlayIds.forEach(id => {
-        d3.select(id).on('click', function () {
+        d3.select<HTMLElement, unknown>(id).on('click', function (this: HTMLElement) {
             let layerName = id.replace('#toggle', '').replace('Layer', '-overlay').toLowerCase();
             // [FIX] 明示的なマッピング（複数単語のキーに対応）
             if (id === '#toggleClimateZoneLayer') {

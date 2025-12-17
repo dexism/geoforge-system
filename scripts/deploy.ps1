@@ -1,5 +1,5 @@
 # deploy.ps1
-# GeoForge System Deployment Script (PR Workflow)
+# VoT GeoForge Deployment Script (PR Workflow)
 
 param (
     [string]$CommitMessage = "Auto-update"
@@ -58,7 +58,7 @@ if ($LASTEXITCODE -eq 0) {
     # --------------------------------
     
     # 5. Guide to PR
-    $prUrl = "https://github.com/dexism/geoforge-system/compare/main...$branchName?expand=1"
+    $prUrl = "https://github.com/dexism/VoT-GeoForge/compare/main...$branchName?expand=1"
     Write-Host "`n==========================================" -ForegroundColor White
     Write-Host "Create Pull Request at:" -ForegroundColor Cyan
     Write-Host $prUrl -ForegroundColor Blue
