@@ -6,6 +6,8 @@ dist/
 !mb_*.md
 !CONTRIBUTING.md
 !AI_RULES.md
+!.github/**/*.md
+!.github/*.md
 *test_*.*
 .DS_Store
 Thumbs.db
