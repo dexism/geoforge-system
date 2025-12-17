@@ -1,5 +1,6 @@
 ---
 name: 機能追加リクエスト (Feature Request)
+
 about: 新しい機能の提案をしてください
 title: ""
 labels: enhancement
