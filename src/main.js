@@ -10,9 +10,9 @@
 
 import * as d3 from 'd3';
 import * as config from './config.ts';
-import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions, recalculateRiverProperties, generateWaterSystems, generateBeaches, initializeWaterVegetation } from './continentGenerator.js';
+import { generatePhysicalMap, generateClimateAndVegetation, generateRidgeLines, recalculateGeographicFlags, calculateFinalProperties, initializeNoiseFunctions, recalculateRiverProperties, generateWaterSystems, generateBeaches, initializeWaterVegetation } from './continentGenerator.ts';
 import { generateCivilization, determineTerritories, defineNations, assignTerritoriesByTradeRoutes, generateMonsterDistribution, generateHuntingPotential, generateLivestockPotential } from './civilizationGenerator.js';
-import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics, calculateShipOwnership } from './economySimulator.js';
+import { simulateEconomy, calculateTerritoryAggregates, calculateRoadTraffic, calculateDemographics, calculateFacilities, calculateLivingConditions, generateCityCharacteristics } from './economySimulator.js';
 import { setupUI, redrawClimate, redrawSettlements, redrawRoadsAndNations, resetUI, redrawMap, updateMinimap, updateUIWithBlockData } from './ui.js';
 import { generateTradeRoutes, generateFeederRoads, generateMainTradeRoutes, calculateRoadDistance, calculateTravelDays, generateSeaRoutes } from './roadGenerator.js';
 import { getIndex, initGlobalRandom, globalRandom, getNeighborIndices } from './utils.ts';
@@ -528,12 +528,12 @@ async function recalculateEconomyMetrics(worldData) {
         await addLogMessage(`シミュレーションエラー: ${e.message}`);
     }
 
-    // [FIX] 削除してしまった重要計算ロジックを復元
-    calculateShipOwnership(allHexes);
-    generateCityCharacteristics(allHexes);
-    calculateDemographics(allHexes);
-    calculateFacilities(allHexes);
-    calculateTerritoryAggregates(allHexes);
+    // [FIX] 削除してしまった重要計算ロジックを復元 -> simulateEconomy内で実行されるため削除
+    // calculateShipOwnership(allHexes);
+    // generateCityCharacteristics(allHexes);
+    // calculateDemographics(allHexes);
+    // calculateFacilities(allHexes);
+    // calculateTerritoryAggregates(allHexes);
 
     // 2. 交通量の再計算 (simulateEconomy内ではスキップされているためここで行う)
     if (roadPaths) {

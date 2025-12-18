@@ -8,7 +8,7 @@
 import * as d3 from 'd3';
 import * as config from './config.ts';
 import { getIndex, formatLocation } from './utils.ts';
-import { allocateVegetation } from './continentGenerator.js';
+import { allocateVegetation } from './continentGenerator.ts';
 import { calculateHexIndustry, calculateHexDemographics, calculateHexFacilities, calculateHexShipOwnership } from './economyHelpers.ts';
 import { WorldMap, Hex } from './WorldMap.ts';
 

@@ -1,7 +1,16 @@
 import * as config from './config.ts';
 import * as d3 from 'd3';
 
+export interface CoordinateSystem {
+    getOrigin(): { x: number; y: number };
+    fromView(x: number, y: number): { x: number; y: number };
+}
+
 export class JapanOverlay {
+    polygons: number[][][];
+    tileUrlTemplate: string;
+    attribution: string;
+
     constructor() {
         // Simplified Japan Coordinates (Lat, Lon) for reference borders
         this.polygons = [
@@ -28,12 +37,12 @@ export class JapanOverlay {
     }
 
     /**
-     * @param {Object} g - D3 selection to draw into
-     * @param {CoordinateSystem} coordSys
-     * @param {number} width - Viewport width
-     * @param {number} height - Viewport height
+     * @param g - D3 selection to draw into
+     * @param coordSys
+     * @param width - Viewport width
+     * @param height - Viewport height
      */
-    draw(g, coordSys, width, height) {
+    draw(g: d3.Selection<any, any, any, any>, coordSys: CoordinateSystem, width: number, height: number) {
         g.selectAll('*').remove();
 
         // 1. Determine Visible bounds in World Coordinates + Buffer
@@ -57,30 +66,6 @@ export class JapanOverlay {
         const minLat = this.getLat(pBottomRight.y);
 
         // 3. Determine Zoom Level
-        // Ideal: 1 tile pixel approx 1 screen pixel?
-        // At Scale 1.0:
-        // World 1.8 deg = BlockPX (~700 px).
-        // deg/px = 1.8 / 700 = 0.0025.
-        // GSI Tile Z=0 covers 360 deg in 256 px -> 1.4 deg/px.
-        // Z=n covers 360 / 2^n deg in 256 px.
-        // Res = 360 / (256 * 2^n) deg/px.
-        // Target 0.0025.
-        // 2^n = 360 / (256 * 0.0025) = 360 / 0.64 = 562.
-        // n = log2(562) ~ 9.1.
-        // So Zoom Level ~9 is basic suitable level.
-        // Adjust by current transform scale?
-        // Passed 'width/height' are viewport size. Scale is handled by D3 zoom transform on the group <g>.
-        // Wait, 'coordSys.fromView' accounts for ORIGIN shift, but does NOT account for Scale if we are talking about MapView logic.
-        // BUT, MapView applies transform to the group 'g' where this layer lives.
-        // So we draw "World Pixels". The user zooms in on these pixels.
-        // If user zooms to 2.0x, the pixels get 2x bigger.
-        // If we draw fixed-resolution images, they will get blurry.
-        // Ideally we should know the current scale to pick the right tile Zoom.
-        // BUT 'draw' is called on *recenter* or *manual update*.
-        // If we want high-res tiles at high zoom, we need `k`.
-        // 'coordSys' doesn't know 'k'.
-        // Assuming we draw at "Native World Resolution" (Zoom=1).
-
         const zoomLevel = 9; // Fix to 9 for now (approx correct for Block scale).
 
         // 4. Generate Tile List
@@ -94,16 +79,16 @@ export class JapanOverlay {
             .data(tiles)
             .enter()
             .append('image')
-            .attr('x', d => d.wx - origin.x)
-            .attr('y', d => d.wy - origin.y)
-            .attr('width', d => d.ww)
-            .attr('height', d => d.wh)
-            .attr('href', d => d.url)
+            .attr('x', (d: any) => d.wx - origin.x)
+            .attr('y', (d: any) => d.wy - origin.y)
+            .attr('width', (d: any) => d.ww)
+            .attr('height', (d: any) => d.wh)
+            .attr('href', (d: any) => d.url)
             .attr('preserveAspectRatio', 'none') // Stretch to fit the rect
             .attr('opacity', 1.0);
 
         // 6. Draw Polygons (Red Lines) on top
-        const line = d3.line()
+        const line = d3.line<number[]>()
             .x(d => this.getGlobalX(d[1]) - origin.x)
             .y(d => this.getGlobalY(d[0]) - origin.y)
             .curve(d3.curveLinearClosed);
@@ -134,10 +119,10 @@ export class JapanOverlay {
     /**
      * Get list of GSI tiles covering the lat/lon bbox
      */
-    getTiles(z, minLon, minLat, maxLon, maxLat) {
+    getTiles(z: number, minLon: number, minLat: number, maxLon: number, maxLat: number) {
         // Clamp Lat for Web Mercator
         const MAX_LAT = 85.0511;
-        const clampLat = l => Math.max(-MAX_LAT, Math.min(MAX_LAT, l));
+        const clampLat = (l: number) => Math.max(-MAX_LAT, Math.min(MAX_LAT, l));
 
         const bounds = {
             n: clampLat(maxLat),
@@ -146,7 +131,7 @@ export class JapanOverlay {
             e: maxLon
         };
 
-        const tiles = [];
+        const tiles: any[] = [];
 
         // Convert bounds to Tile X/Y ranges
         const nw = this.lonLatToTile(bounds.w, bounds.n, z);
@@ -171,17 +156,12 @@ export class JapanOverlay {
                 const wx2 = this.getGlobalX(tileSe.lon);
                 const wy2 = this.getGlobalY(tileSe.lat); // GlobalY for South Lat (Standard Y is larger)
 
-                // Rect Dimensions
-                // X increases East (Left to Right)
-                // Y increases South (Top to Bottom) in World Pixels
-                // So wy1 < wy2 usually.
-
                 tiles.push({
                     x: x, y: y, z: z,
                     url: this.tileUrlTemplate
-                        .replace('{z}', z)
-                        .replace('{x}', x)
-                        .replace('{y}', y),
+                        .replace('{z}', z.toString())
+                        .replace('{x}', x.toString())
+                        .replace('{y}', y.toString()),
                     wx: wx1,
                     wy: wy1,
                     ww: wx2 - wx1,
@@ -194,7 +174,7 @@ export class JapanOverlay {
 
     // --- Mercator Helpers ---
 
-    lonLatToTile(lon, lat, z) {
+    lonLatToTile(lon: number, lat: number, z: number) {
         const rad = lat * Math.PI / 180;
         const n = Math.pow(2, z);
         const xtile = n * ((lon + 180) / 360);
@@ -202,7 +182,7 @@ export class JapanOverlay {
         return { x: xtile, y: ytile };
     }
 
-    tileToLonLat(xtile, ytile, z) {
+    tileToLonLat(xtile: number, ytile: number, z: number) {
         const n = Math.pow(2, z);
         const lon = xtile / n * 360.0 - 180.0;
         const lat_rad = Math.atan(Math.sinh(Math.PI * (1 - 2 * ytile / n)));
@@ -212,7 +192,7 @@ export class JapanOverlay {
 
     // --- Coordinate Converters (Copied/Kept from before) ---
 
-    getGlobalX(lon) {
+    getGlobalX(lon: number) {
         const blockE = lon / 1.8;
         const hexSize = config.r;
         const CORE_COLS = 23;
@@ -220,7 +200,7 @@ export class JapanOverlay {
         return blockE * pixelPerBlockX;
     }
 
-    getLon(worldX) {
+    getLon(worldX: number) {
         const hexSize = config.r;
         const CORE_COLS = 23;
         const pixelPerBlockX = CORE_COLS * (2 * hexSize * 0.75);
@@ -228,7 +208,7 @@ export class JapanOverlay {
         return blockE * 1.8;
     }
 
-    getGlobalY(lat) {
+    getGlobalY(lat: number) {
         const blockN = 50 + (lat / 1.8);
         const hexSize = config.r;
         const hexHeight = Math.sqrt(3) * hexSize;
@@ -238,7 +218,7 @@ export class JapanOverlay {
         return relativeBy * pixelPerBlockY;
     }
 
-    getLat(worldY) {
+    getLat(worldY: number) {
         const hexSize = config.r;
         const hexHeight = Math.sqrt(3) * hexSize;
         const CORE_ROWS = 20;
