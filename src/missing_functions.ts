@@ -1,7 +1,10 @@
 
-export function calculateFacilities(hex) {
+import { getIndex } from './utils.ts';
+import { WorldMap, Hex } from './WorldMap';
+
+export function calculateFacilities(hex: Hex): Record<string, number> {
     const p = hex.properties;
-    const facilities = {};
+    const facilities: Record<string, number> = {};
     const pop = p.population;
     const settlement = p.settlement;
 
@@ -13,11 +16,12 @@ export function calculateFacilities(hex) {
     if (pop >= 1000) facilities['宿屋'] = Math.floor(pop / 2000) + 1;
 
     // 2. 行政・軍事
-    if (['首都', '都市', '領都'].includes(settlement)) {
+    if (settlement && ['首都', '都市', '領都'].includes(settlement)) {
         facilities['役所'] = 1;
         facilities['兵舎'] = Math.floor(pop / 5000) + 1;
         facilities['城壁'] = 1;
     }
+    // @ts-ignore: Property 'fortress' does not exist on type 'Hex'. - Assuming it might be added dynamically or missing in type def
     if (p.fortress) facilities['砦'] = 1;
 
     // 3. 産業施設
@@ -39,10 +43,10 @@ export function calculateFacilities(hex) {
     // 5. 港湾・水運
     if (p.isCoastal) {
         if (pop >= 1000) facilities['港'] = Math.floor(pop / 2000);
-        if (['首都', '都市', '領都'].includes(settlement)) facilities['大型造船所'] = 1;
+        if (settlement && ['首都', '都市', '領都'].includes(settlement)) facilities['大型造船所'] = 1;
     } else if (p.isLakeside) {
         facilities['渡し場'] = 1;
-        if (['街', '都市', '領都'].includes(settlement)) facilities['桟橋'] = 1;
+        if (settlement && ['街', '都市', '領都'].includes(settlement)) facilities['桟橋'] = 1;
     }
 
     // 6. 特殊 (マナ、魔物)
@@ -51,21 +55,21 @@ export function calculateFacilities(hex) {
     return facilities;
 }
 
-export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
+export async function calculateTerritoryAggregates(allHexes: WorldMap, addLogMessage: (msg: string) => Promise<void>) {
     await addLogMessage("主要都市の支配領域データを集計しています...");
 
     // 集計対象を「町」以上の、実質的な拠点となりうる集落に限定する
-    const territoryHubs = allHexes.filter(h => ['首都', '都市', '領都', '街', '町'].includes(h.properties.settlement));
+    const territoryHubs = allHexes.filter((h: Hex) => ['首都', '都市', '領都', '街', '町'].includes(h.properties.settlement || ''));
 
     // --- STEP 1: 親から子の関係をマップ化する ---
-    const childrenMap = new Map();
-    allHexes.forEach(h => {
+    const childrenMap = new Map<number, Hex[]>();
+    allHexes.forEach((h: Hex) => {
         const p = h.properties;
         if (p.parentHexId !== null) {
             if (!childrenMap.has(p.parentHexId)) {
                 childrenMap.set(p.parentHexId, []);
             }
-            childrenMap.get(p.parentHexId).push(h);
+            childrenMap.get(p.parentHexId)!.push(h);
         }
     });
 
@@ -75,15 +79,15 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
         const hubProps = hub.properties;
 
         // 集計の初期値を「ハブ自身の値」からスタートさせる
-        const aggregatedData = {
+        const aggregatedData: any = {
             population: hubProps.population,
             cultivatedArea: hubProps.cultivatedArea,
-            production: { ...hubProps.production },
+            production: { ...hubProps.production }, // Shallow copy
             settlementCounts: { '都市': 0, '領都': 0, '街': 0, '町': 0, '村': 0 }
         };
 
         // ハブ自身をカウント
-        if (aggregatedData.settlementCounts[hubProps.settlement] !== undefined) {
+        if (hubProps.settlement && aggregatedData.settlementCounts[hubProps.settlement] !== undefined) {
             aggregatedData.settlementCounts[hubProps.settlement]++;
         }
 
@@ -99,8 +103,10 @@ export async function calculateTerritoryAggregates(allHexes, addLogMessage) {
             // 1. 配下集落のデータを合計に加算
             aggregatedData.population += dProps.population;
             aggregatedData.cultivatedArea += dProps.cultivatedArea;
-            for (const item in dProps.production) {
-                aggregatedData.production[item] = (aggregatedData.production[item] || 0) + dProps.production[item];
+            if (dProps.production) {
+                for (const item in dProps.production) {
+                    aggregatedData.production[item] = (aggregatedData.production[item] || 0) + dProps.production[item];
+                }
             }
 
             // 2. 「直轄地」の種類をカウント
