@@ -9,24 +9,26 @@ import * as d3 from 'd3';
 import { WorldMap } from './WorldMap.ts';
 
 // ノイズ変数を let で宣言のみ行う
-let continentNoise,
-    mountainNoise,
-    hillNoise,
-    detailNoise,
-    manaNoise,
-    climateNoise,
-    forestPotentialNoise,
-    grasslandPotentialNoise,
-    miningPotentialNoise,
-    precipitationNoise,
-    seasonalityNoise,
-    beachNoise,
-    shelfNoise;
+type NoiseFunction = (x: number, y: number) => number;
+
+let continentNoise: NoiseFunction,
+    mountainNoise: NoiseFunction,
+    hillNoise: NoiseFunction,
+    detailNoise: NoiseFunction,
+    manaNoise: NoiseFunction,
+    climateNoise: NoiseFunction,
+    forestPotentialNoise: NoiseFunction,
+    grasslandPotentialNoise: NoiseFunction,
+    miningPotentialNoise: NoiseFunction,
+    precipitationNoise: NoiseFunction,
+    seasonalityNoise: NoiseFunction,
+    beachNoise: NoiseFunction,
+    shelfNoise: NoiseFunction;
 
 /**
  * 全てのノイズ関数を新しいシードで再初期化する関数
  */
-export function initializeNoiseFunctions(seed) {
+export function initializeNoiseFunctions(seed?: number | string) {
     if (seed) {
         initGlobalRandom(seed);
     }
@@ -85,19 +87,19 @@ export { CLIMATE_RETENTION_PARAMS };
 // ■ ヘルパー関数
 // ================================================================
 
-function clip01(x) {
+function clip01(x: number): number {
     return Math.max(0, Math.min(1, x));
 }
 
 /**
  * 水源発生確率を計算する関数
  */
-function waterSourceProbability(E, P, R, {
+function waterSourceProbability(E: number, P: number, R: number, {
     Emax = 4500,   // 最大標高 [m]
     P_half = 800,  // 降水量の半飽和定数 [mm]
     alpha = 1.2,   // 降水の閾値強調係数
     beta = 0.7     // 標高寄与の指数
-} = {}) {
+} = {}): number {
     // 標高の正規化と源頭寄与
     const E_norm = clip01(E / Emax);
     const E_src = Math.pow(E_norm, beta); // 標高寄与
@@ -117,9 +119,9 @@ function waterSourceProbability(E, P, R, {
 /**
  * 保水力を計算する関数
  */
-function calculateWaterRetention(terrainType, climateZone) {
-    const terrainR = TERRAIN_RETENTION[terrainType] !== undefined ? TERRAIN_RETENTION[terrainType] : 0.5;
-    const climateParams = CLIMATE_RETENTION_PARAMS[climateZone] || { retention: 0.5, evap: 0.5 };
+function calculateWaterRetention(terrainType: string, climateZone: string): number {
+    const terrainR = TERRAIN_RETENTION[terrainType as keyof typeof TERRAIN_RETENTION] !== undefined ? TERRAIN_RETENTION[terrainType as keyof typeof TERRAIN_RETENTION] : 0.5;
+    const climateParams = CLIMATE_RETENTION_PARAMS[climateZone as keyof typeof CLIMATE_RETENTION_PARAMS] || { retention: 0.5, evap: 0.5 };
     const climateR = climateParams.retention;
     const evap = climateParams.evap;
 
@@ -131,10 +133,7 @@ function calculateWaterRetention(terrainType, climateZone) {
 /**
  * 気候区分判定
  */
-/**
- * 気候区分判定
- */
-export function classifyClimate(T_mean, P_annual, H_m) {
+export function classifyClimate(T_mean: number, P_annual: number, H_m: number): string {
     const H_ice = 3600;
     const H_alpine = 3000;
     const C = 140;
@@ -176,7 +175,7 @@ export function classifyClimate(T_mean, P_annual, H_m) {
 /**
  * ベースプロパティ生成 (標高、気温、降水量)
  */
-function generateBaseProperties(col, row) {
+function generateBaseProperties(col: number, row: number) {
     const nx = col / config.COLS;
     const ny = row / config.ROWS;
 
@@ -266,7 +265,7 @@ function generateBaseProperties(col, row) {
 /**
  * 大陸棚生成 (既存ロジック)
  */
-export function generateContinentalShelves(allHexes) {
+export function generateContinentalShelves(allHexes: WorldMap) {
     const distanceFromLand = new Map();
     // 陸地に隣接する海ヘックスをキューに入れる
     const queue = allHexes.filter(h =>
@@ -322,7 +321,7 @@ export function generateContinentalShelves(allHexes) {
  * 降水量補正 (既存ロジック)
  * 山岳による雨陰効果などを適用します。
  */
-export function applyGeographicPrecipitationEffects(allHexes) {
+export function applyGeographicPrecipitationEffects(allHexes: WorldMap) {
     const precipCorrections = new Array(allHexes.length).fill(0);
 
     allHexes.forEach((h, index) => {
@@ -355,7 +354,7 @@ export function applyGeographicPrecipitationEffects(allHexes) {
 /**
  * 派生プロパティ計算 (地形、平坦度、気候区分)
  */
-function calculateDerivedProperties(allHexes) {
+function calculateDerivedProperties(allHexes: WorldMap) {
     allHexes.forEach(h => {
         const p = h.properties;
 
@@ -398,7 +397,7 @@ function calculateDerivedProperties(allHexes) {
 
 
 
-export function generateWaterSystems(allHexes) {
+export function generateWaterSystems(allHexes: WorldMap) {
     const riverSources = [];
 
     // 1. 水源の決定 (新ロジック: 保水力モデル)
@@ -671,6 +670,8 @@ export function generateWaterSystems(allHexes) {
  */
 function calcWaterArea({
     Qin, P, R, dH, flatness = 0.5, type, oceanicity, isRiverMouth, downstreamTerrain
+}: {
+    Qin: number; P: number; R: number; dH: number; flatness?: number; type: string; oceanicity?: number; isRiverMouth: boolean; downstreamTerrain: string | null;
 }) {
     // --- 区間直線距離 ---
     let L_straight = 10;
@@ -749,6 +750,8 @@ export function waterAreasRiverMouthV2({
     tidalRange = 2.0,
     isRiverMouth = false,
     downstreamTerrain = null
+}: {
+    hexHa?: number; L_km?: number; Q: number; flatness: number; oceanicity: number; R: number; tidalRange?: number; isRiverMouth?: boolean; downstreamTerrain?: string | null;
 }) {
     const clip01 = x => Math.max(0, Math.min(1, x));
     const L_m = L_km * 1000;
@@ -818,7 +821,7 @@ export function waterAreasRiverMouthV2({
  * 陸地標高補正 (既存ロジック)
  * 小さすぎる島や低地を修正するなどの後処理を行います。
  */
-export function adjustLandElevation(allHexes) {
+export function adjustLandElevation(allHexes: WorldMap) {
     const MIN_ELEVATION_TARGET = 10; // 定数定義が見つからない場合のフォールバック
 
     const landHexes = allHexes.filter(h => !h.properties.isWater);
@@ -874,7 +877,7 @@ export function adjustLandElevation(allHexes) {
  * 稜線生成 (安定版ロジック + 描画用インデックス修正)
  * 川とは逆に、低いところから高いところへ昇るラインを形成します。
  */
-export function generateRidgeLines(allHexes) {
+export function generateRidgeLines(allHexes: WorldMap) {
     const ridgeSources = allHexes.filter(h => {
         const p = h.properties;
         if (p.isWater || p.flow > 0) return false;
@@ -922,7 +925,12 @@ export function allocateVegetation({
     T, P, H, waterHa,
     flatness, soilFert, D,
     coastalDist, oceanicity,
-    deductedHa = 0 // 水系以外に控除する面積 (砂浜、集落、道路など)
+    deductedHa = 0
+}: {
+    T: number; P: number; H: number; waterHa: number;
+    flatness: number; soilFert: number; D: number;
+    coastalDist: number; oceanicity: number;
+    deductedHa?: number;
 }) {
     const hexAreaHa = config.HEX_AREA_HA || 8660;
     const landHa = Math.max(0, hexAreaHa - waterHa - deductedHa);
@@ -1008,7 +1016,7 @@ export function allocateVegetation({
     // });
 
     const sum = Object.values(s).reduce((a, b) => a + b, 0);
-    const areas = {};
+    const areas: Record<string, number> = {};
     if (sum === 0) {
         areas.wasteland = landHa;
     } else {
@@ -1031,7 +1039,7 @@ export function allocateVegetation({
  * 砂浜生成
  * 海岸線に沿って砂浜を配置します。
  */
-export function generateBeaches(allHexes, mapCols = config.COLS, mapRows = config.ROWS) {
+export function generateBeaches(allHexes: WorldMap, mapCols = config.COLS, mapRows = config.ROWS) {
     const landElevationScale = d3.scaleLinear().domain([50, 300]).range([1.0, 0.0]).clamp(true);
     const seaDepthScale = d3.scaleLinear().domain([0, -500]).range([1.0, 0.0]).clamp(true);
 
@@ -1093,7 +1101,7 @@ export function generateBeaches(allHexes, mapCols = config.COLS, mapRows = confi
  * 最終プロパティ計算 (植生、産業ポテンシャル)
  * 気候・地形・水系データに基づき、ヘックスごとの最終的な植生や産業価値を算出します。
  */
-export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRows = config.ROWS, options = {}) {
+export function calculateFinalProperties(allHexes: WorldMap, mapCols = config.COLS, mapRows = config.ROWS, options: any = {}) {
     // 事前に海岸からの距離をBFSで全計算 (Flyweightパターン対応のため、TypedArrayを使用)
     const distArray = new Float32Array(allHexes.length).fill(Infinity);
     const queue = []; // Store indices
@@ -1429,7 +1437,7 @@ export function calculateFinalProperties(allHexes, mapCols = config.COLS, mapRow
 
 // Export recalculateGeographicFlags so it can be used in main.js
 // 外部からも利用可能な地理フラグ再計算関数
-export function recalculateGeographicFlags(allHexes) {
+export function recalculateGeographicFlags(allHexes: WorldMap) {
     let debugCount = 0;
     allHexes.forEach(h => {
         const p = h.properties;
@@ -1492,7 +1500,7 @@ export function recalculateGeographicFlags(allHexes) {
  * 統合マップ生成関数 (メインエントリポイント)
  * マップ生成の全工程を統括し、各フェーズを順次実行します。
  */
-export async function generateIntegratedMap(addLogMessage, redrawFn) {
+export async function generateIntegratedMap(addLogMessage: (msg: string) => Promise<void>, redrawFn?: (hexes: WorldMap) => Promise<void>) {
     initializeNoiseFunctions();
 
     await addLogMessage("大陸の土台と気候を生成しています...");
@@ -1576,7 +1584,7 @@ export async function generateIntegratedMap(addLogMessage, redrawFn) {
 }
 
 // 互換性のためのダミー関数 (Step 2が呼ばれた場合用)
-export async function generateClimateAndVegetation(allHexes, addLogMessage) {
+export async function generateClimateAndVegetation(allHexes: WorldMap, addLogMessage: (msg: string) => Promise<void>) {
     await addLogMessage("気候と植生は既に統合生成されています。");
     return allHexes;
 }
@@ -1588,7 +1596,7 @@ export const generatePhysicalMap = generateIntegratedMap;
  * 既存の流量データから河川の形状プロパティ（幅、深さ、面積）を再計算する関数
  * ロード時にこれらのデータが保存されていない場合に補完するために使用
  */
-export function recalculateRiverProperties(allHexes) {
+export function recalculateRiverProperties(allHexes: WorldMap) {
     console.log("Recalculating river properties from flow data (Full Restoration)...");
 
     // 物理ベースの係数 (continentGenerator.js内の生成ロジックと一致させる)
@@ -1687,7 +1695,7 @@ export function recalculateRiverProperties(allHexes) {
  * 水域ヘックスの植生プロパティを初期化する (ロード時復元用)
  * @param {Array<object>} allHexes
  */
-export function initializeWaterVegetation(allHexes) {
+export function initializeWaterVegetation(allHexes: WorldMap) {
     if (!allHexes || allHexes.length === 0) return;
 
     allHexes.forEach(h => {

@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import * as d3 from 'd3';
 import { blockToGlobal } from './BlockUtils.ts';
-import { classifyClimate, CLIMATE_RETENTION_PARAMS } from './continentGenerator.js';
+import { classifyClimate, CLIMATE_RETENTION_PARAMS } from './continentGenerator.ts';
 
 // Climate Reference Points (Approximate Annual Averages)
 // Lat, Lon, Temp(C), Precip(mm/year), Elevation(m)

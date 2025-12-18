@@ -102,6 +102,45 @@ export function calculateHexShipOwnership(h: any, allHexes: WorldMap | any[]) {
                 p.ships[mediumName] = (p.ships[mediumName] || 0) + (minOcean - currentOcean);
             }
         }
+
+        // --- Naval Warships (v2.7.6) ---
+        if (config.NAVAL_SETTINGS) {
+            const navalRatio = config.NAVAL_SETTINGS.STANDING_NAVY_RATIO[settlementLevel] || 0;
+            if (navalRatio > 0) {
+                const navalPersonnel = Math.floor(p.population * navalRatio);
+                let remainingPersonnel = navalPersonnel * 0.6;
+
+                const warshipTypes = config.WARSHIP_TYPES;
+                const availableWarships: string[] = [];
+
+                if (settlementLevel === '首都') availableWarships.push('flagship', 'ship_of_the_line', 'galley', 'escort_ship', 'patrol_boat');
+                else if (['領都', '都市'].includes(settlementLevel)) availableWarships.push('ship_of_the_line', 'galley', 'escort_ship', 'patrol_boat');
+                else if (settlementLevel === '街') availableWarships.push('galley', 'escort_ship', 'patrol_boat');
+                else if (settlementLevel === '町') availableWarships.push('patrol_boat');
+
+                availableWarships.forEach(typeKey => {
+                    const shipData = warshipTypes[typeKey];
+                    if (!shipData) return;
+
+                    const crewPerShip = (shipData.crew_requirements.skipper || 0) + (shipData.crew_requirements.crew || 0);
+                    if (crewPerShip <= 0) return;
+
+                    let allocRatio = 0.2;
+                    if (typeKey === 'patrol_boat') allocRatio = 1.0;
+                    else if (typeKey === 'escort_ship') allocRatio = 0.5;
+
+                    const allocPersonnel = remainingPersonnel * allocRatio;
+                    let count = Math.floor(allocPersonnel / crewPerShip);
+
+                    if (typeKey === 'flagship' && settlementLevel === '首都' && count === 0) count = 1;
+
+                    if (count > 0) {
+                        p.ships[shipData.name] = (p.ships[shipData.name] || 0) + count;
+                        remainingPersonnel -= count * crewPerShip;
+                    }
+                });
+            }
+        }
     }
 }
 
@@ -223,21 +262,110 @@ export function calculateHexDemographics(h: any, allHexes: WorldMap | any[]) {
     const totalPop = p.population;
     const demo = {};
 
+    // 職業人口の推計 (産業配分に基づく)
+    // 第一次
     demo['農民'] = Math.floor(totalPop * 0.4 * (p.agriPotential || 0.5));
     demo['漁師'] = Math.floor(totalPop * 0.1 * (p.fishingPotential || 0));
     demo['鉱夫'] = Math.floor(totalPop * 0.1 * (p.miningPotential || 0));
-    demo['職人'] = Math.floor(totalPop * 0.1);
-    demo['商人'] = Math.floor(totalPop * 0.05);
-    demo['兵士'] = Math.floor(totalPop * 0.03);
-    demo['官僚'] = Math.floor(totalPop * 0.01);
+    demo['木こり'] = Math.floor(totalPop * 0.1 * (p.forestPotential || 0));
+    demo['畜夫'] = Math.floor(totalPop * 0.1 * ((p.pastoralPotential || 0) + (p.livestockPotential || 0)));
 
-    // Slum/Orphan logic
+    // 第二次
+    demo['職人'] = Math.floor(totalPop * 0.1);
+
+    // 第三次
+    demo['商人'] = Math.floor(totalPop * 0.05);
+
+    // 第四次・第五次
+    demo['学者'] = Math.floor(totalPop * 0.02);
+
+    // 兵士の細分化
+    const soldierTotal = Math.floor(totalPop * 0.03);
+    if (soldierTotal > 0) {
+        // 都市規模や施設によって比率を変えるのが理想だが、まずは基本比率で
+        demo['騎士'] = Math.floor(soldierTotal * 0.05); // エリート
+        demo['正規兵'] = Math.floor(soldierTotal * 0.45); // 主力
+        demo['衛兵・自警団'] = Math.max(0, soldierTotal - demo['騎士'] - demo['正規兵']);
+    }
+
+    demo['官僚'] = Math.floor(totalPop * 0.01);
+    demo['聖職者'] = Math.floor(totalPop * 0.02);
+
+    // --- スラム・孤児の推計 (v2.1) ---
     let slumRate = 0;
-    if (p.settlement === '街') slumRate = 0.03;
-    else if (['領都', '都市'].includes(p.settlement)) slumRate = 0.07;
-    else if (p.settlement === '首都') slumRate = 0.10;
-    demo['スラム'] = Math.floor(totalPop * slumRate);
-    demo['孤児'] = Math.floor(totalPop * 0.02);
+    const settlement = p.settlement || '散居';
+    if (settlement === '街') slumRate = 0.03;
+    else if (['領都', '都市'].includes(settlement)) slumRate = 0.07;
+    else if (settlement === '首都') slumRate = 0.10;
+
+    if (slumRate > 0) {
+        demo['スラム'] = Math.floor(totalPop * slumRate);
+    } else {
+        demo['スラム'] = 0;
+    }
+
+    // 孤児: 基本2% + 魔物ランクによる補正
+    let orphanRate = 0.02;
+    if (p.monsterRank) {
+        if (p.monsterRank === 'S') orphanRate += 0.05;
+        else if (p.monsterRank === 'A') orphanRate += 0.03;
+        else if (p.monsterRank === 'B') orphanRate += 0.01;
+    }
+    demo['孤児'] = Math.floor(totalPop * orphanRate);
+
+    // 水夫の推計 (v2.7.5)
+    let totalSailors = 0;
+    let totalNavalSailors = 0; // 軍属船員
+    let totalMarines = 0;      // 海兵
+    let totalNavalOfficers = 0; // 海軍士官
+
+    if (p.ships) {
+        Object.entries(p.ships).forEach(([shipName, countVar]) => {
+            const count = countVar as number;
+            // 商船・漁船のチェック
+            const civTypeKey = Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key].name === shipName);
+            if (civTypeKey) {
+                const req = config.SHIP_TYPES[civTypeKey].crew_requirements;
+                if (req) {
+                    totalSailors += count * ((req.skipper || 0) + (req.crew || 0));
+                }
+            }
+
+            // 軍艦のチェック (v2.7.6)
+            const warTypeKey = config.WARSHIP_TYPES ? Object.keys(config.WARSHIP_TYPES).find(key => config.WARSHIP_TYPES[key].name === shipName) : null;
+            if (warTypeKey) {
+                const req = config.WARSHIP_TYPES[warTypeKey].crew_requirements;
+                if (req) {
+                    totalNavalOfficers += count * (req.skipper || 0);
+                    totalNavalSailors += count * (req.crew || 0);
+                    totalMarines += count * (req.marine || 0);
+                }
+            }
+        });
+    }
+
+    if (totalSailors > 0) demo['水夫'] = totalSailors;
+
+    // 海軍人員の計上 (v2.7.6)
+    if (p.isCoastal && config.NAVAL_SETTINGS) {
+        const settlementLevel = p.settlement || '散居';
+        const ratio = config.NAVAL_SETTINGS.STANDING_NAVY_RATIO[settlementLevel] || 0;
+        if (ratio > 0) {
+            const totalNavy = Math.floor(totalPop * ratio);
+
+            // 艦艇乗組員との整合性チェック
+            const minNavy = totalNavalOfficers + totalNavalSailors + totalMarines;
+            const actualNavy = Math.max(totalNavy, minNavy);
+
+            // 内訳比率
+            const comp = config.NAVAL_SETTINGS.PERSONNEL_COMPOSITION[settlementLevel] || { sailor: 0.5, marine: 0.3, support: 0.2 };
+
+            demo['海軍船員'] = Math.max(totalNavalSailors, Math.floor(actualNavy * comp.sailor));
+            demo['海兵'] = Math.max(totalMarines, Math.floor(actualNavy * comp.marine));
+            demo['海軍士官'] = Math.max(totalNavalOfficers, Math.floor(actualNavy * comp.support * 0.3));
+            demo['海軍工廠・支援'] = Math.floor(actualNavy * comp.support * 0.7);
+        }
+    }
 
     p.demographics = demo;
 }
@@ -260,14 +388,12 @@ export function calculateHexFacilities(h: any, allHexes: WorldMap | any[]) {
     if (p.population > 500) addFacility('市場', Math.ceil(p.population / 2000), 1);
     if (p.population > 1000) addFacility('宿屋', Math.ceil(p.population / 1000), 1);
 
-    // Industry
-    if (p.industry) {
-        if (p.industry.secondary['武具・道具'] > 50) addFacility('鍛冶屋', Math.ceil(p.industry.secondary['武具・道具'] / 100), 1);
-        if (p.industry.secondary['織物'] > 50) addFacility('機織り小屋', Math.ceil(p.industry.secondary['織物'] / 100), 1);
-        if (p.industry.secondary['酒(穀物)'] > 50 || p.industry.secondary['酒(果実)'] > 50) addFacility('酒造所', 1, 1);
-    }
+    // 産業施設
+    if (p.industry.secondary['武具・道具'] > 50) addFacility('鍛冶屋', Math.ceil(p.industry.secondary['武具・道具'] / 100), 1);
+    if (p.industry.secondary['織物'] > 50) addFacility('機織り小屋', Math.ceil(p.industry.secondary['織物'] / 100), 1);
+    if (p.industry.secondary['酒(穀物)'] > 50 || p.industry.secondary['酒(果実)'] > 50) addFacility('酒造所', 1, 1);
 
-    // Ports
+    // 港湾・水運
     const isCoastal = p.isCoastal;
     const isLakeside = p.isLakeside || (h.neighbors.some(n => allHexes[n].properties.isWater) && !isCoastal);
     const settlementLevel = p.settlement || '散居';
@@ -276,6 +402,7 @@ export function calculateHexFacilities(h: any, allHexes: WorldMap | any[]) {
         if (['首都', '都市', '領都'].includes(settlementLevel)) {
             addFacility('大型港湾', 1, 3);
             addFacility('造船所', 1, 2);
+            // 軍港 (v2.7.6)
             if (settlementLevel === '首都') addFacility('海軍総司令部', 1, 5);
             else addFacility('海軍基地', 1, 3);
         } else if (['街', '町'].includes(settlementLevel) || p.population > 500) {
@@ -289,11 +416,121 @@ export function calculateHexFacilities(h: any, allHexes: WorldMap | any[]) {
         else addFacility('渡し場', 1, 1);
     }
 
-    // Special
-    if (p.industry) {
-        if (p.industry.quaternary && p.industry.quaternary['魔法研究'] > 50) addFacility('魔導塔', 1, Math.ceil(p.industry.quaternary['魔法研究'] / 500));
-        if (p.industry.quaternary && p.industry.quaternary['学問・歴史'] > 50) addFacility('図書館', 1, 1);
-        if (p.industry.quinary && p.industry.quinary['芸術・文化'] > 50) addFacility('劇場', 1, 1);
-        if (p.industry.quinary && p.industry.quinary['世界儀式'] > 0) addFacility('大聖堂', 1, 5);
+    // 特殊施設
+    if (p.industry.quaternary['魔法研究'] > 50) addFacility('魔導塔', 1, Math.ceil(p.industry.quaternary['魔法研究'] / 500));
+    if (p.industry.quaternary['学問・歴史'] > 50) addFacility('図書館', 1, 1);
+    if (p.industry.quinary['芸術・文化'] > 50) addFacility('劇場', 1, 1);
+    if (p.industry.quinary['世界儀式'] > 0) addFacility('大聖堂', 1, 5);
+
+    // 物流能力
+    const roadLevel = p.roadLevel || 0;
+    let wagonCount = Math.floor(p.population / 60);
+
+    if (isCoastal || isLakeside) {
+        wagonCount = Math.floor(wagonCount * 0.75);
     }
+    if (roadLevel < 3) {
+        wagonCount = Math.floor(wagonCount * 0.9);
+    }
+    wagonCount = Math.floor(wagonCount * 1.15);
+
+    let totalDraftAnimals = Math.floor(wagonCount * 2.2);
+    if (roadLevel < 3) {
+        totalDraftAnimals = Math.floor(totalDraftAnimals * 1.2);
+    }
+    totalDraftAnimals = Math.floor(totalDraftAnimals * 1.2);
+
+    let drivers = Math.floor(wagonCount * 1.3);
+    if (isCoastal || isLakeside) {
+        drivers = Math.floor(drivers * 1.1);
+    }
+
+    // 役畜の構成比率を決定
+    const animals = {};
+    const climate = p.climateZone || '';
+    const terrain = p.terrainType || '';
+
+    let horseRatio = 0.6;
+    let oxRatio = 0.4;
+    let otherType: string = null;
+    let otherRatio = 0;
+
+    if (roadLevel < 3) {
+        horseRatio -= 0.2;
+        oxRatio += 0.2;
+    }
+
+    if (climate.includes('ツンドラ') || climate.includes('氷雪')) {
+        horseRatio = 0.1; oxRatio = 0.1; otherType = 'トナカイ'; otherRatio = 0.8;
+        if (p.population < 500) { otherType = '犬'; otherRatio = 1.0; horseRatio = 0; oxRatio = 0; }
+    } else if (climate.includes('砂漠')) {
+        horseRatio = 0.2; oxRatio = 0.1; otherType = 'ラクダ'; otherRatio = 0.7;
+    } else if (climate.includes('熱帯')) {
+        horseRatio = 0.1; oxRatio = 0.2; otherType = '水牛'; otherRatio = 0.7;
+        if (p.vegetation === '熱帯雨林') { otherType = '象'; otherRatio = 0.2; oxRatio = 0.7; horseRatio = 0.1; }
+    } else if (terrain === '山岳' || terrain === '山地') {
+        horseRatio = 0.1; oxRatio = 0.1; otherType = 'ラバ'; otherRatio = 0.8;
+    }
+
+    if (totalDraftAnimals > 0) {
+        if (horseRatio > 0) animals['馬'] = Math.floor(totalDraftAnimals * horseRatio);
+        if (oxRatio > 0) animals['牛'] = Math.floor(totalDraftAnimals * oxRatio);
+        if (otherType && otherRatio > 0) animals[otherType] = Math.floor(totalDraftAnimals * otherRatio);
+    }
+
+    const ships = p.ships || {};
+
+    // 輸送能力の計算 (v2.6)
+    let waterCapacity = 0;
+    Object.entries(ships).forEach(([shipName, countVar]) => {
+        const count = countVar as number;
+        const typeKey = Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key].name === shipName);
+        if (typeKey) {
+            waterCapacity += count * config.SHIP_TYPES[typeKey].cargo_capacity_t;
+        }
+    });
+
+    let landCapacity = 0;
+    landCapacity += wagonCount * (config.TRANSPORT_CAPACITY.wagon || 1.0);
+    // 荷馬車以外の駄獣 (pack animals)
+    let usedDraftAnimals = wagonCount * 2;
+    let totalAnimals = (Object.values(animals) as number[]).reduce((sum, count) => sum + count, 0);
+    let packAnimals = Math.max(0, totalAnimals - usedDraftAnimals);
+    landCapacity += packAnimals * (config.TRANSPORT_CAPACITY.pack_animal || 0.15);
+
+    const totalCapacity = waterCapacity + landCapacity;
+
+    // 人員計算 (v2.7.5: 詳細化)
+    let skippers = 0;
+    let crew = 0;
+
+    Object.entries(ships).forEach(([shipName, countVar]) => {
+        const count = countVar as number;
+        const typeKey = Object.keys(config.SHIP_TYPES).find(key => config.SHIP_TYPES[key].name === shipName);
+        if (typeKey) {
+            const req = config.SHIP_TYPES[typeKey].crew_requirements;
+            if (req) {
+                skippers += count * (req.skipper || 0);
+                crew += count * (req.crew || 0);
+            }
+        }
+    });
+
+    p.logistics = {
+        wagons: wagonCount,
+        animals: animals,
+        ships: ships,
+        personnel: {
+            drivers: drivers,
+            skippers: skippers,
+            crew: crew
+        },
+        transportCapacity: {
+            water: waterCapacity,
+            land: landCapacity,
+            total: totalCapacity
+        }
+    };
+
+
 }
