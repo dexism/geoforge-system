@@ -1,3 +1,28 @@
+
+export { };
+
+interface Article {
+    index: number;
+    id: string;
+    title: string;
+    level: number;
+    content: string;
+    tags: string[];
+    matchCount?: number;
+}
+
+interface TooltipTerm {
+    word: string;
+    desc: string;
+}
+
+// グローバルスコープを拡張
+declare global {
+    interface Window {
+        closeDrawer: () => void;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // 読み込むファイルリスト
     const files = [
@@ -8,31 +33,31 @@ document.addEventListener('DOMContentLoaded', () => {
         './sections/05_data.html'
     ];
 
-    const contentArea = document.getElementById('content-area');
-    const tocList = document.getElementById('toc-list');
-    
+    const contentArea = document.getElementById('content-area') as HTMLElement;
+    const tocList = document.getElementById('toc-list') as HTMLElement;
+
     // ナビゲーション関連
-    const drawer = document.getElementById('drawer-nav');
-    const overlay = document.getElementById('drawer-overlay');
-    const menuBtn = document.getElementById('menu-btn');
-    const closeMenuBtn = document.getElementById('close-menu-btn');
-    const homeBtn = document.getElementById('home-btn');
+    const drawer = document.getElementById('drawer-nav') as HTMLElement;
+    const overlay = document.getElementById('drawer-overlay') as HTMLElement;
+    const menuBtn = document.getElementById('menu-btn') as HTMLElement;
+    const closeMenuBtn = document.getElementById('close-menu-btn') as HTMLElement;
+    const homeBtn = document.getElementById('home-btn') as HTMLElement;
 
     // ツール・検索関連
-    const tlToolBtn = document.getElementById('tl-tool-btn');
-    const tlModal = document.getElementById('tl-modal');
-    const searchBtn = document.getElementById('search-btn');
-    const searchModal = document.getElementById('search-modal');
-    const searchInput = document.getElementById('search-input');
-    const searchResults = document.getElementById('search-results');
+    const tlToolBtn = document.getElementById('tl-tool-btn') as HTMLElement;
+    const tlModal = document.getElementById('tl-modal') as HTMLElement;
+    const searchBtn = document.getElementById('search-btn') as HTMLElement;
+    const searchModal = document.getElementById('search-modal') as HTMLElement;
+    const searchInput = document.getElementById('search-input') as HTMLInputElement;
+    const searchResults = document.getElementById('search-results') as HTMLElement;
     const closeModalBtns = document.querySelectorAll('.close-modal');
 
     // テーマ関連
-    const themeToggle = document.getElementById('theme-toggle');
-    const themeIcon = themeToggle.querySelector('span');
+    const themeToggle = document.getElementById('theme-toggle') as HTMLElement;
+    const themeIcon = themeToggle.querySelector('span') as HTMLElement;
 
-    let articles = [];
-    let tooltipTerms = [];
+    let articles: Article[] = [];
+    let tooltipTerms: TooltipTerm[] = [];
 
     // --- [追加] 戻るボタンの生成と制御 ---
     const backBtn = document.createElement('button');
@@ -55,15 +80,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ドロワー閉じる関数 ---
     function closeDrawer() {
-        drawer.classList.remove('open');
-        overlay.classList.remove('open');
+        if (drawer) drawer.classList.remove('open');
+        if (overlay) overlay.classList.remove('open');
     }
     window.closeDrawer = closeDrawer;
 
     // --- モーダル閉じる関数 ---
     function closeAllModals() {
-        searchModal.classList.remove('active');
-        tlModal.classList.remove('active');
+        if (searchModal) searchModal.classList.remove('active');
+        if (tlModal) tlModal.classList.remove('active');
     }
 
     // --- 1. 最終更新日時の設定 ---
@@ -78,18 +103,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (currentTheme === "dark" || (!currentTheme && prefersDarkScheme.matches)) {
         document.body.classList.add("dark-mode");
-        themeIcon.textContent = "light_mode";
+        if (themeIcon) themeIcon.textContent = "light_mode";
     } else {
         document.body.classList.remove("dark-mode");
-        themeIcon.textContent = "dark_mode";
+        if (themeIcon) themeIcon.textContent = "dark_mode";
     }
 
-    themeToggle.addEventListener('click', () => {
-        document.body.classList.toggle('dark-mode');
-        const isDark = document.body.classList.contains('dark-mode');
-        themeIcon.textContent = isDark ? 'light_mode' : 'dark_mode';
-        localStorage.setItem("theme", isDark ? "dark" : "light");
-    });
+    if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            if (themeIcon) themeIcon.textContent = isDark ? 'light_mode' : 'dark_mode';
+            localStorage.setItem("theme", isDark ? "dark" : "light");
+        });
+    }
 
     // --- [置換] データ読み込み〜解析ロジック ---
 
@@ -120,30 +147,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err) {
             console.error(err);
-            contentArea.innerHTML = '<div class="error-msg"><p>コンテンツを読み込めませんでした。</p></div>';
+            if (contentArea) contentArea.innerHTML = '<div class="error-msg"><p>コンテンツを読み込めませんでした。</p></div>';
         }
     };
     init(); // 実行
 
     // HTML解析とインデックス化
-    function parseAndIndexContent(html) {
+    function parseAndIndexContent(html: string) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         const targetSelector = 'section[id], article[id]';
         const allElements = Array.from(doc.querySelectorAll(targetSelector));
-        
+
         articles = allElements.map((el, index) => {
             const titleEl = el.querySelector('h1, h2, h3');
-            const title = titleEl ? titleEl.textContent.trim() : '無題';
+            const title = titleEl ? titleEl.textContent?.trim() || '無題' : '無題';
             const id = el.id;
             const level = titleEl ? parseInt(titleEl.tagName.substring(1)) : 2;
-            
+
             const tagsAttr = el.getAttribute('data-tags');
             const tags = tagsAttr ? tagsAttr.split(',').map(t => t.trim()) : [];
 
-            const clone = el.cloneNode(true);
+            const clone = el.cloneNode(true) as HTMLElement;
             clone.querySelectorAll(targetSelector).forEach(child => child.remove());
-            
+
             let content = clone.innerHTML;
 
             // ツールチップ置換処理
@@ -154,9 +181,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     // (?![a-zA-Z])  : 直後がアルファベットでない
                     // (?![^<]*>)    : HTMLタグ内を除外
                     const escapedWord = term.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const regex = new RegExp(`(?<![a-zA-Z])(${escapedWord})(?![a-zA-Z])(?![^<]*>)`, 'g');
-                    
-                    content = content.replace(regex, `<span class="tooltip" data-tip="${term.desc}">$1</span>`);
+                    // Lookbehind support varies, but this is client-side code running on modern browsers (per user environment)
+                    // If target is older, warnings might occur. TypeScript doesn't polyfill regex.
+                    // Keep as is.
+                    try {
+                        const regex = new RegExp(`(?<![a-zA-Z])(${escapedWord})(?![a-zA-Z])(?![^<]*>)`, 'g');
+                        content = content.replace(regex, `<span class="tooltip" data-tip="${term.desc}">$1</span>`);
+                    } catch (e) {
+                        // Safari might assume no lookbehind support in older versions, fallback basic replace if needed
+                        // But Chrome/Edge/Firefox supports it.
+                        // Simple replace fallback logic is risky for HTML tags, skipping complex regex if fails.
+                        content = content.replace(new RegExp(escapedWord, 'g'), `<span class="tooltip" data-tip="${term.desc}">${term.word}</span>`);
+                    }
                 });
             }
 
@@ -171,15 +207,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const hash = window.location.hash.substring(1);
         closeAllModals();
         closeDrawer();
-        
+
         if (!hash) {
-            renderHome(); 
+            renderHome();
         } else {
             const targetArticle = articles.find(a => a.id === hash);
             if (targetArticle) {
                 renderArticle(targetArticle);
             } else {
-                contentArea.innerHTML = '<p style="padding:2rem;">指定されたページが見つかりません。</p>';
+                if (contentArea) contentArea.innerHTML = '<p style="padding:2rem;">指定されたページが見つかりません。</p>';
             }
         }
         window.scrollTo(0, 0);
@@ -187,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 6. ホーム画面の描画 ---
     function renderHome() {
+        if (!contentArea) return;
         const html = `
             <div class="home-view fade-in">
                 <div class="home-hero">
@@ -287,8 +324,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 7. 記事詳細の描画 ---
-    function renderArticle(article) {
-        let relatedArticles = [];
+    function renderArticle(article: Article) {
+        if (!contentArea) return;
+        let relatedArticles: Article[] = [];
         if (article.tags.length > 0) {
             relatedArticles = articles
                 .filter(a => a.id !== article.id)
@@ -296,8 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const matchCount = a.tags.filter(tag => article.tags.includes(tag)).length;
                     return { ...a, matchCount };
                 })
-                .filter(a => a.matchCount > 0)
-                .sort((a, b) => b.matchCount - a.matchCount)
+                .filter(a => (a.matchCount || 0) > 0)
+                .sort((a, b) => (b.matchCount || 0) - (a.matchCount || 0))
                 .slice(0, 3);
         }
 
@@ -325,8 +363,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <article class="blog-post fade-in">
                 <div class="post-header">
                     <h1 class="post-title">${article.title}</h1>
-                    ${article.tags.length > 0 ? 
-                        `<div class="post-tags">
+                    ${article.tags.length > 0 ?
+                `<div class="post-tags">
                             ${article.tags.map(tag => `<span class="tag-chip">#${tag}</span>`).join('')}
                         </div>` : ''}
                 </div>
@@ -350,6 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 8. 目次生成 ---
     function generateTOC() {
+        if (!tocList) return;
         let html = '<ul>';
         articles.forEach(article => {
             const indentClass = `level-${article.level}`;
@@ -360,14 +399,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 9. 検索機能 ---
-    const performSearch = (query) => {
+    const performSearch = (query: string) => {
+        if (!searchResults) return;
         if (!query) { searchResults.innerHTML = ''; return; }
-        const results = articles.filter(a => 
-            a.title.includes(query) || 
+        const results = articles.filter(a =>
+            a.title.includes(query) ||
             a.content.includes(query) ||
             a.tags.some(t => t.includes(query))
         );
-        
+
         if (results.length === 0) {
             searchResults.innerHTML = '<p>見つかりません</p>';
         } else {
@@ -375,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const text = a.content.replace(/<[^>]+>/g, "");
                 const idx = text.indexOf(query);
                 const snippet = idx > -1 ? text.substring(idx - 10, idx + 40) + "..." : text.substring(0, 50) + "...";
-                
+
                 return `
                     <a href="#${a.id}" class="search-result-item" onclick="closeAllModals()">
                         <small>${a.title}</small>
@@ -387,25 +427,25 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- イベントリスナー登録 ---
-    homeBtn.addEventListener('click', () => { location.hash = ''; });
-    menuBtn.addEventListener('click', () => { drawer.classList.add('open'); overlay.classList.add('open'); });
-    closeMenuBtn.addEventListener('click', closeDrawer);
-    overlay.addEventListener('click', closeDrawer);
+    if (homeBtn) homeBtn.addEventListener('click', () => { location.hash = ''; });
+    if (menuBtn) menuBtn.addEventListener('click', () => { drawer.classList.add('open'); overlay.classList.add('open'); });
+    if (closeMenuBtn) closeMenuBtn.addEventListener('click', closeDrawer);
+    if (overlay) overlay.addEventListener('click', closeDrawer);
 
-    tlToolBtn.addEventListener('click', () => { tlModal.classList.add('active'); });
-    searchBtn.addEventListener('click', () => { 
+    if (tlToolBtn) tlToolBtn.addEventListener('click', () => { tlModal.classList.add('active'); });
+    if (searchBtn) searchBtn.addEventListener('click', () => {
         searchModal.classList.add('active');
         setTimeout(() => searchInput.focus(), 100);
     });
     closeModalBtns.forEach(btn => btn.addEventListener('click', closeAllModals));
-    
-    window.onclick = function(event) {
+
+    window.onclick = function (event) {
         if (event.target == searchModal || event.target == tlModal) {
             closeAllModals();
         }
     }
 
-    searchInput.addEventListener('input', (e) => performSearch(e.target.value));
-    
+    if (searchInput) searchInput.addEventListener('input', (e) => performSearch((e.target as HTMLInputElement).value));
+
     window.addEventListener('hashchange', router);
 });
